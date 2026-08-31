@@ -1,43 +1,35 @@
 // Put the app SHELL in the depot after the first visit, and sweep what this
 // build can no longer use.
 //
-// The service worker can't do the storing itself: on a first visit it isn't
-// controlling the page while index.html, the bundles and the fonts load, so none
-// of them pass through its fetch handler and nothing is kept. The reader who
-// opens a shared link once and then boards a plane would find a dead app — the
-// pack and the wasm are already in the depot (the engine worker puts them there),
-// but the shell that runs them wouldn't be.
+// The service worker cannot do the storing: on a first visit it is not controlling
+// the page while index.html, the bundles and the fonts load, so none of them pass
+// through its fetch handler. The reader who opens a shared link and then boards a
+// plane would find a dead app — the pack and the wasm are in the depot already
+// (the engine worker puts them there), but not the shell that runs them.
 //
-// WHAT the shell is comes from `shell-manifest.json`, which the build emits (see
-// the plugin in vite.config.ts). Scraping it from
-// `performance.getEntriesByType("resource")` — whatever this page happened to
-// load — is wrong in both directions:
-//
-//   - a chunk imported lazily, for a screen the reader had not opened, never
-//     appears in the timeline and so is missing offline;
-//   - the same list would double as the cache sweep's keep-set, so the sweep
-//     would delete assets belonging to any build this page had not loaded —
-//     including the one a pending update had just downloaded.
-//
-// A build-emitted list is exact, complete, and identical on every page.
+// WHAT the shell is comes from `shell-manifest.json`, emitted by the build (see the
+// plugin in vite.config.ts), never scraped from
+// `performance.getEntriesByType("resource")`: a lazily imported chunk for a screen
+// the reader never opened would be missing offline, and the same list doubles as
+// the sweep's keep-set, which would then delete assets belonging to any build this
+// page had not loaded — including one a pending update had just downloaded.
 
 import { DEPOT, depotAvailable, depotHas, requestPersistence } from "./depot";
 import { assetUrl } from "./pack";
 
 /** Exported for update.ts, which reads `buildId` off the same file to notice a
- *  deploy. The FILE is this module's business; the SHAPE is shared. */
+ *  deploy: the file is this module's business, the shape is shared. */
 export interface ShellManifest {
   buildId: string;
   files: string[];
 }
 
-/** The shell this build is made of, or null when the manifest cannot be read (a
- *  dev server, or offline before it was ever stored).
+/** The shell this build is made of, or null when the manifest cannot be read (a dev
+ *  server, or offline before it was ever stored).
  *
- *  Module-private: `precacheShell` is the only caller and the only thing that
- *  should be. update.ts deliberately fetches this file itself with `no-store` —
- *  it must see the DEPLOY, not our stored copy — and reusing this cache-falling-
- *  back reader there would make every update check answer "no update". */
+ *  Module-private: update.ts must fetch this file itself with `no-store`, since it
+ *  needs the DEPLOY rather than our stored copy — reusing this cache-falling-back
+ *  reader there would make every update check answer "no update". */
 async function fetchShellManifest(): Promise<ShellManifest | null> {
   const url = assetUrl("shell-manifest.json");
   try {
@@ -54,10 +46,10 @@ async function fetchShellManifest(): Promise<ShellManifest | null> {
   }
 }
 
-/** Store this build's shell. Returns the shell file list, so the caller can hand
- *  it to the worker's prune — which owns reclamation now, because the pin lives
- *  there and the pin is the authority on what to keep. Pruning happens only AFTER
- *  this resolves, never before: it must not be able to strand a half-updated app. */
+/** Store this build's shell. Returns the shell file list for the worker's prune,
+ *  which owns reclamation because the pin (the authority on what to keep) lives
+ *  there. Pruning happens only AFTER this resolves, never before, so it cannot
+ *  strand a half-updated app. */
 export async function precacheShell(): Promise<string[]> {
   if (!depotAvailable()) return []; // no Cache API (private mode, http)
   try {
@@ -67,18 +59,18 @@ export async function precacheShell(): Promise<string[]> {
     // The bare base as well as index.html: a navigation to "/" is a different
     // cache key from "/index.html", and both have to answer offline.
     const docs = [base, indexUrl];
-    // Everything that is NOT the document. The document is stored last and
-    // separately — see below, this ordering is the whole fix.
+    // Everything that is NOT the document; the document is stored last and
+    // separately (see below).
     const assets = new Set<string>([assetUrl("shell-manifest.json")]);
     for (const f of manifest?.files ?? []) if (assetUrl(f) !== indexUrl) assets.add(assetUrl(f));
 
     const cache = await caches.open(DEPOT);
     await Promise.all(
       [...assets].map(async (url) => {
-        // Never re-download what is already stored. depotHas carries the
-        // ignoreVary this lookup needs: these responses come back `Vary: Origin`,
-        // and a copy stored for a request whose Origin header differs from this
-        // one's would otherwise look absent — and get shadowed by a new entry.
+        // Never re-download what is already stored. depotHas carries the ignoreVary
+        // this lookup needs: these responses come back `Vary: Origin`, so a copy
+        // stored for a request with a different Origin would otherwise look absent
+        // and get shadowed by a new entry.
         if (await depotHas(url)) return;
         await cache.add(url).catch(() => {
           /* checked below by presence, not by this error */
@@ -88,39 +80,24 @@ export async function precacheShell(): Promise<string[]> {
 
     // COMPLETE MEANS PRESENT, not "no fetch threw". `cache.add` is not the only
     // writer of these entries — the page's own `<script>` and `<link>` loads go
-    // through the service worker's immutable path, which stores them too — so an
-    // `add` can reject while the file is on disk anyway (a duplicate put, a race
-    // with that load). Trusting the error channel made this report "incomplete"
-    // for a shell that was entirely fine, which then skipped the promotion below
-    // and left the stale document in place. Ask the cache instead.
+    // through the service worker's immutable path — so an `add` can reject while
+    // the file is on disk anyway. Ask the cache, not the error channel.
     const missing: string[] = [];
     for (const url of assets) if (!(await depotHas(url))) missing.push(url);
     const complete = missing.length === 0;
 
-    // ── THE DOCUMENT GOES LAST, AND ONLY IF THE SHELL IT NAMES IS HERE ────────
+    // THE DOCUMENT GOES LAST, AND ONLY IF THE SHELL IT NAMES IS HERE. A stored
+    // document is a promise that the bundles it names can be served; breaking it is
+    // a white screen with nothing to tap. So: re-fetch it every time (a few KB, and
+    // a document guarded by `depotHas` would never be replaced, leaving the first
+    // build's document under the bare-base key an installed PWA opens as
+    // `start_url`), store it under BOTH keys from ONE response so the two cannot
+    // disagree, and only once every other shell file is confirmed present.
     //
-    // A cached document is a PROMISE that the bundles it names can be served.
-    // Breaking that promise is a white screen with no error and nothing to tap:
-    // the document is served, `assets/index-<hash>.js` is not, and `#app` is
-    // never mounted.
-    //
-    // Two faults would produce it. A document that is a peer of the assets in one
-    // unordered `Promise.all` can land without them. And a document guarded by
-    // `depotHas` is NEVER REPLACED once stored — so the bare-base key would keep
-    // the FIRST build's document forever while `pruneToPin` keeps only the CURRENT
-    // build's assets and deletes the ones that document asks for. An installed PWA
-    // opens `start_url: "./"`, which is that exact key, so a reader who updated and
-    // then opened the app offline would be served a document whose bundle had been
-    // reclaimed.
-    //
-    // So: re-fetch the document every time (it is a few KB), store it under BOTH
-    // keys from ONE response so the two can never disagree with each other, and
-    // do it only when every other shell file is confirmed present.
-    // AN INCOMPLETE SHELL RECLAIMS NOTHING. The caller prunes with what this
-    // returns, and `pruneToPin` refuses an empty list — so returning nothing is
-    // how "do not reclaim yet" is said. Promotion and reclamation are one
-    // decision, taken here: skipping only the promotion would leave the stale
-    // document in place while the prune deleted the very bundle it names.
+    // An incomplete shell reclaims nothing: `pruneToPin` refuses an empty list, so
+    // returning nothing is how "do not reclaim yet" is said. Promotion and
+    // reclamation are one decision — skipping only the promotion would leave the
+    // stale document in place while the prune deleted the bundle it names.
     if (!complete || !manifest) return [];
 
     // `no-store` so this is the DEPLOYED document and not our own stored copy.
@@ -130,9 +107,9 @@ export async function precacheShell(): Promise<string[]> {
     if (!res.ok) return [];
     for (const key of docs) await cache.put(key, res.clone());
 
-    // The shell is safe now, so ask the browser to keep it. The reader has used
-    // the app at least once, which is the engagement signal persistence is
-    // granted on. Nothing downstream assumes it was granted.
+    // The shell is safe now, so ask the browser to keep it — the reader has used the
+    // app once, which is the engagement signal persistence is granted on. Nothing
+    // downstream assumes it was granted.
     void requestPersistence();
 
     return manifest.files;

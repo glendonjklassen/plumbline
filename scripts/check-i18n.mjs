@@ -1,49 +1,25 @@
-// Fails the build on a user-visible string literal outside the catalogue.
+// Fails the build (exits non-zero) on a user-visible string literal outside the
+// catalogue. Run by CI and by `npm run check`.
 //
-// This is the whole reason the catalogue holds: extraction is a one-day job and
-// re-accumulation is a permanent one. The shells drifted back to literals for a
-// year because nothing ever said no, and a warning would have been read exactly
-// as often as it was printed. So this EXITS NON-ZERO, and CI and `npm run
-// check` both run it.
+// What it looks for:
 //
-// ── What it looks for ────────────────────────────────────────────────────────
+//   1. A text node in Svelte markup — `<button>Cancel</button>`.
+//   2. A literal in a user-facing attribute — aria-label, title, placeholder,
+//      alt. These are the ones missed by eye: they do not look like copy.
+//   3. A binding called `t` in a component that calls `t("id")` — see the rule
+//      below.
+//   4. A label property in a script body — `{ key: "hymnal", label: "Hymnal" }`.
 //
-// Two shapes, because they are the two ways a sentence reaches a screen:
+// It deliberately does NOT read script bodies for bare strings in general:
+// almost every string in a script is a key, a class, a CSS value, a method name
+// or a URL, so the allowlist would become the file. The property names below are
+// the narrow exception — what a UI table calls its human-readable column.
 //
-//   1. A TEXT NODE in Svelte markup — anything between tags that a reader would
-//      read. `<button>Cancel</button>`.
-//   2. A LITERAL in a user-facing ATTRIBUTE — aria-label, title, placeholder,
-//      alt. `<input placeholder="Church name" />`. These are the ones that get
-//      missed by eye, because they do not look like copy in a diff.
-//
-//   3. A BINDING CALLED `t` in a component that calls `t("id")` — see the rule
-//      below. Not a stray string at all, but the same failure (a screen with no
-//      words on it) and the only one nothing else in the toolchain can see.
-//   4. A LABEL PROPERTY in a script body — `{ key: "hymnal", label: "Hymnal" }`.
-//      This one was added after it bit: the bottom bar's nav table survived the
-//      whole extraction pass with one bare label in it, and neither review nor
-//      the first two rules saw it, because a string in a script does not look
-//      like copy. Only e2e/language.spec.ts caught it, and only because it
-//      happened to assert that exact word.
-//
-// It deliberately does NOT read script bodies for bare strings in general.
-// Almost every string in a script is a key, a class, a CSS value, an engine
-// method name or a URL, so the false-positive rate would be high enough that the
-// allowlist became the file. The property names below are the narrow exception:
-// they are what a UI table calls its human-readable column, and nothing else.
-//
-// ── Escape hatch ─────────────────────────────────────────────────────────────
-//
-// `<!-- i18n-ignore: why -->` on the line before, or `// i18n-ignore: why` for a
-// script line. For a run of lines, `i18n-ignore-start: why` … `i18n-ignore-end`.
-// The reason is required and is not parsed — it is there for the next person,
-// who will otherwise assume the exemption was a mistake.
-//
-// There is exactly one block exemption in the tree today, and it is the honest
-// kind: the boot-diagnostics tables render only under the PERF build flag, so
-// no reader in any language can reach them, and their contents are stage names
-// out of the engine's own trace. Translating "worst single stall" would be
-// translating a variable name.
+// Escape hatch: `<!-- i18n-ignore: why -->` on the line before, or
+// `// i18n-ignore: why` for a script line; `i18n-ignore-start: why` …
+// `i18n-ignore-end` for a run of lines. The reason is required and is not
+// parsed — it is there for the next person, who would otherwise assume the
+// exemption was a mistake.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -53,21 +29,14 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const WEB = join(root, "apps/web/src");
 
 /** Text that is not language: symbols, punctuation, numbers, single glyphs.
- *
- *  Interpolations are stripped before the test, so `"$name $chapter"` and
- *  `"${i + 1}"` are correctly seen as holding no words of their own. The
- *  variables' CONTENTS are somebody else's problem — and usually the engine's,
- *  which already hands back a localized book name. */
+ *  Interpolations are stripped first, so `"$name $chapter"` holds no words of
+ *  its own; what they contain is the engine's problem, and it already hands back
+ *  localized book names. */
 const words = (s) => s.replace(/\$\{[^}]*\}|\$\w+/g, "");
 const NOT_WORDS = (s) => /^[^\p{L}]*$/u.test(words(s));
 
-/**
- * Words that are the same in every language we ship, and are not copy.
- *
- * A NAME is not a translation problem — "Plumbline" is the app, "KJV" is an
- * edition, "QR" is a format. Keeping them out of the catalogue keeps the
- * catalogue honest about what a translator actually has to do.
- */
+/** Names, not copy: the same in every language we ship, and kept out of the
+ *  catalogue so it stays honest about what a translator has to do. */
 const NAMES = new Set(["Plumbline", "KJV", "AKJV", "QR", "OK", "Aa", "plumblinebible.org", "OSIS"]);
 
 /** Object properties that hold copy in a UI table — see rule 3 above. */
@@ -88,12 +57,11 @@ const files = [];
 const findings = [];
 
 // ── every id the shell asks for exists ───────────────────────────────────────
-// The other half of the contract. `t()` answers an unknown id with the id
-// itself, which is the right runtime behaviour — visible, greppable, never a
-// crash — and exactly the wrong build-time behaviour, because a typo then ships
-// as a screen reading "settings.cpoyFormat". Template ids (`explore.${c.id}`)
-// are skipped: they are assembled at runtime and their completeness is what the
-// core's own catalogue tests are for.
+// `t()` answers an unknown id with the id itself — right at runtime (visible,
+// greppable, never a crash), wrong at build time, because a typo then ships as a
+// screen reading "settings.cpoyFormat". Template ids (`explore.${c.id}`) are
+// skipped: they are assembled at runtime, and the core's own catalogue tests
+// cover their completeness.
 const EN = JSON.parse(readFileSync(join(root, "crates/core/src/i18n/en.json"), "utf8"));
 const unknown = [];
 
@@ -119,12 +87,11 @@ for (const file of files) {
   const src = readFileSync(file, "utf8");
   const lines = src.split("\n");
   // Everything before the markup is script; everything inside <style> is CSS.
-  // Both are found by index rather than parsed, which is enough: this checker
-  // reports positions, it does not rewrite anything.
+  // Found by index rather than parsed, which is enough for reporting positions.
   const styleAt = src.lastIndexOf("\n<style");
   // LAST, not first: a component may open with `<script module>` and then its
-  // instance script, and taking the first close treated the second script as
-  // markup — which reported arithmetic as copy.
+  // instance script, and taking the first close treats the second script as
+  // markup — which reports arithmetic as copy.
   const scriptEnd = src.lastIndexOf("</script>");
 
   // Lines inside an `i18n-ignore-start` … `i18n-ignore-end` run.
@@ -182,13 +149,10 @@ for (const file of files) {
 
   // ── `t` shadowed ───────────────────────────────────────────────────────────
   // A binding called `t` in a component that also calls `t("id")`.
-  //
-  // This is the one failure mode in this whole system that NOTHING else can see.
   // `{#each threads as t (t.name)}` makes `t` the thread inside the block, so
   // `t("thread.delete")` calls an object — and because these values are `any`,
-  // svelte-check is silent, the guard's other rules are silent, and the component
-  // renders as a blank surface at runtime. Two pickers shipped like that until
-  // the full Playwright suite caught them (2026-08-03).
+  // svelte-check is silent and the component renders blank at runtime. Nothing
+  // else in the toolchain can see it.
   //
   // Reported wherever the binding appears, not only where the collision bites:
   // the fix is to rename the binding, and a component that binds `t` at all is

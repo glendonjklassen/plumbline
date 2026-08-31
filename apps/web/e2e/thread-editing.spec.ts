@@ -1,9 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// THREADS ARE EDITED, not just accumulated (maintainer UAT, 2026-08-18): a road
-// gets a verse in the wrong place, or one that turned out not to belong. And
-// the thread the Share screen walks is a choice, with the stock Romans Road as
-// the default.
+// Threads are edited, not just accumulated: a road gets a verse in the wrong place, or one
+// that turned out not to belong. The thread the Share screen walks is a choice too, with the
+// stock Romans Road as the default.
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
@@ -35,14 +34,10 @@ async function order(page: Page, name: string): Promise<string[]> {
   }, name);
 }
 
-// THE BUG THE MAINTAINER HIT. Present keyed its verse list by refKey, so a
-// thread holding the same verse twice — which nothing forbids, and which
-// "I added a couple of verses" produces the moment one is already on the road —
-// made Svelte throw `each_key_duplicate` and kill the component mid-render. It
-// read as a page that would not scroll and was "all smushed".
-//
-// MUTATION: key that each-block by `e.ref` again. Red: a page error is thrown
-// and the overview never appears.
+// Present keyed its verse list by refKey, so a thread holding the same verse twice — which
+// nothing forbids — made Svelte throw `each_key_duplicate` and kill the component mid-render,
+// leaving a page that would not scroll. Mutation: key that each-block by `e.ref` again — red,
+// a page error is thrown and the overview never appears.
 test("a thread holding the same verse twice still presents", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -70,8 +65,7 @@ test("a thread holding the same verse twice still presents", async ({ page }) =>
   await expect(overview).toBeVisible({ timeout: 30_000 });
   expect(errors.filter((e) => e.includes("each_key_duplicate")), "Svelte threw on the duplicate verse").toEqual([]);
 
-  // And it SCROLLS: the list is taller than its box and owns its own overflow,
-  // which is what "smushed" was the absence of.
+  // And it scrolls: the list is taller than its box and owns its own overflow.
   const box = await overview.evaluate((el) => ({
     scrollable: el.scrollHeight > el.clientHeight + 2,
     overflowY: getComputedStyle(el).overflowY,
@@ -82,20 +76,17 @@ test("a thread holding the same verse twice still presents", async ({ page }) =>
   expect(await overview.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
 });
 
-// THE FOCUSED VERSE stays reachable however long it is, and stays centred when
-// it is short. Centring comes from auto margins, not `justify-content` — plain
-// `center` pushes an overflowing verse's first line above the top edge where
-// scrolling cannot reach it, and `safe center` is a keyword WebKit shipped late
-// (an unsupported keyword drops the declaration, top-aligning short verses on
-// exactly the iPhones the PWA is the install path for).
-//
-// MUTATION (1): add `justify-content: center` to `.focus` → the first-line
-// check fails while overflowing. MUTATION (2): drop the auto margins on
-// `.fref`/`.fbody` → the symmetry check fails on the short verse.
+// The focused verse stays reachable however long it is, and centred when short. Centring
+// comes from auto margins, not `justify-content`: plain `center` pushes an overflowing
+// verse's first line above the top edge where scrolling cannot reach it, and `safe center` is
+// a keyword WebKit shipped late, so on older iOS the declaration is dropped and short verses
+// top-align. Mutations: add `justify-content: center` to `.focus` → the first-line check
+// fails while overflowing; drop the auto margins on `.fref`/`.fbody` → the symmetry check
+// fails on the short verse.
 test("a focused verse scrolls when long and centres when short", async ({ page }) => {
   await boot(page);
-  // The KJV's longest verse, added to the road for the occasion: the overflow
-  // must be REAL, or every scroll assertion below passes against nothing.
+  // The KJV's longest verse: the overflow must be real, or every scroll assertion below
+  // passes against nothing.
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     await s.author("threadAdd", "Romans Road", "Esth 8:9", null, new Date().toISOString());
@@ -150,20 +141,17 @@ test("a focused verse scrolls when long and centres when short", async ({ page }
   ).toBeLessThan(30);
 });
 
-// MUTATION: in links.ts pass `link.entry` instead of `link.entry + link.delta`
-// as the destination. Red: the order never changes.
+// Mutation: in links.ts pass `link.entry` instead of `link.entry + link.delta` as the
+// destination — red, the order never changes.
 test("verses in a thread can be rearranged", async ({ page }) => {
   await boot(page);
   const before = await order(page, "Romans Road");
   expect(before.length).toBeGreaterThan(2);
 
-  // Through the panel's own ↓ — the control the reader taps. The e2e suite runs
-  // the production bundle, so the page cannot import `links.ts` to call the
-  // dispatcher directly; clicking the rendered control is both possible and a
-  // truer test.
+  // Through the panel's own ↓: the e2e suite runs the production bundle, so the page cannot
+  // import `links.ts` to call the dispatcher directly.
   await openThread(page, "Romans Road");
-  // The reorder controls live behind the header's edit pencil now (drag is
-  // gone, and the always-visible inline links with it — 2026-08-30).
+  // The reorder controls live behind the header's edit pencil.
   await page.locator("aside.panel button.link", { hasText: "✎" }).first().click();
   await page.locator("aside.panel button.link", { hasText: "↓" }).first().click();
 
@@ -173,8 +161,8 @@ test("verses in a thread can be rearranged", async ({ page }) => {
   expect(after.length).toBe(before.length);
 });
 
-// MUTATION: in `remove_from_thread`, delete the whole thread when its last
-// entry goes. Red: the thread is missing from the library afterwards.
+// Mutation: in `remove_from_thread`, delete the whole thread when its last entry goes — red,
+// the thread is missing from the library afterwards.
 test("a verse can be removed, and the thread survives", async ({ page }) => {
   await boot(page);
   const before = await order(page, "Romans Road");
@@ -182,14 +170,13 @@ test("a verse can be removed, and the thread survives", async ({ page }) => {
   await openThread(page, "Romans Road");
   // ✕ lives behind the edit pencil too.
   await page.locator("aside.panel button.link", { hasText: "✎" }).first().click();
-  // Removing ASKS FIRST, because it cannot be undone — the rule `deletethread:`
-  // already follows. The dialog names the passage, and its button names the act
-  // rather than saying OK, so this clicks the verb.
+  // Removing asks first, because it cannot be undone, and the dialog's button names the
+  // act rather than saying OK — so this clicks the verb.
   await page.locator("aside.panel button.link", { hasText: /^✕$/ }).first().click();
   const confirm = page.locator('[data-surface="confirm"]');
   await expect(confirm).toBeVisible({ timeout: 20_000 });
-  // The chapter:verse, not the refKey: the dialog names the passage the way the
-  // reader sees it ("Romans 3:23"), and the stored key is "Rom 3:23".
+  // The chapter:verse, not the refKey: the dialog names the passage the way the reader
+  // sees it ("Romans 3:23"), and the stored key is "Rom 3:23".
   await expect(confirm).toContainText(before[0].slice(before[0].indexOf(" ") + 1));
   await confirm.locator("button.danger").click();
 
@@ -202,8 +189,8 @@ test("a verse can be removed, and the thread survives", async ({ page }) => {
   expect(names).toContain("Romans Road");
 });
 
-// MUTATION: in ShareScreen use the literal "Romans Road" again. Red: Share
-// opens the stock road instead of the thread the reader chose.
+// Mutation: in ShareScreen use the literal "Romans Road" again — red, Share opens the stock
+// road instead of the thread the reader chose.
 test("Share walks the thread chosen in Settings", async ({ page }) => {
   await boot(page);
 
@@ -223,14 +210,13 @@ test("Share walks the thread chosen in Settings", async ({ page }) => {
   });
   expect(await page.evaluate(() => (window as any).__plumbline.gospelThread())).toBe("My Gospel Walk");
 
-  // Share's gospel button opens THAT thread.
+  // Share's gospel button opens that thread.
   await page.evaluate(() => ((window as any).__plumbline.screen = "share"));
   await page.getByRole("button", { name: /gospel|Gospel/ }).first().click();
   await expect(page.locator(".present")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".present .title, .present .name")).toContainText("My Gospel Walk", { timeout: 30_000 });
 
-  // A chosen thread that is later deleted falls back rather than leaving the
-  // button dead.
+  // A chosen thread that is later deleted falls back rather than leaving the button dead.
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     s.showPresent = false;
@@ -242,17 +228,12 @@ test("Share walks the thread chosen in Settings", async ({ page }) => {
     .toBe("Romans Road");
 });
 
-// THE OTHER HALF OF "IT'S ALL SMUSHED" (maintainer, same UAT round, with a
-// screenshot): the overview's rows are <button> flex items in a scrollable
-// column, and a button's `min-height: auto` floor doesn't hold — Chromium's
-// button layout reports a one-line minimum — so on a phone viewport the rows
-// were flex-shrunk to ~40% of their content and every verse painted its tail
-// over the entry below. The duplicate-key crash above was a second bug, not
-// this one. `.entry { flex: none }` is the fix; this pins it at the viewport
-// class that exposed it.
-//
-// MUTATION: drop `flex: none` from `.entry` (and rebuild — the CSS ships in
-// the bundle). Red: rows report scrollHeight beyond clientHeight.
+// The overview's rows are <button> flex items in a scrollable column, and a button's
+// `min-height: auto` floor doesn't hold — Chromium's button layout reports a one-line minimum
+// — so on a phone viewport rows were flex-shrunk to ~40% of their content and every verse
+// painted its tail over the entry below. `.entry { flex: none }` is the fix; this pins it at
+// the viewport class that exposes it. Mutation: drop `flex: none` from `.entry` and rebuild
+// (the CSS ships in the bundle) — red, rows report scrollHeight beyond clientHeight.
 test.describe("phone-sized Present", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
@@ -276,24 +257,17 @@ test.describe("phone-sized Present", () => {
       const rows = Array.from(ov.querySelectorAll(".entry")) as HTMLElement[];
       return {
         rows: rows.length,
-        // Per row: content the box cannot show. 0 everywhere or the verse is
-        // painting over its neighbour.
+        // Per row: content the box cannot show. 0 everywhere, or the verse is painting
+        // over its neighbour.
         worstShrink: Math.max(...rows.map((el) => el.scrollHeight - el.clientHeight)),
         overflow: ov.scrollHeight - ov.clientHeight,
       };
     });
-    // Preconditions, so a vacuous pass is impossible: enough rows that the
-    // column is under real shrink pressure, and the list genuinely overflows.
+    // Preconditions against a vacuous pass: enough rows that the column is under real
+    // shrink pressure, and a list that genuinely overflows.
     expect(m.rows).toBeGreaterThanOrEqual(9);
     expect(m.overflow, "the overview must have real content to scroll").toBeGreaterThan(200);
     expect(m.worstShrink, "a row is clipping its verse — flex shrink is back").toBeLessThanOrEqual(1);
   });
 });
-
-// DRAG-REORDER's e2e was DELETED on 2026-08-26 (maintainer: "clearly it's a
-// flaky crap test just kill it"). It drove the grip with raw pointer events and
-// failed intermittently on CI without ever failing the feature — the drag
-// itself was verified working by hand at the time it went. The reorder write
-// behind it (`links.ts dragEntry`) is the same one the ↑/↓ links make, and
-// those still have coverage above.
 

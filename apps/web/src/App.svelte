@@ -1,12 +1,8 @@
 <script lang="ts">
-  // Boot (TODO #28): the ENGINE WORKER does everything — pack fetch, home,
-  // wasm, open, warm, and later the deferred R&D pack — while this thread
-  // paints the splash from its progress messages. Fonts load here too, for
-  // PAINTING; the worker loads its own copy for layout measurement.
-  //
-  // The splash is a SPLASH. Reading text you can't touch reads as broken, not
-  // fast — honest progress beats a decoy, so the work goes into making the wait
-  // short rather than disguising it.
+  // Boot: the engine worker does everything — pack fetch, home, wasm, open, warm,
+  // and later the deferred R&D pack — while this thread paints the splash from its
+  // progress messages. Fonts load here too, for painting; the worker loads its own
+  // copy for layout measurement.
   import { bootErrorCopy } from "./engine/bootError";
   import { deviceLocale, lastLang, setCatalog, t, readerFace } from "./lib/i18n.svelte";
   import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "./engine/fonts.generated";
@@ -17,24 +13,18 @@
   import FirstRun from "./shell/FirstRun.svelte";
   import Shell from "./shell/Shell.svelte";
 
-  // PREPARE, not download. Boot's own first message says the same thing now
-  // (engine/boot.ts) — this is the value the splash paints in the milliseconds
-  // before the worker has said anything at all, and a warm boot, which downloads
-  // nothing, must not open by claiming to be fetching (audit D-11).
+  // "prepare", not "download": this is what the splash paints before the worker
+  // has said anything, and a warm boot downloads nothing.
   let phase = $state<WorkerProgress>({ phase: "prepare" });
   let error = $state<string | null>(null);
   let session = $state<Session | null>(null);
 
-  // THE ONLY reactive writers of the document's appearance. The pipeline is
-  // state → derived → writer, in that direction and no other: `session.palette`
-  // and `session.chrome` decide, these two paint, and nothing else calls them
-  // except the session's own first paint and its re-assert listeners.
-  //
-  // TWO effects and not one, because they have different inputs. The chrome
-  // moves whenever Present or Sing opens or closes — those two paint their own
-  // fixed-light paper over the status bar — and the palette does not; folding
-  // them together would re-write thirty custom properties and re-stringify the
-  // palette into localStorage every time someone opened a presentation.
+  // The only reactive writers of the document's appearance: state → derived →
+  // writer, in that direction only. Two effects, not one, because their inputs
+  // differ — the chrome moves whenever Present or Sing opens (they paint their own
+  // fixed-light paper over the status bar) and the palette does not, so folding
+  // them together would rewrite thirty custom properties and re-stringify the
+  // palette into localStorage on every presentation.
   $effect(() => {
     session?.applyTheme();
   });
@@ -42,70 +32,44 @@
     session?.applyChrome();
   });
 
-  /** A refKey ("Gen 1:7", "1John 3:16") → the core's `go:` verb, split on the
-   *  LAST space — the same rule as core `go_uri` and `VRef::parse_ref_key`.
-   *
-   *  Every OSIS id the corpus ships is one word ("1John", "2Chr"), so the old
-   *  `replace(" ", ":")` happened to agree for all 66 books; it disagreed with
-   *  the contract, which lets a book id hold a space, and a disagreement here is
-   *  silent — the verb parses into a book nobody has and the tap does nothing.
-   *  The same line sits in MemorizeHost and StudyPanel; all three go when refKey
-   *  parse/format reaches the ABI. */
+  /** A refKey → the core's `go:` verb, split on the LAST space — the same rule as
+   *  core `go_uri` and `VRef::parse_ref_key`, whose contract lets a book id hold a
+   *  space. Duplicated in MemorizeHost and StudyPanel. */
   const goUri = (refKey: string): string => `go:${refKey.replace(/ (?=\S*$)/, ":")}`;
 
-  // ── the last net (audit D-12) ───────────────────────────────────────────────
-  // There was no global handler anywhere in this product. An exception thrown in
-  // an effect, a component that failed to render, a rejected promise nobody
-  // awaited — every one of them went to the console of a device that has no
-  // console, and the reader was left with a screen that had quietly stopped
-  // answering. This says so, and offers the one remedy there is.
-  //
-  // A NET, not a diagnosis. It deliberately does not swallow anything (no
-  // `preventDefault`), so the console, the browser's own reporting and every
-  // existing catch still see exactly what they saw before.
+  // ── the last net ────────────────────────────────────────────────────────────
+  // The global handler for faults nothing else surfaces — a throw in an effect, a
+  // component that failed to render, an unawaited rejection — so the reader is told
+  // rather than left with a screen that quietly stopped answering. It swallows
+  // nothing (no `preventDefault`), so the console and every existing catch still
+  // see what they saw before.
   let mishap = $state<string | null>(null);
   /** Whether the bar has already been raised (or refused) this session. */
   let mishapSpent = false;
-  /** The document is going away. A reload or a close abandons everything in
-   *  flight — an engine read mid-answer, a depot write mid-put — and the
-   *  rejections that follow are teardown, not a fault the reader can act on.
-   *  They are also the likeliest false positive this bar has, because Retry and
-   *  the update notice both reload on purpose. */
+  /** The document is going away: the rejections that follow a reload or a close are
+   *  teardown, not a fault — and the likeliest false positive this bar has, since
+   *  Retry and the update notice both reload on purpose. */
   let leaving = false;
   addEventListener("pagehide", () => (leaving = true));
 
   /** Raise the bar for a fault nothing else surfaced.
    *
-   *  ONCE PER SESSION, and that is the whole anti-spam rule. Faults arrive in
-   *  storms — a render that throws throws again on every reactive pass, a poll
-   *  that rejects rejects again on its next tick — and a bar that re-rendered,
-   *  or even re-counted, per event would become the failure. The first one
-   *  raises it; the rest go to the console, because the message could not change
-   *  anyway: there is exactly one thing to offer.
-   *
-   *  Dismissal is final for the same reason. Reloading is the remedy, and a
-   *  reader who has declined it should not be asked again by the very loop that
-   *  is broken.
-   *
-   *  NOT WHILE THE SPLASH IS UP, which is exactly `session === null`. Boot
-   *  failure has its own screen — mapped copy, the raw string behind a details,
-   *  and a Retry (D-11) — and a bar over it would be the same news twice, told
-   *  worse. (Testing `error` as well would be wrong, not merely redundant: it can
-   *  only be set alongside a live session by a throw in the tail of `start()`,
-   *  after the shell is up, and that is a fault worth reporting.) */
+   *  Once per session: faults arrive in storms (a render that throws throws again
+   *  on every reactive pass), and there is only one remedy to offer anyway.
+   *  Dismissal is final for the same reason. Never while the splash is up, which is
+   *  exactly `session === null` — boot failure has its own screen with the same
+   *  remedy. `error` is deliberately not tested: alongside a live session it can
+   *  only come from a throw in the tail of `start()`, which is worth reporting. */
   function noteMishap(detail: string): void {
     if (mishapSpent || leaving || !session) return;
     mishapSpent = true;
     mishap = detail;
   }
 
-  /** The one fault this net deliberately drops. Chromium dispatches a window
+  /** The one fault this net deliberately drops: Chromium dispatches a window
    *  `error` reading "ResizeObserver loop completed with undelivered
-   *  notifications" whenever an observer callback runs out of passes — it is a
-   *  notice, not a failure, nothing is broken by it, and this shell runs three
-   *  observers (the reader pane, the canon strip, the connectors overlay). It is
-   *  the classic false positive of every global handler ever written, and a bar
-   *  that cries wolf on a window resize is worse than no bar. */
+   *  notifications" whenever an observer callback runs out of passes. It is a
+   *  notice, not a failure, and this shell runs three observers. */
   const BENIGN = /^ResizeObserver loop/;
 
   addEventListener("error", (e: ErrorEvent) => {
@@ -117,11 +81,10 @@
     noteMishap(r instanceof Error ? `${r.name}: ${r.message}` : String(r));
   });
 
-  /** The scripture face this device used LAST launch, written by
-   *  `session.applyFonts()`. Same trick as `lastLang()`: only this thread can
-   *  read localStorage, and it is the only thing available before the worker has
-   *  opened the config. An unknown token (a config from a later build, a wiped
-   *  store) resolves to the shipped default. */
+  /** The scripture face this device used last launch, written by
+   *  `session.applyFonts()`. Only this thread can read localStorage, and it is all
+   *  there is before the worker has opened the config; an unknown token falls back
+   *  to the shipped default. */
   function hintedTextFont(): string {
     try {
       const token = localStorage.getItem("plumbline:textFont");
@@ -132,7 +95,7 @@
     return DEFAULT_FONT;
   }
 
-  /** The document's own copy of a family, so the CANVAS paints the real face
+  /** The document's own copy of a family, so the canvas paints the real face
    *  rather than the fallback it would otherwise measure once and cache. */
   function documentFaces(token: string): Promise<unknown>[] {
     const fam = FONT_CSS_FAMILY[token] ?? FONT_CSS_FAMILY[DEFAULT_FONT];
@@ -141,7 +104,7 @@
     return loads;
   }
 
-  /** How many faces the WORKER should have for a family — 1 for a face with no
+  /** How many faces the worker should have for a family — 1 for a face with no
    *  italic (Fira Code), 2 otherwise. */
   function expectedFaces(token: string): number {
     return FONT_FILES[token]?.italic ? 2 : 1;
@@ -151,52 +114,43 @@
     try {
       const rpc = new EngineRpc();
       rpc.onProgress = (p) => (phase = p);
-      // Phones defer the machine-tier auto-download: the shell
-      // offers an explicit "load analysis" action instead of spending the
-      // download and the worker time behind the reader's back.
+      // Phones defer the machine-tier auto-download; the shell offers an explicit
+      // action instead of spending the download behind the reader's back.
       const deferRnd = matchMedia("(max-width: 700px)").matches;
       const hinted = hintedTextFont();
       const [info] = await Promise.all([
-        // `textFont` is a HINT from localStorage, exactly like `lang`: the
-        // reader's real choice lives in a config only the worker can read, but
-        // the worker needs a face before the first layout and the reply that
-        // carries the config is what unblocks layouts. Guess, overlap the
-        // download with the whole boot, and reconcile below — a wrong guess
-        // costs one relayout before anything has been painted.
+        // `textFont` is a hint from localStorage, like `lang`: the real choice is
+        // in a config only the worker can read, but the worker needs a face before
+        // the first layout. Guess, overlap the download with boot, and reconcile
+        // below — a wrong guess costs one relayout before anything is painted.
         rpc.boot({ deferRnd, locale: deviceLocale(), lang: lastLang(), textFont: hinted }),
         ...documentFaces(hinted),
       ]);
-      // The worker measures layout with its OWN FontFaceSet. If its load failed
-      // it would silently measure platform-serif metrics while this thread
-      // paints real Garamond, and lines would wrap where they are not drawn —
-      // so say so in the console rather than let it pass as a rendering quirk.
+      // The worker measures layout with its own FontFaceSet. If its load failed it
+      // would silently measure platform-serif metrics while this thread paints real
+      // Garamond, and lines would wrap where they are not drawn — so say so.
       if (info.fontFaces !== expectedFaces(hinted)) {
         console.warn(
           `[plumbline] engine worker loaded ${info.fontFaces}/${expectedFaces(hinted)} reader faces — ` +
             `layout is being measured with fallback metrics`,
         );
       }
-      // Before ANY of the work below, and well before the shell mounts: this is
-      // the point the guessed splash language (i18n.svelte.ts `seed`) is
-      // replaced by the one the core resolved from the reader's own setting.
+      // Before the shell mounts: the guessed splash language (i18n.svelte.ts
+      // `seed`) is replaced by the one the core resolved from the config.
       setCatalog(info.i18n);
-      // The palettes RIDE ON THE BOOT REPLY (audit F-11): the engine lives in
-      // ONE worker thread, so carrying the three compiled-in colour tables on
-      // the reply saves three full queue hops on the single path where nothing
-      // else can proceed. See BOOT_READS in engine/worker-client.ts.
+      // The palettes ride on the boot reply: the engine is one worker thread, so
+      // carrying the three compiled-in colour tables there saves three queue hops
+      // on the one path nothing else can proceed without (BOOT_READS in
+      // engine/worker-client.ts).
       const s = initSession(rpc, info, info.palettes ?? {}, info.bundledOn);
-      // Both type axes, from the config the worker just handed over. If the
-      // guess above was wrong the real face is loaded and the reader relaid
-      // HERE — before the shell mounts, so nothing has been painted in the
-      // wrong one.
+      // Both type axes, from the config the worker just handed over — before the
+      // shell mounts, so a wrong guess above has painted nothing.
       s.applyFonts();
-      // Compared through `readerFace`: the catalogue has arrived by here, so an
-      // Arabic session knows its face is the script one regardless of the
-      // config — and a boot hinted with last ENGLISH session's Latin face (the
-      // reload that follows a language switch) is exactly the wrong guess this
-      // correction exists for. Without the resolve on this side, config ===
-      // hint and the mismatch is invisible: the engine measures Arabic at a
-      // Latin face's optical scale for the whole session.
+      // Compared through `readerFace`, because the catalogue has arrived by here:
+      // an Arabic session's face is the script one whatever the config says.
+      // Without resolving on this side, config === hint and the mismatch is
+      // invisible — the engine measures Arabic at a Latin face's optical scale for
+      // the whole session.
       if (readerFace(s.config.textFont ?? DEFAULT_FONT) !== hinted) {
         await s.setTextFont(s.config.textFont ?? DEFAULT_FONT);
       }
@@ -206,21 +160,20 @@
       const shared = churchFromQuery(location.search);
       s.startAsNewBeliever = startsAsNewBeliever(location.search);
       if (shared && !s.config.church?.name) {
-        // Through `setChurch`, not by assigning `config.church`: the meeting
-        // time is stored ONCE, in `config.sundayService`, and setChurch is what
-        // knows that. Assigning here dropped it on the floor — the link said
-        // when they meet and the reader ended up with no time at all.
+        // Through `setChurch`, not by assigning `config.church`: the meeting time
+        // is stored separately in `config.sundayService`, and only setChurch knows
+        // to write it.
         s.setChurch(shared);
         s.sharedByChurch = shared;
       } else if (shared) {
         s.sharedByChurch = shared; // shown in the welcome, not saved over theirs
       }
-      // A shared PASSAGE opens where it points (`?at=Ps 23:1`) — the QR on the
+      // A shared passage opens where it points (`?at=Ps 23:1`) — the QR on the
       // Present end card hands over the weave, not just the app.
       const at = sharedAtRef(location.search);
       // A launcher shortcut names a destination (`?open=review`, from the
-      // manifest's `shortcuts`). Stripped with the rest: a destination is a
-      // way IN, and a reload should reopen the reader, not the drill.
+      // manifest's `shortcuts`). Stripped with the rest: a destination is a way in,
+      // and a reload should reopen the reader, not the drill.
       const opened = launchDestination(location.search);
       if (shared || s.startAsNewBeliever || at || opened) {
         history.replaceState(null, "", location.pathname + location.hash);
@@ -230,42 +183,30 @@
       if (hasChurch(shared) && !s.showFirstRun) {
         s.showToast(t("shell.homeChurchSet", { church: shared.name }));
       }
-      // "Deferred" has to mean the reader WANTS the machine tier and its download
-      // was held back — not merely that no download happened. The tiers are
-      // opt-in, so those two came apart: with the tier off,
-      // `rndAuto` is correctly false on every device, and without the last clause
-      // every phone would be shown StudyPanel's "Load analysis" offer for a tier
-      // its reader had never asked for.
+      // "Deferred" must mean the reader wants the machine tier and its download was
+      // held back, not merely that no download happened: the tiers are opt-in, so
+      // without the last clause every phone would be offered a tier its reader had
+      // never asked for.
       s.rndDeferred = deferRnd && !info.rndAuto && s.config.machineAnalysis === true;
-      // The TOC, seeded into the read-through cache. NOT a round trip any more:
-      // it came back on the boot reply and `rpc.call` hands it straight over
-      // (BOOT_READS, engine/worker-client.ts), so this is a local write into the
-      // cache under the key `q("toc")` reads — awaited only because the two lines
-      // below genuinely need a canon to clamp and route against.
+      // The TOC, seeded into the read-through cache — not a round trip: it came
+      // back on the boot reply (BOOT_READS, engine/worker-client.ts), so this is a
+      // local write under the key `q("toc")` reads. Awaited because the two lines
+      // below need a canon to clamp and route against.
       await s.fetchQ("toc");
-      // `canonSegments` IS NOT AWAITED, and is not asked for here at all (audit
-      // F-11). Nothing on the path to first text reads it — the canon strip, the
-      // passage navigator and the maps do, and all four go through `q()`, which
-      // fetches on first render and repaints when the answer lands. Awaiting it
-      // here made a read that only the CHROME needs a barrier in front of the
-      // TEXT, which is the one thing boot is racing for.
+      // `canonSegments` is deliberately not asked for here: only the chrome reads
+      // it, through `q()`, which fetches on first render and repaints when the
+      // answer lands — awaiting it would put a barrier in front of the text.
 
-      // An incoming ADDRESS beats the restored position — that is the whole point
-      // of a link somebody sent, and of a bookmark. Applied here for two reasons:
-      // after the TOC, so a hash naming a book nobody has falls through to the
-      // restored session instead of opening a pane on nothing; and before the
-      // shell mounts, so a routed arrival never flashes last session's chapter
-      // first. `history: false` — the reader never saw the restored chapter, so
-      // it is not somewhere for Back to return to.
+      // An incoming address beats the restored position. After the TOC, so a hash
+      // naming a book nobody has falls through to the restored session instead of
+      // opening a pane on nothing; before the shell mounts, so a routed arrival
+      // never flashes last session's chapter first. `history: false`, because the
+      // reader never saw the restored chapter.
       //
-      // ARRIVALS ONLY. A reload's address is not incoming information — it is the
-      // one this app stamped itself last session — while the config underneath it
-      // may have been REPLACED: restoring a backup mutes every config write and
-      // reloads, so honouring the address there would open the chapter the old
-      // session was in instead of the one the backup was last in
-      // (e2e/legacy-restore.spec.ts is the guard: the backup's Revelation 22
-      // against the live John 3). On every other reload the two agree anyway,
-      // because `pagehide` flushes the session before the document goes.
+      // Arrivals only. A reload's address is the one this app stamped last session,
+      // while the config underneath it may have been replaced: restoring a backup
+      // mutes every config write and reloads, so honouring the address there would
+      // open the old session's chapter instead of the backup's.
       const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
       // No entry at all (an engine without the API) is treated as an arrival: a
       // shared link that opens nowhere is the worse of the two failures.
@@ -273,21 +214,16 @@
       if (routed) s.navigate(0, routed.book, routed.chapter, null, { history: false });
       s.installRouter();
       session = s;
-      // The worker dying AFTER boot had nowhere to go — worker-death.spec.ts says
-      // so in as many words ("the shell has no post-boot fatal UI to show yet…
-      // the hook is where that UI will attach"). It is not a window `error`, so
-      // the net above cannot see it; it is attached HERE, after the splash has
-      // handed over, so a death DURING boot is still the splash's to report and
-      // is never told twice.
+      // A worker death after boot is not a window `error`, so the net above cannot
+      // see it. Attached here, after the splash has handed over, so a death during
+      // boot stays the splash's to report and is never told twice.
       rpc.onFatal = (e) => noteMishap(e.message);
-      // After the TOC is in, so navigation clamps against a real canon. AFTER the
-      // hash too, and deliberately: `?at=` names a verse, so it is the more
-      // specific of the two and wins when a link carries both.
+      // After the TOC, so navigation clamps against a real canon, and after the
+      // hash: `?at=` names a verse, so it wins when a link carries both.
       if (at) void dispatchLink(s, goUri(at));
-      // The shortcut's destination opens ON TOP of the restored reader — the
-      // same states the bottom nav sets (Shell.svelte NAV), so the Read tab and
-      // Back dismiss it the same way. After the hash/`?at=` routing above: the
-      // reader underneath should be where the session left it either way.
+      // The shortcut's destination opens on top of the restored reader, using the
+      // same states the bottom nav sets, so the Read tab and Back dismiss it the
+      // same way.
       if (opened === "hymnal") s.screen = "hymnal";
       else if (opened) {
         s.screen = "memorize";
@@ -304,18 +240,17 @@
       idle(() => {
         void s.sweepCaches();
         void s.checkForUpdate();
-        // The launch badge: cards that fell due since last session. At idle
-        // because it is chrome, not text — nothing on screen waits on it.
+        // The launch badge: cards that fell due since last session. At idle because
+        // it is chrome, not text.
         s.refreshAppBadge();
       });
-      // An installed PWA is resumed far more often than it is launched, so
-      // coming back to the foreground is the moment worth re-checking (the
-      // check throttles itself).
+      // An installed PWA is resumed far more often than launched, so returning to
+      // the foreground is the moment worth re-checking (the check throttles itself).
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {
           void s.checkForUpdate();
-          // Resume crosses midnights: a card can have fallen due while the
-          // app sat in the background, and resume is the only moment to say so.
+          // Resume crosses midnights: a card can have fallen due while the app sat
+          // in the background.
           s.refreshAppBadge();
         }
       });
@@ -325,19 +260,15 @@
   }
   start();
 
-  // The address bar follows pane 0 wherever it goes. An EFFECT rather than a line
-  // inside `navigate`, because a pane's chapter moves down half a dozen paths —
-  // the canon strip, a history step, a weave tapped in Explore, the passage
-  // navigator, `?at=`, session restore — and the URL has to follow all of them,
-  // not the ones somebody remembered to instrument.
+  // The address bar follows pane 0. An effect rather than a line inside
+  // `navigate`, because a pane's chapter moves down half a dozen paths and the URL
+  // has to follow all of them, not the ones somebody remembered to instrument.
   $effect(() => {
     session?.syncUrl();
   });
 
   // The phone's Back button, wired to the surface stack: an open surface owns a
-  // history entry, so Back closes it instead of exiting the PWA. Android has had
-  // this since it shipped (BackHandler); on the web, Back out of a study sheet
-  // left an installed app entirely — there was nothing under it but the launch.
+  // history entry, so Back closes it instead of exiting an installed PWA.
   $effect(() => {
     const s = session;
     if (!s) return;
@@ -353,8 +284,8 @@
 </script>
 
 {#if mishap}
-  <!-- Outside the session block on purpose: whatever broke may be the thing that
-       renders the app, so this must not be nested inside it. -->
+  <!-- Outside the session block: whatever broke may be the thing that renders the
+       app, so this must not be nested inside it. -->
   <div class="mishap" role="alert">
     <span class="what">{t("boot.mishap")}</span>
     <button class="act" onclick={() => location.reload()}>{t("boot.reload")}</button>
@@ -368,9 +299,8 @@
 
 {#if session}
   {#if session.showFirstRun}
-    <!-- First launch: the welcome owns the screen, straight off the loader —
-         the reader mounts only after a path is chosen (no John 3 flashing
-         under a question). -->
+    <!-- First launch: the welcome owns the screen; the reader mounts only after a
+         path is chosen, so nothing flashes under the question. -->
     <div class="firstrun-stage">
       <FirstRun />
     </div>
@@ -386,9 +316,8 @@
     <h1>Plumbline</h1>
     <p class="sub">{t("boot.tagline")}</p>
     {#if error}
-      <!-- The reader gets a sentence they can act on; the RAW string stays one
-           disclosure away, because it is what a bug report pastes and the only
-           evidence of which rung of the boot ladder broke (audit D-11). -->
+      <!-- The reader gets a sentence they can act on; the raw string stays one
+           disclosure away, because it is what a bug report pastes. -->
       <p class="error">{t(bootErrorCopy(error))}</p>
       <button onclick={() => location.reload()}>{t("boot.retry")}</button>
       <details>
@@ -405,9 +334,8 @@
       </div>
       <p class="detail">{phaseLabel}</p>
       {#if phase.phase === "download"}
-        <!-- Only while something is actually being downloaded — which, now that
-             boot opens in `prepare`, is only ever a cold visit. Saying it on a
-             warm boot would be a bill for a purchase already made. -->
+        <!-- Only while something is actually being downloaded — since boot opens
+             in `prepare`, only ever a cold visit. -->
         <p class="once">{t("boot.oneTime")}</p>
       {/if}
     {/if}
@@ -421,12 +349,11 @@
     background: var(--paper, #fcf9f4);
   }
   .splash {
-    /* A system serif ON PURPOSE, not an oversight. This screen exists to say
-       "we are working on it", and it inherited EB Garamond from body — which is
-       render-blocking, so with font-display: block the splash painted NOTHING
-       until 1.6 MB of font arrived. Asking for a face that is already on the
-       device means it appears immediately, and nothing swaps under the reader
-       here (the reader itself is a canvas, painted after the font resolves). */
+    /* A system serif on purpose: EB Garamond, inherited from body, is
+       render-blocking, so with font-display: block the splash painted nothing
+       until 1.6 MB of font arrived. A face already on the device appears at once,
+       and nothing swaps here (the reader is a canvas, painted after the font
+       resolves). */
     font-family: Georgia, "Times New Roman", serif;
     height: 100%;
     display: flex;
@@ -434,13 +361,11 @@
     align-items: center;
     justify-content: center;
     gap: 10px;
-    /* EVERY COLOUR HERE IS THE PALETTE'S, not a literal (audit D-11). These were
-       the light theme's hexes, so a dark-theme reader got a full-screen cream
-       flash on every launch — warm boots included — before `applyTheme()`
-       arrived with the truth. The variables are set in index.html's head, from
-       last session's stored palette, BEFORE the first paint; the fallbacks after
-       the comma are the light theme's own (crates/core/src/theme.rs) and only
-       ever apply if that inline block has been removed. */
+    /* Every colour here is the palette's, not a literal: hard-coded light hexes
+       gave a dark-theme reader a full-screen cream flash on every launch, warm
+       boots included. The variables are set in index.html's head from last
+       session's stored palette, before the first paint; the fallbacks are the
+       light theme's own (crates/core/src/theme.rs). */
     background: var(--paper, #fcf9f4);
     color: var(--ink, #211f1a);
   }
@@ -509,8 +434,8 @@
     border-radius: 6px;
     color: var(--gold, #7d632c);
   }
-  /* The raw string, one disclosure away. Monospace and scrollable because it is
-     meant to be READ and COPIED into a bug report, not skimmed. */
+  /* The raw string: monospace and scrollable, meant to be copied into a bug
+     report rather than skimmed. */
   details {
     max-width: min(48em, calc(100vw - 32px));
     font-size: 12px;
@@ -529,12 +454,10 @@
     user-select: text;
   }
 
-  /* ── the global failure bar (audit D-12) ─────────────────────────────────── */
-  /* A TOP bar, where the shell's two sticky notices are bottom ones: this can
-     appear at the same time as either, and the one thing it must not do is land
-     on top of the notice about the reader's unsaved work. Above everything
-     (the app's ceiling is z-index 60) — if this is showing, it is the most
-     important thing on the screen. */
+  /* ── the global failure bar ──────────────────────────────────────────────── */
+  /* A top bar, where the shell's two sticky notices are bottom ones, so it can
+     never land on the notice about the reader's unsaved work. Above the app's
+     z-index ceiling of 60. */
   .mishap {
     position: fixed;
     top: 0;
@@ -545,18 +468,16 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
-    /* An installed PWA draws under the status bar (viewport-fit=cover), so the
+    /* An installed PWA draws under the status bar (viewport-fit=cover), so this
        inset is the difference between a readable bar and one behind the clock.
-       Through the shared variable, not `env()` directly: app.css names the four
-       insets once and is the only place that writes `env()`, which is what lets
-       a headless browser — which has no notch and never will — drive them. */
+       Through the shared variable, not `env()` directly: app.css is the only place
+       that writes `env()`, which is what lets a headless browser drive the insets. */
     padding: calc(8px + var(--safeTop, 0px)) 12px 8px;
     background: var(--ink, #211f1a);
     color: var(--paper, #fcf9f4);
     border-bottom: 4px solid var(--tierResearch, #b04a3a);
-    /* Scaled like the rest of the chrome (D-23). The splash below is NOT, and
-       correctly so: it paints before Shell mounts, so `--uiScale` has not been
-       published yet and the fallback of 1 is the honest value there. */
+    /* Scaled like the rest of the chrome. The splash is not, and correctly so: it
+       paints before Shell mounts, so `--uiScale` has not been published yet. */
     font-size: calc(14px * var(--uiScale, 1));
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
   }

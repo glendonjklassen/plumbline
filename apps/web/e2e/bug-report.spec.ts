@@ -1,28 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The pasteable bug report, and the switch it must NOT depend on (D-20).
-//
-// The header — release tag, build id, engine version, data pack version, and what
-// kind of device this is — used to live inside SettingsDialog's `{#if PERF}`
-// block, while `engine/perf.ts` says in its own docstring that PERF must not ship
-// on. So every release was a choice between shipping a build that measures itself
-// on every reader's phone and shipping one where a bug report says nothing about
-// which code, which data, or which device it came from.
-//
-// They are separate things now: the report is a normal part of Settings, and PERF
-// only decides whether MEASUREMENTS are appended to it. These two tests hold both
-// halves of that — the report is there with the flag off, and the flag is off.
-//
-// Mutation-tested? NOT BY THE AUTHOR — this suite cannot be run from the agent
-// that wrote it (one shared dist/ and preview port). Exact recipes are with each
-// test; every one names the file, the edit, and the title that must go red.
+// The pasteable bug report must not depend on PERF, which must ship off. The report's
+// header (release tag, build id, engine version, data pack version, device) is a
+// normal part of Settings; PERF only decides whether MEASUREMENTS are appended. These
+// two tests hold both halves: the report is there with the flag off, and it is off.
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
-  // Either the first-run chooser (fresh storage, which is every test here) or the
-  // reader canvas. The analysis tiers are deliberately left OFF: nothing in a bug
-  // report header comes from the analysis pack, so there is no reason to make
-  // these two tests wait for that download.
+  // The analysis tiers are left off deliberately: nothing in a report header comes
+  // from the analysis pack, so these tests need not wait for that download.
   const established = page.getByRole("button", { name: "Established believer" });
   await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
   if (await established.isVisible().catch(() => false)) {
@@ -40,8 +26,7 @@ async function openSettings(page: Page): Promise<void> {
   await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(settings(page)).toBeVisible();
-  // The report moved behind the Advanced disclosure with the menu
-  // rationalization; every path to it in this file goes through here.
+  // The report lives behind the Advanced disclosure; every path to it goes here.
   const adv = settings(page).locator("details.advanced");
   if (!(await adv.evaluate((d) => (d as HTMLDetailsElement).open))) {
     await adv.locator("> summary").click();

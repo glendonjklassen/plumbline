@@ -1,21 +1,18 @@
-// Fetch the read-only data pack (built by scripts/build-web-pack.mjs):
-// manifest first, then the gzipped files, decompressed with the browser's
-// DecompressionStream.
+// Fetch the read-only data pack (built by scripts/build-web-pack.mjs): manifest
+// first, then the gzipped files, decompressed with DecompressionStream.
 //
-// Every read goes through the DEPOT (engine/depot.ts), which serves the
-// device's copy when it has one and stores what it downloads. That is not an
-// optimisation — it is what makes the pack independent of whether the service
-// worker happens to be controlling this worker, which on a first visit is a
-// race (see the depot's header).
+// Every read goes through the DEPOT (engine/depot.ts), which is what makes the
+// pack independent of whether the service worker happens to control this worker —
+// on a first visit that is a race (see the depot's header).
 
 import { depotBytes, depotDelete, depotGet, depotPut } from "./depot";
 import { PERF } from "./perf";
 import { shippedBase } from "../lib/locale";
 
-/** When the loader fetches a file. The manifest carries this per entry — it is
- *  NOT re-derived from filenames here, which is how four places ended up able to
- *  disagree about which tier a file belonged to. `scripts/build-web-pack.mjs`
- *  owns the assignment; `scripts/check-web-pack.mjs` guards the shape. */
+/** When the loader fetches a file. The MANIFEST IS THE LOAD SPEC: this is carried
+ *  per entry, never re-derived from filenames here, or several places end up able
+ *  to disagree about a file's tier. `scripts/build-web-pack.mjs` owns the
+ *  assignment; `scripts/check-web-pack.mjs` guards the shape. */
 export type PackStage =
   /** Needed before the reader sees a word: the corpus cache + the stock set. */
   | "text"
@@ -23,11 +20,9 @@ export type PackStage =
   | "study"
   /** The machine tier — background, and deferred behind an action on phones. */
   | "analysis"
-  /** Every language's Bible except the one this boot opens. On EVERY device,
-   *  downloaded in the background once there is text on screen, so that picking
-   *  a language is a switch and not a download — and so that a phone whose
-   *  locale we translate the interface into is never shown somebody else's
-   *  scripture. Only the opened one is ever inflated into the home
+  /** Every language's Bible except the one this boot opens: downloaded in the
+   *  background once there is text on screen, so picking a language is a switch
+   *  rather than a download. Only the opened one is inflated into the home
    *  ([isOtherCorpus]); the rest sit in the depot as compressed bytes. */
   | "corpus"
   /** Never fetched unless the reader asks: the suggested-weave bundle and the
@@ -46,17 +41,14 @@ export interface PackFile {
   /** The bundled stock study set: seeded into the reader's own files once, and
    *  their copies rule afterwards. */
   seedOnce?: true;
-  /** The parsed-corpus cache — the one file the fast open depends on, fetched
-   *  only when IndexedDB doesn't already hold a usable copy (see boot.ts) — or
-   *  the suggested-weave bundle, which the reader downloads from Settings.
-   *  Both are found by role rather than by filename, so a rename cannot quietly
-   *  unhook them. */
+  /** The parsed-corpus cache (the one file the fast open depends on) or the
+   *  suggested-weave bundle. Found by role rather than filename, so a rename
+   *  cannot quietly unhook them. */
   role?: "corpusCache" | "suggestedWeaves" | `corpus:${string}` | `lexicon:${string}`;
-  /** Where these bytes live, relative to the app base. Present on files that came
-   *  from a PIN, absent on a manifest straight off the network (where it is
-   *  derived). Storing it lets two pack generations coexist in the depot: an
-   *  unchanged file keeps its URL across a version bump, so re-pinning costs no
-   *  bytes. See pin.ts. */
+  /** Where these bytes live, relative to the app base. Present on files from a
+   *  PIN, absent on a manifest straight off the network (where it is derived).
+   *  Storing it lets two pack generations coexist in the depot: an unchanged file
+   *  keeps its URL across a version bump. See pin.ts. */
   url?: string;
 }
 
@@ -68,8 +60,8 @@ export interface PackManifest {
 }
 
 /** The entry shape this build understands. A pack from the future is refused
- *  rather than mis-tiered: an unknown `stage` would silently make files
- *  unreachable, which surfaces as a boot that hangs with no explanation. */
+ *  rather than mis-tiered: an unknown `stage` would make files silently
+ *  unreachable, surfacing as a boot that hangs with no explanation. */
 const SUPPORTED_FORMAT = 2;
 
 export interface PackProgress {
@@ -78,10 +70,9 @@ export interface PackProgress {
   currentFile: string;
 }
 
-// The app's asset base as an ABSOLUTE url. Vite's BASE_URL is "./" (host-
-// agnostic), which resolves against the *current script* — wrong inside the
-// engine worker (it lives under assets/). The main thread passes the resolved
-// page base into the worker, which overrides it here before booting.
+// The app's asset base as an ABSOLUTE url. Vite's BASE_URL is "./", which resolves
+// against the *current script* — wrong inside the engine worker, which lives under
+// assets/. The main thread passes the resolved page base in before booting.
 let assetBase = typeof document !== "undefined" ? new URL(import.meta.env.BASE_URL, location.href).href : "";
 export function setAssetBase(url: string): void {
   assetBase = url;
@@ -95,10 +86,9 @@ export function assetUrl(path: string): string {
 
 export async function fetchManifest(): Promise<PackManifest> {
   const url = new URL("pack/manifest.json", assetBase).href;
-  // Network first, depot as the fallback: the manifest is the one pack file
-  // with no version in its URL, so a cached copy can be stale and we want the
-  // live one when there is a network. Offline, the stored copy is what lets the
-  // rest of the pack be found at all.
+  // Network first, depot as the fallback: the manifest is the one pack file with
+  // no version in its URL, so a stored copy can be stale. Offline, that stored copy
+  // is what lets the rest of the pack be found at all.
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -132,28 +122,19 @@ async function gunzip(body: ArrayBuffer): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-/** Per-file download detail, for the diagnostics panel.
- *
- *  ONE number per stage — "stage2 fetch+gunzip" — conflates three unrelated
- *  things: bytes off the network, bytes off this device, and time the thread
- *  simply wasn't available to receive either. Dividing the byte count by it
- *  produces a "connection speed" that is pure invention. So record what each file
- *  cost and WHERE IT CAME FROM, not one number. */
+/** Per-file download detail, for the diagnostics panel. Per file and with its
+ *  source, because one number per stage conflates bytes off the network, bytes off
+ *  this device, and time the thread was not available to receive either. */
 export interface PackFileTrace {
   path: string;
   gzBytes: number;
   ms: number;
   /** A depot hit costs no network at all; a miss is a real download. */
   from: "depot" | "network";
-  /** What the BROWSER'S OWN network stack says this request took, and how many
-   *  bytes crossed the wire — independent of when our thread got around to
-   *  reading them.
-   *
-   *  This is the whole argument-settler. Our `ms` above is wall clock around an
-   *  `await`, so a frozen thread inflates it without limit. If `netMs` is small
-   *  while `ms` is huge, the bytes arrived on time and we were late collecting
-   *  them — which is a scheduling bug, not a bandwidth one, and no amount of
-   *  shrinking the pack would touch it. */
+  /** What the browser's own network stack says the request took, and how many
+   *  bytes crossed the wire. `ms` above is wall clock around an `await`, which a
+   *  frozen thread inflates without limit — a small `netMs` beside a huge `ms`
+   *  means a scheduling problem, not a bandwidth one. */
   netMs?: number;
   transferBytes?: number;
 }
@@ -163,9 +144,8 @@ export function takePackTrace(): PackFileTrace[] {
   return [...packTrace];
 }
 
-/** What the browser's network stack says a request cost, as opposed to what our
- *  wall clock around the `await` says. The gap between the two is time the bytes
- *  existed and this thread had not collected them yet. */
+/** What the browser's network stack says a request cost. The gap against our own
+ *  wall clock is time the bytes existed uncollected by this thread. */
 function netTiming(url: string): { netMs?: number; transferBytes?: number } {
   try {
     const e = performance.getEntriesByName(url).at(-1) as PerformanceResourceTiming | undefined;
@@ -182,9 +162,8 @@ async function fetchFiles(
   onProgress?: (p: PackProgress) => void,
 ): Promise<Map<string, Uint8Array>> {
   const totalGz = files.reduce((s, f) => s + f.gzBytes, 0);
-  // Bytes as they arrive, not files as they finish: the analysis pack is a
-  // handful of files and one of them dwarfs the rest, so per-file reporting would
-  // sit at 0% for the whole download on a phone.
+  // Bytes as they arrive, not files as they finish: one analysis file dwarfs the
+  // rest, so per-file reporting would sit at 0% for the whole download.
   let received = 0;
   const out = new Map<string, Uint8Array>();
   // A few files concurrently; decompression overlaps the network.
@@ -192,8 +171,8 @@ async function fetchFiles(
   const workers = Array.from({ length: 4 }, async () => {
     for (let f = queue.shift(); f; f = queue.shift()) {
       const url = packFileUrl(f, version);
-      // Which side of the read-through answered, taken from the read itself so
-      // it adds no work to the load path.
+      // Which side of the read-through answered, taken from the read itself so it
+      // adds no work to the load path.
       const src = { fromDepot: false };
       const t0 = performance.now();
       const body = await depotBytes(
@@ -223,22 +202,18 @@ async function fetchFiles(
   return out;
 }
 
-/** The depot key for a pack file. One function, so the loader, the offline
- *  survey and the cache sweep cannot disagree about what a file is called.
- *
- *  A pinned file carries its own URL — content-addressed on its hash, so one
- *  changed weave invalidates one URL. A manifest fresh off the network has none
- *  yet, and gets the same scheme derived from the same hash. */
+/** The depot key for a pack file. One function, so the loader, the offline survey
+ *  and the cache sweep cannot disagree about what a file is called. A pinned file
+ *  carries its own URL (content-addressed on its hash, so one changed weave
+ *  invalidates one URL); a fresh manifest gets the same scheme derived. */
 export function packFileUrl(f: PackFile, version: string): string {
   if (f.url) return assetUrl(f.url);
   return f.hash ? `${packUrl(f.path)}.gz?h=${f.hash}` : `${packUrl(f.path)}.gz?v=${version}`;
 }
 
-/** sha256 of raw bytes, first 16 hex chars — the same form the manifest carries.
- *  Returns null where `crypto.subtle` is unavailable (it needs a secure context,
- *  so a plain-http origin has none). Callers treat null as "unverified" rather
- *  than "bad": refusing to load on a host that cannot hash would be worse than
- *  loading unverified, which is exactly what every previous build did. */
+/** sha256 of raw bytes, first 16 hex chars — the form the manifest carries. Null
+ *  where `crypto.subtle` is unavailable (it needs a secure context, so a plain-http
+ *  origin has none); callers treat null as "unverified", not "bad". */
 export async function sha16(raw: Uint8Array): Promise<string | null> {
   try {
     const buf = raw.slice().buffer as ArrayBuffer;
@@ -250,12 +225,9 @@ export async function sha16(raw: Uint8Array): Promise<string | null> {
 }
 
 /** Check a freshly-stored pack file against the hash the manifest claims, and
- *  delete it if it does not match.
- *
- *  Without this, a CDN error page served with a 200, or a truncated body, is
- *  stored as a permanently valid file — and the engine then fails to parse it on
- *  every launch with no recovery path. This is what makes the per-file hash
- *  load-bearing rather than decorative. */
+ *  delete it if it does not match. Without this, a CDN error page served with a
+ *  200, or a truncated body, is stored as a permanently valid file the engine then
+ *  fails to parse on every launch with no recovery path. */
 export async function verifyStored(f: PackFile, version: string): Promise<boolean> {
   if (!f.hash) return true;
   const url = packFileUrl(f, version);
@@ -269,11 +241,10 @@ export async function verifyStored(f: PackFile, version: string): Promise<boolea
   return false;
 }
 
-/** Read a stage entirely from the DEPOT, or give up. No network, at all — this is
- *  what makes a warm boot cost zero requests, and returning null rather than
- *  falling back to the network is deliberate: the caller decides whether to take
- *  the cold path, so a partially-evicted device gets one coherent decision
- *  instead of a per-file mix of local reads and downloads. */
+/** Read a stage entirely from the DEPOT, or give up. No network at all — this is
+ *  what makes a warm boot cost zero requests before text. Returning null rather
+ *  than falling back leaves the cold-path decision to the caller, so a
+ *  partially-evicted device makes one coherent choice rather than a per-file mix. */
 export async function fetchStageLocal(
   manifest: PackManifest,
   stage: PackFile["stage"],
@@ -291,13 +262,10 @@ export async function fetchStageLocal(
   return out;
 }
 
-/** Stage 1 — the FASTEST path to text on screen: the parsed corpus cache plus
- *  the tiny stock study set (which has to be present AT OPEN so it can seed).
- *
- *  "The text" is the cache, not `kjv.jsonl`: the cache supersedes it, core opens
- *  straight from it, and the raw JSONL is no longer shipped at all. When this
- *  device already holds a usable cache in IndexedDB, `needText: false` skips it
- *  and only the stock set is fetched. */
+/** Stage 1 — the fastest path to text on screen: the parsed corpus cache (which
+ *  supersedes `kjv.jsonl`; the raw JSONL is not shipped) plus the tiny stock study
+ *  set, which must be present AT OPEN so it can seed. `needText: false` skips the
+ *  cache when this device already holds a usable one. */
 export function fetchPack(
   manifest: PackManifest,
   onProgress?: (p: PackProgress) => void,
@@ -315,10 +283,10 @@ export function fetchPack(
   );
 }
 
-/** Stage 2 — Strong's, cross-references, margin notes, the overlay and the
- *  bridge witnesses, fetched right after the reader hands over. A device with a
- *  language's corpus installed also gets that language's lexicon here, so the
- *  engine's `strongs_for` pick finds it in the home before `loadCoreData`. */
+/** Stage 2 — Strong's, cross-references, margin notes, the overlay and the bridge
+ *  witnesses, fetched right after the reader hands over. A device with a language's
+ *  corpus installed also gets that language's lexicon here, so the engine's
+ *  `strongs_for` finds it in the home before `loadCoreData`. */
 export function fetchStage2Pack(
   manifest: PackManifest,
   onProgress?: (p: PackProgress) => void,
@@ -335,12 +303,9 @@ export function fetchStage2Pack(
   );
 }
 
-/** A NAMED set of entries, whatever stage they came from.
- *
- *  Every other fetch here selects by tier, because the tier is the question.
- *  This one exists for the case where it is not: `backgroundLoad` diffs a
- *  refreshed manifest against the files the pin actually delivered, and what
- *  comes out is a list, not a tier. Its only caller. */
+/** A NAMED set of entries, whatever stage they came from. For its one caller,
+ *  `backgroundLoad`, which diffs a refreshed manifest against the files the pin
+ *  actually delivered — what comes out is a list, not a tier. */
 export function fetchPackEntries(
   version: string,
   files: PackFile[],
@@ -357,66 +322,32 @@ export function fetchRndPack(
   return fetchFiles(manifest.version, manifest.files.filter((f) => f.stage === "analysis"), onProgress);
 }
 
-/** The suggested-weave bundle, and ONLY when the reader asked for it.
- *
- *  Found by role, not by filename or stage sweep: it is the one entry a rename
- *  could otherwise unhook silently. Null when this pack has none (an older
- *  pack, or a build with no `stock/weaves/suggested/`), which the Settings row
- *  reads as "nothing to offer" rather than an error. */
-/**
- * The files THIS device's pack consists of.
- *
- * Every stage but `optional` always counts. An `optional` entry counts only
- * where the reader has actually asked for it, and the authority on that is the
- * home's install marker — NOT whether the bytes happen to be in the depot,
- * which prune is free to reclaim.
- *
- * `has` is asked PER FILE rather than once for the whole stage, because a reader
- * can easily have one optional file and not another, and one boolean for the
- * whole set would be a lie about half of it — the pin naming a file that is
- * absent, or the update sweep silently pushing a German Bible onto a device that
- * never asked for it.
- *
- * Two things read this and they must not disagree. The update sweep fetches
- * exactly this set, so a deploy never pushes an optional file onto a device
- * that declined it. And the PIN names exactly this set, because the pin's
- * promise is that every file it names is present — a pin listing a file the
- * device deliberately does not have is a false claim, and prune, which keeps
- * what the pin names, would be asked to preserve something that was never
- * there.
- */
 /** Whether an optional pack file is one THIS home has asked for.
  *
- *  Keyed on `role`, so a new optional entry has to be named here to count —
- *  which is the failure mode worth designing for: an unnamed optional file
- *  defaults to "not ours", so it is never pinned as present and never swept onto
- *  a device that declined it. The alternative default would put a download the
- *  reader never approved on the update path.
+ *  Keyed on `role`, so an unnamed optional file defaults to "not ours": it is then
+ *  never pinned as present and never swept onto a device that declined it. The
+ *  authority is the home's install marker, not whether the bytes happen to be in
+ *  the depot, which prune is free to reclaim.
  *
- *  The home is passed structurally rather than as `VirtualHome` so `pack.ts`
- *  stays free of a `home.ts` import — they already point the other way. */
+ *  The home is passed structurally rather than as `VirtualHome`, so `pack.ts` stays
+ *  free of a `home.ts` import — they already point the other way. */
 export function hasOptional(home: { suggestedInstalled: boolean; langsInstalled: Set<string> }, f: PackFile): boolean {
   if (f.role === "suggestedWeaves") return home.suggestedInstalled;
-  // NOT the corpora. A Bible is not something a reader opts into any more — it
-  // is `stage: "corpus"` and ships to every device — so answering "has the
-  // reader installed it?" about one would be answering a question nobody asks.
-  // `devicePackFiles` takes it on its stage; stage 1 takes the opened one by
-  // role. Saying false here rather than deleting the branch, because the
-  // `langsInstalled` set still carries codes written by the old install flow on
-  // devices upgrading into this build, and a stale marker must not start meaning
-  // something new.
+  // NOT the corpora: a Bible is `stage: "corpus"` and ships to every device, so it
+  // is not something a reader opts into. `devicePackFiles` takes it on its stage,
+  // stage 1 takes the opened one by role. Answering false rather than dropping the
+  // branch, because `langsInstalled` still carries codes written by the old install
+  // flow on upgrading devices, and a stale marker must not start meaning something
+  // new.
   if (isCorpusRole(f.role)) return false;
   // The dictionary is still an ask, and still keyed by language code.
   const code = langOfRole(f.role);
   return code !== null && home.langsInstalled.has(code);
 }
 
-/** The language code a `corpus:xx` / `lexicon:xx` role names, else null.
- *
- *  ONE PARSER, so the loader, the pin and Settings cannot disagree about what a
- *  role means. These were three literal strings — `germanCorpus`,
- *  `germanLexicon`, and a `"de"` compared in a Svelte file — which is why
- *  adding a language meant finding all three. */
+/** The language code a `corpus:xx` / `lexicon:xx` role names, else null. One
+ *  parser, so the loader, the pin and Settings cannot disagree about what a role
+ *  means, and adding a language touches no literal string elsewhere. */
 export function langOfRole(role: string | undefined): string | null {
   if (!role) return null;
   const at = role.indexOf(":");
@@ -432,63 +363,36 @@ export function isCorpusRole(role: string | undefined): boolean {
 }
 
 /**
- * The corpus this boot should actually INFLATE, by role — and therefore the one
- * it should skip.
+ * The corpus this boot should INFLATE, by role — and therefore the ones it skips.
+ * Several corpus caches ship, and inflating them all would cost tens of MB of work
+ * and memory before any text appeared when only one is ever opened.
  *
- * Two corpus caches are in the pack now, and a German reader has both on the
- * device. Without this, stage 1 would gunzip and copy BOTH into the home on
- * every launch — about 63 MB of work and memory before any text appeared,
- * against 35 MB for an English reader — when only one is ever opened.
+ * Decided by `plumbline.lang` and then the device locale, because stage 1 runs
+ * before there is an engine to read a config with, and on a genuinely cold start
+ * that key is still empty (it is written at the END of a boot). Those two arguments
+ * in that order ARE `i18n::resolve(chosen, device)` in crates/core: the same rule
+ * decides the interface and the text, or an app ends up with its chrome and its
+ * scripture in different languages.
  *
- * BY `plumbline.lang`, and not by the config, because stage 1 runs before there
- * is an engine to read a config with. That key is already the splash's own seed
- * and is written on every boot and on every language switch, so it is the one
- * answer available this early.
+ * Skipping a load is not dropping a file: every corpus stays in the pin and the
+ * depot, so switching back to English works with no network.
  *
- * AND BY THE DEVICE'S LOCALE WHEN THAT KEY IS EMPTY, which is the case on the
- * visit that matters most: the first one. `plumbline.lang` is written at the END
- * of a boot, so on a genuinely cold start there is no last session to remember
- * and this used to fall straight through to the KJV — the interface would read
- * the device locale, resolve to Arabic, and paint an Arabic app over English
- * scripture, on the one visit where nobody has had a chance to correct it.
- *
- * These two arguments in this order ARE `i18n::resolve(chosen, device)` in
- * crates/core, deliberately: the chosen language wins, the device answers when
- * nothing was chosen. That rule decides the interface, and it now decides the
- * text, because a rule implemented twice is a rule that disagrees with itself
- * once — and the shape of that disagreement is exactly an app whose chrome and
- * whose scripture are in different languages.
- *
- * ALL OF THEM STAY IN THE PIN AND THE DEPOT. This decides what to inflate,
- * never what to keep: switching back to English has to work with no network,
- * and prune keeps exactly what the pin names. Skipping the load is not the same
- * as dropping the file.
- *
- * `has` ASKS THE MANIFEST, not the reader's install history. It used to ask
- * whether this device had taken the optional download, which was the right
- * question while a Bible was an optional download and is the wrong one now that
- * every Bible ships: asking it today would answer "no" for a language whose
- * corpus is sitting in the depot, and the reader would get the KJV under a
- * translated interface — the exact failure the bundling was for. What is left
- * to ask is whether this BUILD carries that language's text at all, which is a
- * real question: a checkout that has not run the Spanish data-prep produces a
- * pack without it.
- *
- * Every way of being wrong lands on the KJV, which is what a boot does today: a
- * missing key, a stale key, a language this build has no corpus for.
+ * `has` asks the MANIFEST — whether this build carries that language's text at all
+ * — not the reader's install history: every Bible ships now, so asking about an
+ * install would answer "no" for a corpus sitting in the depot. Every way of being
+ * wrong lands on the KJV.
  */
 export function corpusRoleFor(lang: string | null, locale: string | null, has: (role: string) => boolean): string {
-  // The stored answer first, the hardware second — and a stored answer of
-  // "en" must WIN over an Arabic device, or a reader who chose English would
-  // be overruled by their own phone on every launch. `shippedBase` rather
-  // than a bare base-tag strip, because a Chinese device says `zh-TW` and
-  // the corpus roles say `zht`/`zhs` — a strip to `zh` misses every role and
-  // boots the KJV under a Chinese interface.
+  // Stored answer first, hardware second: a stored "en" must win over an Arabic
+  // device, or a reader who chose English is overruled by their phone every launch.
+  // `shippedBase` rather than a bare base-tag strip, because a Chinese device says
+  // `zh-TW` while the corpus roles say `zht`/`zhs`, and a strip to `zh` misses every
+  // role and boots the KJV under a Chinese interface.
   const wants = shippedBase(lang) || shippedBase(locale);
-  // BY CONVENTION, not by a table: `crates/core/src/i18n.rs` files every
-  // non-English corpus under `corpus:<code>` and this composes the same string.
-  // The alternative — a map from language to role — is the thing that had to be
-  // edited to add Spanish, and forgetting it is a silent fall back to the KJV.
+  // By convention, not by a table: `crates/core/src/i18n.rs` files every non-English
+  // corpus under `corpus:<code>` and this composes the same string. A language→role
+  // map would be one more place a new language has to be registered, and forgetting
+  // it falls back silently to the KJV.
   const role = `corpus:${wants}`;
   return wants && wants !== "en" && has(role) ? role : "corpusCache";
 }
@@ -498,36 +402,38 @@ export function isOtherCorpus(f: PackFile, want: string): boolean {
   return isCorpusRole(f.role) && f.role !== want;
 }
 
-/** The Bibles this device should hold but is not reading — what the background
- *  pass downloads into the depot after there is text on screen.
+/** The Bibles this device should hold but is not reading — what the background pass
+ *  downloads into the depot after there is text on screen.
  *
- *  DEPOT ONLY, and that distinction is the whole design: these are bytes on
- *  disk, never files in the in-memory home. Inflating them is what
- *  [isOtherCorpus] exists to prevent, and three corpora in the home is ~91 MB.
- *
- *  Ordered by size, smallest first, so a reader on a slow connection who closes
- *  the tab has completed the most Bibles rather than the fewest — and so that a
- *  partial run leaves whole files rather than a stalled big one. */
+ *  DEPOT ONLY: bytes on disk, never files in the in-memory home (three corpora in
+ *  the home is ~91 MB — see [isOtherCorpus]). Ordered smallest first, so a reader
+ *  who closes the tab mid-run has whole files and the most Bibles, not the fewest. */
 export function otherCorpora(manifest: PackManifest, want: string): PackFile[] {
   return manifest.files
     .filter((f) => f.stage === "corpus" && isOtherCorpus(f, want))
     .sort((a, b) => a.gzBytes - b.gzBytes);
 }
 
+/** The files THIS device's pack consists of: every stage but `optional`, plus the
+ *  optional entries `has` says the reader asked for. Asked per file, because a
+ *  reader can have one and not another. Both readers must agree on this set — the
+ *  update sweep fetches exactly it, so a deploy never pushes a declined download;
+ *  and the pin names exactly it, its promise being that every file it names is
+ *  present. */
 export function devicePackFiles(manifest: PackManifest, has: (f: PackFile) => boolean): PackFile[] {
   return manifest.files.filter((f) => f.stage !== "optional" || has(f));
 }
 
+/** The suggested-weave bundle, found by role rather than filename so a rename
+ *  cannot unhook it. Null when this pack ships none, which the Settings row reads
+ *  as "nothing to offer" rather than an error. */
 export function suggestedWeavesEntry(manifest: PackManifest): PackFile | null {
   return manifest.files.find((f) => f.role === "suggestedWeaves") ?? null;
 }
 
-/** A language's corpus cache, and ONLY when the reader has picked it.
- *
- *  Found by role for the same reason as the bundle above. Null when this pack
- *  has none, which a shell reads as "that scripture is not on offer in this
- *  build" — the interface is still translated, over the English text, because
- *  `corpus_for` in crates/ffi falls back rather than failing. */
+/** A language's corpus cache, by role. Null when this pack ships none: the
+ *  interface is still translated over the English text, because `corpus_for` in
+ *  crates/ffi falls back rather than failing. */
 export function langCorpusEntry(manifest: PackManifest, code: string): PackFile | null {
   return manifest.files.find((f) => f.role === `corpus:${code}`) ?? null;
 }

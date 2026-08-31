@@ -2,34 +2,20 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { zipWrite } from "../src/engine/zip";
 
-// A restore that FAILS must not take the session down with it.
+// Fails against a restore whose failure path left the session standing. Restoring mutes this
+// session's writes before it touches IndexedDB — `s.restoring` stops the config persist,
+// `home.freeze()` stops the authoring persist — and neither has an undo, so a failed restore used
+// to end the session's useful life: a 2.2 s toast, no reload, and from then on every note, tag,
+// thread and setting appeared to save and went nowhere.
 //
-// Restoring mutes this session's writes before it touches IndexedDB — on
-// purpose: `s.restoring` stops the config persist and `home.freeze()` stops the
-// authoring persist, so nothing can save the old session over the restored
-// files. Neither has an undo. So the failure path used to end the session's
-// useful life: a 2.2 s toast, no reload, and from then on every note, tag,
-// thread and setting appeared to save and silently went nowhere. The reader's
-// only way out was a reload nobody had told them to do.
+// The load-bearing assertion is not that an error appeared but that the session can still save
+// afterwards, read straight out of IndexedDB.
 //
-// The load-bearing assertion here is NOT that an error appeared. It is that the
-// session can still SAVE afterwards — read straight out of IndexedDB, the way
-// multitab.spec.ts does, because that is the thing the reader loses.
-//
-// The failure is injected at the browser API, not at the app: the page's own
-// `IDBObjectStore.put` refuses writes to the "user" store while a flag is set,
-// which is what a device out of quota does. Nothing stubs `idbApply`, so the
-// rejection travels the real path. The hook is page-context only — the engine
-// worker has its own global scope, so the authoring persist that this test
-// depends on is untouched by it.
-//
-// Mutation-tested 2026-07-29 (working rules: break the fix, watch it fail):
-//   * the pre-fix catch (`s.showToast(...)`, no reload) → red on the persistence
-//     poll, "authoring after a failed restore must reach IndexedDB — a session
-//     left frozen accepts every write and keeps none";
-//   * the reload kept, the carried message dropped → red on "a failed restore is
-//     reported blocking, not as a 2.2 s toast".
-// Both restored, green.
+// The failure is injected at the browser API rather than at the app: the page's own
+// `IDBObjectStore.put` refuses writes to the "user" store while a flag is set, which is what a
+// device out of quota does, so the rejection travels the real path. The hook is page-context only
+// — the engine worker has its own global scope, so the authoring persist this test depends on is
+// untouched by it.
 
 test.setTimeout(240_000); // a boot, a failed restore, and the reload after it
 
@@ -44,7 +30,7 @@ async function boot(page: Page): Promise<void> {
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
-/** Every value in the user store, decoded — the durable truth about this home. */
+/** Every value in the user store, decoded. */
 function userStore(page: Page): Promise<string[]> {
   return page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((res, rej) => {
@@ -88,10 +74,8 @@ function backupZip(): Buffer {
 }
 
 test("a restore that fails leaves a session that can still save", async ({ page }) => {
-  // Refuse the page's writes to the user store on demand. Installed before the
-  // first navigation so it survives the reload the fix performs (each document
-  // gets a fresh realm, and a fresh flag with it — which is exactly right: the
-  // session on the other side must be able to write again).
+  // Installed before the first navigation so it survives the reload the fix performs. Each
+  // document gets a fresh realm and a fresh flag, so the session on the other side can write.
   await page.addInitScript(() => {
     const put = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function (this: IDBObjectStore, ...args: unknown[]) {
@@ -103,8 +87,8 @@ test("a restore that fails leaves a session that can still save", async ({ page 
 
   await boot(page);
 
-  // The reload must land back on the reader rather than the first-run chooser,
-  // so wait until this session's config is actually durable.
+  // The reload must land back on the reader rather than the first-run chooser, so wait until this
+  // session's config is durable.
   await expect
     .poll(async () => (await userStore(page)).some((e) => e.startsWith(".config/")), {
       timeout: 30_000,
@@ -116,8 +100,8 @@ test("a restore that fails leaves a session that can still save", async ({ page 
   const settings = page.locator('[data-surface="settings"]');
   await expect(settings).toBeVisible();
 
-  // A window marker only a real document navigation can clear, so "it reloaded"
-  // is asserted rather than assumed (sessionStorage would survive; this cannot).
+  // A window marker only a real document navigation can clear, so "it reloaded" is asserted rather
+  // than assumed (sessionStorage would survive; this cannot).
   await page.evaluate(() => {
     (window as any).__beforeRestore = true;
     (window as any).__failUserWrites = true;
@@ -128,22 +112,20 @@ test("a restore that fails leaves a session that can still save", async ({ page 
     buffer: backupZip(),
   });
 
-  // Whichever way it reports, the report is what settles the page: the fix
-  // reloads and shows the notice on the other side; the bug toasts in place.
-  // Swallowed, so the assertions below are what fail rather than this wait.
+  // The report is what settles the page, either way: the fix reloads and shows the notice on the
+  // other side, the bug toasts in place. Swallowed so the assertions below fail, not this wait.
   const notice = page.locator('[data-surface="restore-failed"], .toast');
   await notice
     .first()
     .waitFor({ state: "visible", timeout: 90_000 })
     .catch(() => {});
 
-  // The restore really did fail — nothing out of the zip is in the store.
+  // The restore really did fail: nothing out of the zip is in the store.
   expect(
     (await userStore(page)).filter((e) => e.includes("From the backup")),
     "the injected failure must actually have stopped the restore",
   ).toEqual([]);
 
-  // ── the load-bearing part: this session can still save ──────────────────
   // A frozen session accepts the write, reports no error, and persists nothing.
   await page.evaluate(() =>
     (window as any).__plumbline.author(
@@ -162,21 +144,18 @@ test("a restore that fails leaves a session that can still save", async ({ page 
     })
     .toBe(true);
 
-  // Because it can save: the session was replaced rather than left standing
-  // with its writes muted.
   expect(
     await page.evaluate(() => (window as any).__beforeRestore === true),
     "a failed restore must reload the page — the freeze it took out has no undo",
   ).toBe(false);
 
-  // And the reader was told, in something they cannot miss by looking away.
   const blocking = page.locator('[data-surface="restore-failed"]');
   await expect(blocking, "a failed restore is reported blocking, not as a 2.2 s toast").toBeVisible();
   await expect(blocking).toContainText("nothing changed");
   // Nothing was half-applied: one IndexedDB transaction, rolled back whole.
   await expect(blocking).toContainText("your own study data is as it was");
 
-  // It closes on the reader's word, and only theirs.
+  // It closes only on the reader's word.
   await page.locator('[data-surface="restore-failed"] button').click();
   await expect(blocking).toBeHidden();
 });

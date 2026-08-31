@@ -1,13 +1,10 @@
-//! WHICH SEATING a reader is in — so opening the app at church resumes church,
-//! and opening it on a Tuesday morning resumes Tuesday morning.
+//! Which SEATING a reader is in, so opening the app at church resumes church and
+//! opening it on a Tuesday morning resumes Tuesday morning.
 //!
-//! A reader's last chapter is not one thing. Somebody who studies on weekday
+//! A reader's last chapter is not one thing: somebody who studies on weekday
 //! mornings, sits in a Sunday service and goes to a Wednesday meeting has three
 //! separate places they were, and one "last chapter" serves whichever they did
-//! most recently — so arriving at church on Sunday reopens Saturday night's
-//! study, and Monday morning reopens the sermon passage. Keeping a position per
-//! SLOT means each of those threads is picked up where it was left
-//! (maintainer, 2026-08-13).
+//! most recently. A position per SLOT picks up each of them where it was left.
 //!
 //! The boundaries are a judgement, stated here rather than buried in a shell:
 //!
@@ -19,14 +16,12 @@
 //! | `other`            | everything else             |
 //!
 //! Wednesday MORNING is deliberately `other`: the slot exists for the midweek
-//! meeting, and a Wednesday morning is a weekday morning like any other.
+//! meeting, and a Wednesday morning is a weekday morning like any other. When
+//! the reader sets a Sunday service time
+//! ([`crate::config::Config::sunday_service`]), `sunday-morning` stops meaning
+//! "before noon" and starts meaning AT CHURCH — see [`slot_for_at`].
 //!
-//! A reader can also SAY when their Sunday service starts
-//! ([`crate::config::Config::sunday_service`]). With that set, `sunday-morning`
-//! stops meaning "before noon" and starts meaning AT CHURCH: from the service
-//! start until [`SERVICE_WINDOW_MIN`] after it — see [`slot_for_at`].
-//!
-//! The shells pass their own LOCAL date and hour. The core has no clock and no
+//! The shell passes its own LOCAL date and hour. The core has no clock and no
 //! timezone, and a slot computed in UTC would put a Sunday-evening service in
 //! Monday for half the world.
 
@@ -54,9 +49,9 @@ impl SessionSlot {
         }
     }
 
-    /// A token back to a slot; unknown tokens (a later build's) answer `None`
-    /// rather than silently becoming `Other`, so a caller can tell "I do not
-    /// know this slot" from "this is the everyday one".
+    /// A token back to a slot. An unknown token (a later build's) answers `None`
+    /// rather than `Other`, so a caller can tell "I do not know this slot" from
+    /// "this is the everyday one".
     pub fn parse(t: &str) -> Option<SessionSlot> {
         match t {
             "sunday-morning" => Some(SessionSlot::SundayMorning),
@@ -74,9 +69,8 @@ impl SessionSlot {
 
 /// Day of the week for a `YYYY-MM-DD` date: 0 = Sunday … 6 = Saturday.
 ///
-/// 1970-01-01 was a THURSDAY, which is day 4, hence the offset. `date_to_days`
-/// answers days since that epoch and can be negative for dates before it, so the
-/// remainder is brought back into range rather than left as C's negative modulo.
+/// The `+ 4` is because 1970-01-01 was a Thursday. `date_to_days` is negative
+/// before the epoch, so the remainder is brought back into range.
 pub fn weekday(date: &str) -> Option<u8> {
     let days = date_to_days(date)?;
     Some((((days + 4) % 7 + 7) % 7) as u8)
@@ -87,21 +81,18 @@ pub fn slot_for(date: &str, hour: u32) -> SessionSlot {
     slot_for_at(date, hour * 60, None)
 }
 
-/// How long a Sunday service window lasts, in minutes: the start time the
-/// reader set, plus an hour and a half.
+/// How long a Sunday service window lasts, in minutes.
 pub const SERVICE_WINDOW_MIN: u32 = 90;
 
 /// The slot a local date and minute-of-day fall in, honouring a configured
 /// Sunday service time. `minute` is 0–1439 local; `sunday_service` is the
-/// service start in minutes since local midnight, or `None` when the reader
-/// never set one.
+/// service start in minutes since local midnight, or `None` when unset.
 ///
-/// With a service time set, `sunday-morning` means AT CHURCH: from the service
-/// start until [`SERVICE_WINDOW_MIN`] after it, wherever in the day that lands
-/// (an afternoon congregation is still the Sunday service). The rest of Sunday
-/// keeps the noon split — evening from 12:00 — and the hours before the
-/// service are ordinary reading, so Saturday night's study is what an early
-/// Sunday riser resumes.
+/// With a service time set, `sunday-morning` means AT CHURCH: from the start
+/// until [`SERVICE_WINDOW_MIN`] after it, wherever in the day that lands (an
+/// afternoon congregation is still the Sunday service). The rest of Sunday keeps
+/// the noon split, and the hours before the service are ordinary reading, so an
+/// early Sunday riser resumes Saturday night's study.
 pub fn slot_for_at(date: &str, minute: u32, sunday_service: Option<u32>) -> SessionSlot {
     let hour = minute / 60;
     match weekday(date) {
@@ -113,8 +104,8 @@ pub fn slot_for_at(date: &str, minute: u32, sunday_service: Option<u32>) -> Sess
             None => SessionSlot::SundayEvening,
         },
         Some(3) if hour >= 17 => SessionSlot::WednesdayEvening,
-        // An unparseable date is the everyday slot, not a panic: a shell with a
-        // broken clock should still open a Bible.
+        // An unparseable date is the everyday slot: a shell with a broken clock
+        // should still open a Bible.
         _ => SessionSlot::Other,
     }
 }
@@ -125,7 +116,6 @@ mod tests {
 
     #[test]
     fn weekdays_are_right_against_known_dates() {
-        // The epoch itself, and a spread of dates whose weekday is checkable.
         assert_eq!(weekday("1970-01-01"), Some(4), "the epoch was a Thursday");
         assert_eq!(weekday("2026-08-13"), Some(4), "a Thursday");
         assert_eq!(weekday("2026-08-16"), Some(0), "a Sunday");
@@ -146,8 +136,6 @@ mod tests {
 
     #[test]
     fn wednesday_is_only_an_evening() {
-        // The slot exists for the midweek meeting; a Wednesday morning is a
-        // weekday morning like any other and belongs with them.
         assert_eq!(slot_for("2026-08-19", 9), SessionSlot::Other);
         assert_eq!(slot_for("2026-08-19", 16), SessionSlot::Other);
         assert_eq!(slot_for("2026-08-19", 17), SessionSlot::WednesdayEvening);
@@ -168,15 +156,14 @@ mod tests {
         let sunday = "2026-08-16";
         // Church at 10:30.
         let at = |m: u32| slot_for_at(sunday, m, Some(10 * 60 + 30));
-        // Before the service: ordinary reading, not the church seating —
-        // Saturday night's study is what an early riser resumes.
+        // Before the service: ordinary reading, so an early riser resumes
+        // Saturday night's study.
         assert_eq!(at(8 * 60), SessionSlot::Other);
         assert_eq!(at(10 * 60 + 29), SessionSlot::Other);
         // The window: start, through 1.5 hours.
         assert_eq!(at(10 * 60 + 30), SessionSlot::SundayMorning);
         assert_eq!(at(11 * 60 + 59), SessionSlot::SundayMorning);
-        // The window ends at start + 90 exactly; noon-side minutes after it
-        // fall to the evening slot as before.
+        // Past start + 90, noon-side minutes fall to the evening slot as before.
         assert_eq!(at(12 * 60), SessionSlot::SundayEvening, "12:00 is past the 10:30+1.5h window");
         assert_eq!(at(19 * 60), SessionSlot::SundayEvening);
     }
@@ -214,8 +201,8 @@ mod tests {
         for s in SessionSlot::ALL {
             assert_eq!(SessionSlot::parse(s.token()), Some(s));
         }
-        // NOT `Other`: a caller must be able to tell an unknown slot from the
-        // everyday one, or a later build's token would silently overwrite it.
+        // Not `Other`: a later build's token would otherwise silently overwrite
+        // the everyday slot's position.
         assert_eq!(SessionSlot::parse("friday-vigil"), None);
     }
 }

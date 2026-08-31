@@ -3,18 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- The browser/OS chrome around the app. TWO tags, because a single one is a
-         single colour: on a dark-mode phone the address bar and the task-switcher
-         card were cream while the reader was candlelit. A UA uses the FIRST
-         theme-color whose media matches, so the pair below resolves to exactly
-         one value before any script runs.
+    <!-- The browser/OS chrome around the app. TWO tags, because one tag is one
+         colour and a dark-mode phone would frame a candlelit reader in cream. A
+         UA uses the first theme-color whose media matches, so the pair resolves
+         to one value before any script runs.
 
-         Both hexes are `paper` from crates/core/src/theme.rs — Theme::Light and
-         Theme::Dark. Dark and not Night because that is what ThemeChoice::System
-         resolves a dark device to; Night (#000000) is only ever chosen by hand.
-         The light value moved in the WCAG pass (2026-07-29) — paper did not, but
-         if it ever does, `e2e/manifest.spec.ts` fails rather than letting the
-         chrome drift a shade off the page it frames. -->
+         Both hexes are `paper` from crates/core/src/theme.rs (Theme::Light and
+         Theme::Dark — Dark, not Night, because that is what ThemeChoice::System
+         resolves a dark device to). `e2e/manifest.spec.ts` re-derives them from
+         that file, so the chrome cannot drift a shade off the page it frames. -->
     <meta name="theme-color" content="#fcf9f4" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#1f1b16" media="(prefers-color-scheme: dark)" />
     <title>Plumbline Bible</title>
@@ -23,20 +20,17 @@
       content="The Holy Bible in a free, private, offline application."
     />
 
-    <!-- The link card: what a stranger sees when someone pastes this address into
-         a chat, a bulletin, or a post. It is the app's first sentence, so it says
-         what Plumbline IS rather than what it has.
+    <!-- The link card: what a stranger sees when this address is pasted into a
+         chat or a post.
 
-         ABSOLUTE urls on purpose. Everything else here is relative — `base: "./"`
-         keeps the bundle host-agnostic — but a crawler is not a browser: it reads
-         the markup, resolves nothing, and drops a card whose image it cannot
-         fetch. So these name the one origin the app is shared from. (The old Pages
-         address 301s there, and a 301 is followed.)
+         ABSOLUTE urls on purpose, where everything else here is relative
+         (`base: "./"` keeps the bundle host-agnostic): a crawler reads the
+         markup, resolves nothing, and drops a card whose image it cannot fetch.
 
-         og:image states its exact pixel size because scrapers that would have to
-         download and measure the file often skip the image instead — which means
-         the numbers below and the shipped PNG can disagree with nothing on screen
-         to show it. `e2e/social.spec.ts` decodes the file and holds them equal. -->
+         og:image states its exact pixel size, because a scraper that would have
+         to download and measure the file often skips the image instead — so the
+         numbers and the shipped PNG can disagree with nothing on screen to show
+         it. `e2e/social.spec.ts` decodes the file and holds them equal. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Plumbline" />
     <meta property="og:locale" content="en_US" />
@@ -75,40 +69,27 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="stylesheet" href="./fonts.css" />
 
-    <!-- THE PAGE'S COLOURS BEFORE ANY OF THE APP EXISTS.
-         `session.applyTheme()` has always written the resolved palette to
-         localStorage "so the boot snapshot can paint before the engine exists" —
-         and nothing has read it since the boot snapshot was removed. So every
-         launch painted cream paper and then repainted in the reader's real
-         theme once the engine answered: a dark-theme reader got a full-screen
-         cream flash on EVERY launch, warm boots included (audit D-11).
-
-         Two layers, cheapest first:
-           1. these defaults, so a first-ever visit (nothing stored yet) still
-              opens in the scheme the device asked for — the same bet the
-              noscript block below makes, and the same one `ThemeChoice::System`
-              makes once the engine is up;
-           2. the inline script, which overrides them with last session's ACTUAL
+    <!-- The page's colours before any of the app exists, so a dark-theme reader
+         gets no full-screen cream flash on launch. Two layers, cheapest first:
+           1. these defaults, so a first-ever visit with nothing stored opens in
+              the scheme the device asked for;
+           2. the inline script, which overrides them with last session's actual
               resolved palette (a reader on Night, or on a theme that disagrees
               with the OS, is not served by a media query).
-         Both are then overwritten by `applyTheme()` the moment the engine
-         answers, so neither can be wrong for longer than the splash.
+         `applyTheme()` overwrites both the moment the engine answers, so neither
+         can be wrong for longer than the splash.
 
          Only the roles the splash and the bare page paint: paper, ink, faded,
-         gold, rule, and tierResearch (the app's one alarm colour, which the boot
-         error is written in — and a boot error is exactly the case where nothing
-         has been stored yet). Values are Theme::Light / Theme::Dark from
-         crates/core/src/theme.rs, and `e2e/splash.spec.ts` re-derives every one
-         of them from that file rather than trusting this comment. -->
+         gold, rule, and tierResearch (the alarm colour the boot error is written
+         in — and a boot error is exactly when nothing has been stored yet).
+         Values are Theme::Light / Theme::Dark from crates/core/src/theme.rs, and
+         `e2e/splash.spec.ts` re-derives each from that file. -->
     <style>
       :root {
-        /* The controls the BROWSER draws, not us — the time input's clock glyph,
-           its spinner, the scrollbars, the native picker popups. Unset, a UA
-           assumes light and paints them near-black on a dark theme's surfaces.
-           `session.applyTheme()` overwrites this with the reader's resolved
-           palette; the media pair here is only what holds until it runs. It was
-           previously declared ONLY inside the noscript below, where a scripting
-           browser never parses it. */
+        /* The controls the BROWSER draws — scrollbars, the time input's glyphs,
+           native picker popups. Unset, a UA assumes light and paints them
+           near-black on a dark theme's surfaces. `session.applyTheme()`
+           overwrites this; the media pair holds until it runs. */
         color-scheme: light;
         --paper: #fcf9f4;
         --ink: #211f1a;
@@ -129,58 +110,47 @@
         }
       }
     </style>
-    <!-- A classic, blocking, inline script ON PURPOSE: the whole value of this
-         is that it runs before the first paint, and a module script (or one in
-         the bundle) is deferred until after the document has been laid out —
-         which is exactly the flash it exists to remove. It is also why it stays
-         here and not in App.svelte: Svelte mounts long after the browser has
-         already shown the reader a page. -->
+    <!-- A classic, blocking, inline script ON PURPOSE: it has to run before the
+         first paint, and a module script (or one in the bundle) is deferred
+         until after layout — which is the flash it exists to remove. Same reason
+         it is not in App.svelte: Svelte mounts long after the first paint. -->
     <script>
       try {
         var stored = JSON.parse(localStorage.getItem("plumbline:palette") || "null");
         var choice = localStorage.getItem("plumbline:themeChoice");
         var explicit = !!choice && choice !== "system";
-        // IS LAST SESSION'S PALETTE STILL THE RIGHT ANSWER? For a theme the
-        // reader chose by hand, always. For "follow the device", only while the
-        // device is still in the scheme it was in — a phone that went dark
-        // overnight would otherwise be repainted light from the cache, and the
-        // media-scoped defaults in the stylesheet above, which cannot be wrong,
-        // would be overridden by an inline var, which now is. The metas were
-        // already gated this way; the vars were not, and that asymmetry is the
-        // one that showed.
+        // Is last session's palette still the right answer? For a theme chosen
+        // by hand, always. For "follow the device", only while the device is
+        // still in the scheme it was in — a phone that went dark overnight would
+        // otherwise be repainted light from the cache, an inline var overriding
+        // the media-scoped defaults above, which cannot be wrong.
         var useVars =
           !!stored &&
           (explicit || !!stored.dark === matchMedia("(prefers-color-scheme: dark)").matches);
-        // Every string role, not a hand-picked five: the writer is
-        // `applyTheme()`, which sets one custom property per string field, and
-        // reproducing its subset here would be a second list to keep in step.
+        // Every string role, not a hand-picked few: `applyTheme()` sets one
+        // custom property per string field, and a subset here would be a second
+        // list to keep in step.
         if (useVars) {
           for (var role in stored)
             if (typeof stored[role] === "string")
               document.documentElement.style.setProperty("--" + role, stored[role]);
           // The status bar too, and BOTH tags (see session.applyTheme) — but
-          // ONLY for a theme the reader chose by hand. For "follow the device"
-          // the media-scoped pair above is already the right pre-script answer
-          // and last session's paper may not be (the phone's scheme can change
-          // between sessions); for an explicit theme the cached paper is right
-          // whatever the device says, and the pair is what is stale — a
-          // dark-mode phone under a light reader theme otherwise boots with
-          // light icons over cream until the engine's palette lands.
+          // only for a theme chosen by hand. For "follow the device" the
+          // media-scoped pair above is already right and last session's paper
+          // may not be; for an explicit theme the cached paper is right whatever
+          // the device says, and the pair is what is stale.
           //
-          // `paper`, NOT `paneNavBg`, and on purpose. This is the SPLASH's
-          // chrome, and the splash paints paper edge to edge; the running app's
-          // header does not, so `Session.chrome` hands over to `paneNavBg` the
-          // moment the palette lands. The handoff cannot flip an icon, because
-          // paper and paneNavBg have the same polarity in all eighteen palettes
-          // — only the tint moves, by a shade.
+          // `paper`, not `paneNavBg`: this is the SPLASH's chrome, and the
+          // splash paints paper edge to edge, so `Session.chrome` hands over to
+          // `paneNavBg` once the palette lands. The handoff cannot flip an icon
+          // — the two have the same polarity in every palette.
           if (typeof stored.paper === "string" && explicit) {
             var metas = document.querySelectorAll('meta[name="theme-color"]');
             for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", stored.paper);
-            // The UA-drawn controls, on the same terms and for the same reason:
-            // the media pair in the stylesheet above answers for "follow the
-            // device", and last session's flag answers for a theme chosen by
-            // hand (a reader on Night with the phone in light mode is not
-            // served by the query).
+            // The UA-drawn controls, on the same terms: the media pair above
+            // answers for "follow the device", last session's flag for a theme
+            // chosen by hand (Night on a light-mode phone is not served by the
+            // query).
             document.documentElement.style.colorScheme = stored.dark ? "dark" : "light";
           }
         }
@@ -192,18 +162,17 @@
   <body>
     <div id="app"></div>
 
-    <!-- What a browser with JavaScript switched off gets, and what a text-only
-         crawler reads. Both used to get blank cream paper for ever, which reads
-         as a broken site rather than an unmet requirement. There is nothing to
-         degrade to: the text, the concordance and the reader's own notes are all
-         built in the page from a local engine, with no server rendering anything.
+    <!-- What a browser with JavaScript off gets, and what a text-only crawler
+         reads: otherwise blank cream paper, which reads as a broken site rather
+         than an unmet requirement. There is nothing to degrade to — the text,
+         the concordance and the reader's notes are all built in the page.
 
          The styles live INSIDE the noscript on purpose. A browser with scripting
-         ENABLED never parses the contents of a noscript element — they are raw
-         text to it — so nothing in here can reach the running app: not the CSS,
-         not the markup, not the accessibility tree, not Ctrl+F. And it cannot
-         lean on the bundle's stylesheet either, because the premise is that the
-         bundle never ran. Same palette values as the light/dark themes. -->
+         enabled never parses a noscript element's contents — they are raw text
+         to it — so nothing in here reaches the running app: not the CSS, not the
+         markup, not the accessibility tree, not Ctrl+F. It cannot lean on the
+         bundle's stylesheet either, since the premise is that the bundle never
+         ran. Same palette values as the light/dark themes. -->
     <noscript>
       <style>
         #app {

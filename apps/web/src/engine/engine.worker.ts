@@ -1,41 +1,28 @@
-// The engine worker (TODO #28): the WHOLE engine life runs here — pack fetch,
-// IndexedDB home, wasm instantiate, engine open, warm, the deferred R&D load,
-// authoring writes and their persistence. The main thread never blocks on an
-// engine call again; it speaks the tiny RPC below and paints.
+// The engine worker: the whole engine life runs here — pack fetch, IndexedDB home,
+// wasm instantiate, engine open, warm, the deferred R&D load, authoring writes and
+// their persistence. The main thread never blocks on an engine call; it speaks the
+// RPC below and paints.
 //
-// SCHEDULING RULE: this thread is the
-// only one that can answer layout/tap RPCs, so background loading must never
-// hold it for one long synchronous block. Stage-2 load, index warming, and
-// the R&D load all run as separate macrotasks with yields between them —
-// pending RPC messages interleave. Warming goes index-by-index through the
-// wasm-only `warmStep` export instead of one monolithic `warmIndexes` call.
+// THE SCHEDULING RULE, which the rest of this file is arranged around: this thread
+// is the only one that can answer layout and tap RPCs, so anything synchronous it
+// runs blocks all of them — and blocks its own in-flight downloads with them, since
+// a response body is read one `await` at a time. Background loading must therefore
+// never hold the thread for one long synchronous block: stage-2 load, index warming
+// and the R&D load all run as separate macrotasks with yields between them, so
+// pending RPC messages interleave. Warming goes index-by-index through the wasm-only
+// `warmStep` export instead of one monolithic `warmIndexes` call.
 //
-// Protocol (structured-clone JSON):
-//   in:  { id, op: "boot", base, fontUrl, italicUrl, deferRnd } → boots; progress
-//        streams, and the reply carries the session-immutables the shell needs
-//        before first text (palettes, toc) so they are not four more queue hops
-//   in:  { id, op: "call", method, args }           → StudyEngine[method](...args)
-//   in:  { id, op: "static", fn, args }             → engine-independent fns
-//   in:  { id, op: "layout", book, chapter, cfg, font } → display-list JSON
-//   in:  { id, op: "loadRnd" }                      → deferred pack + re-warm
-//   in:  { id, op: "bootTrace" }                    → [label, ms][] so far
-//   in:  { id, op: "export" } / { id, op: "freeze" } / { id, op: "setBundled", on }
-//   in:  { id, op: "suggestedState" }               → {available, installed, gzBytes}
-//   in:  { id, op: "installSuggested" }             → optional weave set, count written
-//   in:  { id, op: "flush" }                        → persist pending writes NOW
-//   out: { id, result } | { id, error }
-//   out: { type: "progress", phase, fraction?, detail? }   (during boot)
-//   out: { type: "authored" }                       (any authoring write landed)
-//   out: { type: "readingWrote" }                   (a dwell report landed)
-//   out: { type: "persistFailed", detail, retrying } / { type: "persistOk" }
-//   out: { type: "coreReady" } / { type: "rndReady" } / { type: "rndProgress", fraction }
+// Protocol (structured-clone JSON). In: `{ id, op, ...args }`, where the ops are the
+// switch at the bottom of this file. Out: `{ id, result }` | `{ id, error }`, plus
+// unsolicited `{ type }` events — progress (during boot), authored, readingWrote,
+// persistFailed / persistOk, coreReady, warmReady, rndProgress / rndPreparing /
+// rndReady, langPackProgress / paneLangProgress.
 //
-// Layout measure runs HERE over an OffscreenCanvas (measure.ts adapts), so
-// EB Garamond must be loaded into self.fonts before the first layout — the
-// boot message carries the resolved font URL. Before the first LAYOUT, note,
-// which is not the same as before the boot: the load runs alongside the whole
-// boot and is collected just before the boot reply, since no layout op can be
-// answered until the shell has that reply.
+// Layout measure runs here over an OffscreenCanvas (measure.ts adapts), so the
+// scripture face must be in self.fonts before the first LAYOUT — which is not the
+// same as before the boot: the font load runs alongside the whole boot and is
+// collected just before the boot reply, since no layout op can be answered until the
+// shell has that reply.
 
 import { boot, engineUrl, type BootResult } from "./boot";
 import { pinnedUrls, writePin } from "./pin";
@@ -91,30 +78,14 @@ let booted: BootResult | null = null;
 let lastTurn: [string, number][] = [];
 
 // ── the stall meter ───────────────────────────────────────────────────────────
-// This thread is the only one that can answer layout, taps and word studies, so
-// anything synchronous it runs blocks all of them. It also blocks its OWN
-// downloads: a response body is read one `await` at a time, and every one of
-// those continuations needs the event loop, so a file can finish arriving at the
-// radio and then sit in a queue behind a quarter-second of arithmetic.
+// How long this thread spent unavailable, measured directly: a heartbeat that should
+// fire every tick, and how late it actually was. Dividing bytes by a wall clock that
+// includes the starvation would only invent a "connection speed" that measures the
+// starvation rather than the network.
 //
-// That second effect is INVISIBLE in a wall-clock timer: dividing bytes by a
-// wall clock that includes the starvation produces a confident, invented
-// "connection speed". The bytes-per-second of a starved reader measures the
-// starvation, not the network.
-//
-// So measure the starvation directly. A heartbeat that should fire every tick,
-// and how late it actually was. Total lateness during boot IS the time this
-// thread spent unavailable — no division, no inference, no assumption about
-// anyone's wifi.
-//
-// A LATE TIMER IS NOT ALWAYS A BUSY THREAD. A hidden page has its timers AND its
-// in-flight requests frozen by the browser, so a meter that counted that time
-// would bill the reader's screen turning off as engine work. A measurement that
-// cannot distinguish "we were busy" from "the phone was asleep" is worse than
-// none: it invents a crisis and points at the wrong code. So the page tells the
-// worker when it is hidden, hidden time is excluded rather than counted, and it
-// is reported separately — because "you were away for 25 s" is also a thing a
-// reader of this report needs to know.
+// A late timer is not always a busy thread: a hidden page has its timers AND its
+// in-flight requests frozen, so hidden time is excluded rather than counted (the main
+// thread forwards visibility) and reported on its own.
 const STALL_TICK = 50;
 /** Lateness under this is timer jitter, not a stall worth counting. */
 const STALL_FLOOR = 20;
@@ -142,13 +113,12 @@ function startStallMeter(): void {
   stallLast = performance.now();
   setInterval(() => {
     const now = performance.now();
-    // Browsers COALESCE a repeating timer whose thread was blocked — one late
-    // callback, not a burst of missed ones — so this is the lateness of this
-    // tick, which is exactly the quantity wanted.
+    // Browsers coalesce a repeating timer whose thread was blocked into one late
+    // callback, so this is the lateness of this tick — the quantity wanted.
     const late = now - stallLast - STALL_TICK;
     stallLast = now;
-    // Hidden: the clock kept running but this thread was not being asked to do
-    // anything, and the timer itself was throttled. Not a stall.
+    // Hidden: the clock ran but nothing was asked of this thread, and the timer was
+    // throttled. Not a stall.
     if (pageHidden || late <= STALL_FLOOR) return;
     stall.totalMs += late;
     stall.worstMs = Math.max(stall.worstMs, late);
@@ -157,45 +127,30 @@ function startStallMeter(): void {
 }
 
 // ── the turn cache ────────────────────────────────────────────────────────────
-// Laid-out chapters, keyed by everything the layout depends on. Overlays,
-// notes and the verse band are painted OVER the display list by the shell, so
-// authoring never invalidates this — only a width/font/spacing change does,
-// and that changes the key. Small and LRU: a handful of chapters is enough to
-// make paging back and forth free, without holding the canon in memory.
+// Laid-out chapters, LRU, keyed by everything the layout depends on. Overlays, notes
+// and the verse band are painted OVER the display list by the shell, so authoring
+// never invalidates this — only a width/font/spacing change does, and that re-keys.
 //
-// 16, because the working set is larger than "a handful" suggests. Every pane
-// prefetches BOTH its neighbours (ReaderPane.prefetchNeighbours) and three panes
-// can be open, so a settled three-pane session is 9 live keys — at 8, the last
-// prefetch evicted the first pane's own chapter and the prefetch became pure cost.
-// The remaining 7 are a stale generation's grace for the one event that re-keys
-// every pane at once (a width, font or spacing change): what is on screen has to
-// outlive what it replaced, or the reader pays for it twice.
-//
-// A turn costs what its display list weighs. Measured under V8 with --expose-gc,
-// heapUsed across 40 retained JSON.parse copies of one chapter's list: 322 B/item
-// for Psalm 119 (2,643 items → 831 KB), 235 B/item for Gen 1, 343 B/item for John
-// 3. The mean chapter is 691 items, so 16 turns is ~3 MB; even at the p99 chapter
-// (1,701 items) the ceiling is ~8 MB, against the ~235 MB all 822,057 items of the
-// canon would be.
+// 16: three panes each prefetching both neighbours (ReaderPane.prefetchNeighbours) is
+// 9 live keys, and at 8 the last prefetch evicted the first pane's own chapter. The
+// remaining 7 are one stale generation's grace for the event that re-keys every pane
+// at once (a width, font or spacing change) — what is on screen has to outlive what
+// it replaced. Roughly 3 MB at the mean chapter, ~8 MB at the p99.
 const TURN_CACHE_MAX = 16;
 type LaidOut = { items: unknown[]; height: number };
 const turnCache = new Map<string, LaidOut>();
-/** Whether the AKJV overlay is on. Tracked HERE because it changes the words a
- *  chapter lays out to, and the turn cache is keyed on everything that does —
- *  without it, flipping the toggle serves the cached KJV display list straight
- *  back and the page never changes.
- *  Keeping it in the key rather than clearing the cache means toggling back and
- *  forth stays free, which is exactly what someone comparing wordings does. */
+/** Whether the AKJV overlay is on. Tracked here because it changes the words a
+ *  chapter lays out to, so it belongs in the turn-cache key: without it, flipping the
+ *  toggle serves the cached KJV display list back. In the key rather than clearing
+ *  the cache, so toggling back and forth stays free. */
 let akjvOn = false;
 
 /**
- * The engines for OTHER languages' texts, by language code — a pane reading
- * German beside an English one (docs/PER-PANE-LANGUAGE.md).
- *
- * They share the reader's data (every text sits at the KJV's verse addresses),
- * so this is a second view of one library rather than a second library. What it
- * is NOT is a second study store to keep in sync: an authoring write goes
- * through the primary engine, and `refreshAlts` re-reads the others.
+ * The engines for other languages' texts, by language code — a pane reading German
+ * beside an English one. They share the reader's data (every text sits at the KJV's
+ * verse addresses), so this is a second view of one library, not a second study store
+ * to keep in sync: authoring goes through the primary engine and `refreshAlts`
+ * re-reads the others.
  */
 const altEngines = new Map<string, StudyEngine>();
 
@@ -203,17 +158,15 @@ const altEngines = new Map<string, StudyEngine>();
 function engineFor(lang?: string | null): StudyEngine {
   if (!lang) return booted!.engine;
   const alt = altEngines.get(lang);
-  // NOT a silent fall back to the primary. A pane labelled Deutsch painting the
-  // KJV is the failure this whole path is built to avoid, so an unopened
-  // language is an error the shell can act on — it is the shell that offers the
-  // download.
+  // Never a silent fall back to the primary: a pane labelled Deutsch painting the KJV
+  // is the failure this path exists to avoid, so an unopened language is an error the
+  // shell can act on — it is the shell that offers the download.
   if (!alt) throw new Error(`the ${lang} text is not open on this device`);
   return alt;
 }
 
-/** After an authoring write: the alt engines re-read the study files the
- *  primary just rewrote, or a tag made in English never reaches the German
- *  pane's word study. */
+/** After an authoring write: the alt engines re-read the study files the primary
+ *  just rewrote, or a tag made in English never reaches the German pane. */
 function refreshAlts(): void {
   for (const e of altEngines.values()) e.loadCoreData();
 }
@@ -231,17 +184,11 @@ interface LayoutReq {
 }
 
 function layoutChapter(m: LayoutReq): LaidOut | null {
-  // The face token is part of the key: a cached layout was measured under one
-  // face's metrics AND its optical scale (readerFont applies both), so a face
-  // switch must miss here rather than serve geometry the new face will not
-  // paint at. Same for `verseNumbers`: it moves every word on every line, so a
-  // layout cached under one setting is wrong geometry under the other. (The
-  // ITALICS switch is deliberately absent — it changes paint only, never
-  // measurement, so its layouts are interchangeable.)
-  // The LANGUAGE is part of the key for the same reason the face and the
-  // overlay are: it changes the words this chapter lays out to. Without it a
-  // German pane at the same width serves the English pane's cached display
-  // list — the right geometry for the wrong Bible.
+  // Everything that changes the geometry or the words is in the key: the face token
+  // (metrics and optical scale both), `verseNumbers` (it moves every word on every
+  // line), and the language (a German pane at the same width would otherwise serve the
+  // English pane's list — right geometry, wrong Bible). The ITALICS switch is
+  // deliberately absent: it changes paint only, never measurement.
   const key =
     `${m.book} ${m.chapter}|${m.lang ?? ""}|${readerFontToken()}|${m.font}|${m.width}|` +
     `${m.lineSpacing}|${m.versePerLine}|${m.verseNumbers}|${akjvOn}`;
@@ -276,8 +223,8 @@ function layoutChapter(m: LayoutReq): LaidOut | null {
   firstLayoutServed = null;
   const t2 = performance.now();
   if (!dl) return null;
-  // `raw` parses the display-list JSON the core produced — the second of the
-  // two serialisation passes a chapter turn pays for.
+  // Parses the display-list JSON the core produced — the second of the two
+  // serialisation passes a chapter turn pays for.
   const raw = dl.raw as LaidOut;
   dl.free();
   const t3 = performance.now();
@@ -300,24 +247,13 @@ function layoutChapter(m: LayoutReq): LaidOut | null {
 /** Let queued messages (layout, taps) run before the next synchronous chunk. */
 const yieldTask = () => new Promise<void>((r) => setTimeout(r, 0));
 
-// NOTHING THE ENGINE BUILDS IS PERSISTED. Prune is an allowlist, so any stale
-// saved artifact still on a device is reclaimed on that device's next launch.
-
 // ── engine calls ──────────────────────────────────────────────────────────────
-// EVERY engine request the shell makes arrives as `call` or `static`, and each is
-// timed. The boot stages, the warm chunks and the analysis chunks all report
-// themselves, so a trace looks complete — while a single un-timed `call` can hold
-// this thread for as long as it likes and leave no mark anywhere.
-//
-// It is not a hypothetical hole. `wordStudyBlocks` builds the occurrence index,
-// the rendering lens, the cross-references, the concept model and the bridge
-// SYNCHRONOUSLY when the reader taps a word before the warm has reached them —
-// hundreds of ms on a desktop, many seconds on a phone, that no timed section
-// would otherwise account for. A frozen thread also strands its own in-flight
-// downloads.
-//
-// Cheap by construction: two clock reads per call, and only calls that actually
-// cost something are kept.
+// Every engine request arrives as `call` or `static`, and each is timed: an un-timed
+// one can hold this thread for as long as it likes and leave no mark anywhere.
+// `wordStudyBlocks` is the real case — it builds the occurrence index, the lens, the
+// cross-references, the concept model and the bridge synchronously when the reader
+// taps a word before the warm has reached them, seconds of it on a phone. Two clock
+// reads per call, and only the expensive ones are kept.
 const SLOW_CALL_MS = 30;
 const SLOW_CALLS_KEPT = 25;
 /** The most expensive engine calls this session, worst first. */
@@ -346,10 +282,9 @@ function timedChunk<T>(label: string, f: () => T): T {
   return v;
 }
 
-/** Resolved once the first layout has been served — the reader is on screen
- *  and the worker may start spending time on background loads. The race in
- *  backgroundLoad() caps the wait so a boot that never lays out (unexpected,
- *  but possible) still gets its study data. */
+/** Resolved once the first layout has been served: the reader is on screen and the
+ *  worker may start spending time on background loads. The race in backgroundLoad()
+ *  caps the wait, so a boot that never lays out still gets its study data. */
 let firstLayoutServed: (() => void) | null = null;
 const firstLayout = new Promise<void>((r) => (firstLayoutServed = r));
 
@@ -357,35 +292,27 @@ const firstLayout = new Promise<void>((r) => (firstLayoutServed = r));
  *  the R&D pack lands — the machine-tier indexes only build once it is in). */
 let warmRun: Promise<void> | null = null;
 function warmChunked(): Promise<void> {
-  // SINGLE-FLIGHTED, like the R&D load below. Two callers reach here: the
-  // background load, and the R&D load — which the first-run chooser kicks off via
-  // ensureRnd (FirstRun.svelte) while the background load is often still in
-  // flight, so both really do run at once on a normal first visit.
-  //
-  // NOT a throughput fix, and worth saying so plainly: the step counter each loop
-  // keeps is ignored by the engine (`plumbline_engine_warm_step` takes `_step`),
-  // and every call advances ONE shared phase counter — so two loops split the work
-  // rather than duplicating it. Measured before and after: ~1,198 warm steps
-  // either way. The steps are small on purpose, one budgeted slice per macrotask,
+  // Single-flighted, like the R&D load below: the background load and the R&D load
+  // (which FirstRun.svelte kicks off via ensureRnd) really do run at once on a normal
+  // first visit. Not a throughput fix — the engine ignores the loop's step counter and
+  // every call advances one shared phase counter, so two loops split the work rather
+  // than duplicating it. The steps stay small on purpose, one slice per macrotask,
   // which is what keeps layout and tap RPCs answerable.
   //
-  // What it does buy is a well-defined re-warm. With two drivers the "run again
-  // after the R&D pack lands, to pick up the machine-tier indexes" pass was racy —
-  // whichever loop happened to still be alive absorbed the second call. Now the
-  // second caller joins the live pass, and because `warmRun` is cleared on
-  // completion a genuinely later call still gets a fresh one. Every phase is
-  // idempotent and the counter is shared, so joining mid-pass is safe.
+  // What it buys is a well-defined re-warm after the R&D pack lands: a second caller
+  // joins the live pass, and clearing `warmRun` on completion means a genuinely later
+  // call still gets a fresh one. Every phase is idempotent and the counter is shared,
+  // so joining mid-pass is safe.
   return (warmRun ??= (async () => {
     for (let step = 0; ; step++) {
       await yieldTask();
       const more = timedChunk(`warm step ${step}`, () => booted!.engine.warmStep(step));
       if (!more) break;
     }
-    // The engine refuses to build an index inside a reader's tap while this warm
-    // is running (see `defer_builds` in crates/ffi), so a study opened mid-warm
-    // comes back with only the sections that were ready. Tell the shell the rest
-    // exist now, or it shows that thinner answer until something unrelated
-    // happens to re-fetch.
+    // While this warm runs the engine refuses to build an index inside a tap (see
+    // `defer_builds` in crates/ffi), so a study opened mid-warm comes back with only
+    // the ready sections. Tell the shell the rest exist now, or it shows that thinner
+    // answer until something unrelated re-fetches.
     self.postMessage({ type: "warmReady" });
   })().finally(() => {
     warmRun = null;
@@ -405,11 +332,9 @@ function loadRndChunked(): Promise<void> {
     );
     booted!.trace.push(["rnd fetch+gunzip", Math.round(performance.now() - t0)]);
     await yieldTask();
-    // Downloaded; now the expensive part. Parsing the morphology is megabytes of
-    // text, seconds of it on a phone — one artifact per macrotask so a tap in
-    // between is still answered, and the shell is told we've moved from
-    // downloading to preparing (the bar sat at 0% and the study sheet said
-    // "— loading —" through the whole thing).
+    // Now the expensive part: parsing the morphology is megabytes of text, seconds of
+    // it on a phone. One artifact per macrotask so a tap in between is still answered,
+    // and the shell is told we have moved from downloading to preparing.
     self.postMessage({ type: "rndPreparing" });
     booted!.home.addFiles(files);
     for (let step = 0; ; step++) {
@@ -428,18 +353,12 @@ function loadRndChunked(): Promise<void> {
   }));
 }
 
-/** Everything beyond the text, AFTER the reader hands over (TODO #28 — text
- *  on screen is the north star): stage-2 core files (Strong's, cross-refs,
- *  margin notes) → warm → the R&D pack unless deferred (phones defer; the
- *  shell offers an explicit "load analysis" action instead). */
 /** Data Saver — the one setting that still means "ask me before you spend". */
 const saveData = (): boolean => (navigator as any).connection?.saveData === true;
 
-/** Is the machine-tier pack already on this device? Then loading it costs no
- *  network at all, and putting a one-time-download button in front of a download
- *  that will not happen is theatre. The deferral exists to protect the
- *  reader's data and their first paint; neither is at stake once the bytes are
- *  cached. */
+/** Is the machine-tier pack already on this device? Then loading it costs no network,
+ *  and the deferral — which protects the reader's data and their first paint — has
+ *  nothing left to protect. */
 async function rndAlreadyCached(): Promise<boolean> {
   const files = booted!.manifest.files.filter((f) => f.stage === "analysis");
   if (!files.length) return false;
@@ -449,61 +368,48 @@ async function rndAlreadyCached(): Promise<boolean> {
   return true;
 }
 
-/** Whether this session will fetch the machine tier by itself. Phones defer it
- *  out of the BOOT path, never out of the session — the reader should not have
- *  to ask for it again on every launch. */
+/** Whether this session will fetch the machine tier by itself. Phones defer it out of
+ *  the boot path, never out of the session. */
 async function willAutoLoadRnd(machineOn: boolean, deferRnd: boolean): Promise<boolean> {
   if (!machineOn) return false;
   if (!deferRnd) return true;
   return (await rndAlreadyCached()) || !saveData();
 }
 
-/** Notice a data update, download only what changed, and re-pin — all of it OFF
- *  the boot path.
+/** Notice a data update, download only what changed, and re-pin — all of it off the
+ *  boot path, so a warm launch asks the network nothing. The live manifest is fetched
+ *  once here, after the reader has text on screen, and diffed against the pin.
  *
- *  This is where the manifest fetch went. Boot no longer asks the network
- *  anything on a warm launch; the live manifest is fetched once here, after the
- *  reader already has text on screen, and diffed against the pin.
+ *  URLs are content-addressed on each file's own hash, so a release that changes one
+ *  weave downloads one weave and unchanged files keep their URLs. New bytes land
+ *  beside the old ones, and the pin is rewritten only once every file it will name is
+ *  verified present, so an interrupted update leaves the previous generation bootable.
  *
- *  Because URLs are content-addressed on each file's own hash, a release that
- *  changes one weave downloads one weave — and unchanged files keep their URLs, so
- *  re-pinning copies nothing. The new bytes land BESIDE the old ones and the pin
- *  is rewritten only after every file it will name is verified present, so an
- *  interrupted update leaves the previous generation intact and bootable.
- *
- *  The new pack applies at the NEXT launch, deliberately. This session's engine
- *  has its text in wasm memory and the reader is mid-verse; swapping the corpus
- *  under them would be worse than waiting. Files a release ADDS are the
- *  exception and are not this function's business: `backgroundLoad` hands those
- *  to the running home directly, because nothing is being swapped under anyone.
+ *  The new pack applies at the NEXT launch: this session's engine has its text in wasm
+ *  memory and the reader is mid-verse. Files a release ADDS are the exception and
+ *  belong to `backgroundLoad`, which hands them to the running home directly.
  */
 async function reconcilePack(): Promise<void> {
   const live = await fetchManifest();
   if (live.version === booted!.packVersion) return; // nothing deployed since
   const t0 = performance.now();
   let fetched = 0;
-  // What this device's pack IS — the optional bundle only where the reader
-  // installed it. The same call decides what gets pinned below, so the sweep
-  // and the pin can never disagree about which files should be here.
+  // What this device's pack is — the optional bundle only where the reader installed
+  // it. The same call decides what gets pinned below, so the sweep and the pin cannot
+  // disagree about which files should be here.
   const mine = devicePackFiles(live, (f) => hasOptional(booted!.home, f));
-  // NOT THE OTHER BIBLES. They are in `mine` — the pin claims their URLs, prune
-  // keeps them — but they must not gate this sweep: they are ~9 MB against the
-  // base pack's ~200 KB of typical drift, and `fetchOtherCorpora` (which runs
-  // right after this, against the manifest this function just updated) is their
-  // download path. Fetched here too, a slow or offline device would strand its
-  // pin on the OLD release until all three Bibles landed — the exact
-  // "stopped re-pinning for good" failure the optional bundle already taught
-  // this function about, one stage over (caught by CI, 2026-08-28: the
-  // completeness gate below timed a test out waiting on corpora that the
-  // background pass would have fetched anyway).
+  // Not the other Bibles. They are in `mine` — the pin claims their URLs and prune
+  // keeps them — but they must not gate this sweep: ~9 MB against the base pack's
+  // ~200 KB of typical drift, and `fetchOtherCorpora` (which runs right after this) is
+  // their download path. Gating on them strands a slow or offline device's pin on the
+  // old release until every Bible has landed.
   const gating = mine.filter((f) => f.stage !== "corpus");
   for (const f of gating) {
     const url = packFileUrl(f, live.version);
     if (await depotHas(url)) continue; // unchanged: same hash, same URL, already here
     await depotBytes(url);
-    // Verify what just arrived. A hash mismatch means a truncated body or an error
-    // page served 200 — store that unchecked and the engine fails to parse it on
-    // every launch with no way out. Bail and keep the pin we have.
+    // A hash mismatch means a truncated body or an error page served 200; stored
+    // unchecked, the engine fails to parse it on every launch with no way out.
     if (!(await verifyStored(f, live.version))) return;
     fetched++;
   }
@@ -511,44 +417,34 @@ async function reconcilePack(): Promise<void> {
   for (const f of gating) {
     if (!(await depotHas(packFileUrl(f, live.version)))) return; // incomplete: keep the old pin
   }
-  // `mine`, not `gating`: the pin CLAIMS the corpora — URLs are content-addressed
-  // and deterministic, so a claim for bytes still on their way names exactly
-  // where those bytes will land, prune's keep-set covers them mid-download, and
-  // nothing has to re-pin when they arrive.
+  // `mine`, not `gating`: the pin claims the corpora. URLs are content-addressed and
+  // deterministic, so a claim for bytes still on their way names exactly where they
+  // will land, prune's keep-set covers them mid-download, and nothing re-pins on
+  // arrival.
   await writePin(live, assetUrl(""), mine);
 
   // From here the session speaks about the pack it actually has.
   booted!.manifest = live;
 
   booted!.trace.push([`reconciled to ${live.version} (${fetched} files)`, Math.round(performance.now() - t0)]);
-  // No message out. This function's product is the depot and the pin — what the
-  // RUNNING session needed out of a new release was the stage-1 diff in
-  // `backgroundLoad`, and it has already had it. The `packUpdated` post that
-  // used to be here had no listener on the other side and no prospective one.
+  // No message out: this function's product is the depot and the pin. What the running
+  // session needed out of a new release was the stage-1 diff in `backgroundLoad`, and
+  // it has already had it.
 }
 
 async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<void> {
   await Promise.race([firstLayout, new Promise((r) => setTimeout(r, 2500))]);
   try {
-    // WHICH PACK ARE WE ACTUALLY ON? Ask before stage 2 — but only after an
-    // upgrade.
+    // Which pack are we actually on? A warm boot's manifest IS the pin, which
+    // describes the release this device last completed — so stage 2 would fetch the
+    // study files THAT release listed and a file added since would never arrive.
     //
-    // A warm boot's manifest IS the pin, and the pin describes the release this
-    // device last completed. Stage 2 then fetches the study files THAT release
-    // listed, so a file added since is never fetched and the feature reading it
-    // is simply missing.
-    //
-    // Gated on the pin coming from an older BUILD, because a warm boot on an
-    // unchanged release must ask the network for nothing whatsoever — not even
-    // 5 KB (e2e/app.spec.ts counts requests). So: one extra fetch on the first
-    // launch after an upgrade, none ever again, and `fetchManifest` falls back to
-    // the stored copy so an offline upgrade behaves exactly as before.
-    //
-    // Everything downstream then works through the path that already existed,
-    // which is the point — the alternative was a second mechanism for injecting
-    // late files into a running engine.
+    // Gated on the pin coming from an older build, because a warm boot on an unchanged
+    // release must ask the network for nothing at all, not even 5 KB. One extra fetch
+    // on the first launch after an upgrade, none ever again, and `fetchManifest` falls
+    // back to the stored copy so an offline upgrade behaves as before.
     if (booted!.staleManifest) {
-      // What the PIN delivered, held before the live manifest replaces it: the
+      // What the pin delivered, held before the live manifest replaces it: the
       // left-hand side of the diff below.
       const pinned = booted!.manifest;
       try {
@@ -558,23 +454,15 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
         /* offline: the pin's manifest is what we have, and it is enough */
       }
 
-      // A FILE ADDED SINCE THIS DEVICE'S PIN, at stage 1.
+      // Files a newer release added at stage 1. The stage-2 fetch below picks up
+      // study-stage additions, but selects on `stage === "study"` — so without this a
+      // text-stage addition reaches fresh profiles and nobody else, and the feature
+      // reading it silently loads empty on every upgraded install.
       //
-      // The stage-2 fetch below already picks up study files a newer release
-      // added — that is the v0.39.0 hymnal fix — but it selects on
-      // `stage === "study"`, so a new TEXT-stage file was structurally excluded
-      // and an upgrading install simply never received it. Which is how v0.62.0
-      // shipped `data/devotional.json` to fresh profiles and to nobody else: a
-      // warm boot builds its manifest FROM THE PIN, the pin does not name the
-      // file, stage 1 loads happily without it, and `devotional::load` answers
-      // `Ok(vec![])` for a file that is not there — an empty Plans list with
-      // nothing to start.
-      //
-      // ADDITIONS BY PATH ONLY, never replacements: swapping bytes under a
-      // running engine is exactly what `reconcilePack`'s next-launch rule exists
-      // to avoid. `seedOnce` entries are excluded because they are the stock
-      // study set and the reader's own copies rule; corpus caches are excluded
-      // because only the one this boot chose is ever inflated, and it is 35 MB.
+      // Additions by path only, never replacements: swapping bytes under a running
+      // engine is what `reconcilePack`'s next-launch rule exists to avoid. `seedOnce`
+      // entries are excluded because the reader's own copies of the stock study set
+      // rule; corpus caches because only the one this boot chose is ever inflated.
       const have = new Set(pinned.files.map((f) => f.path));
       const adds = booted!.manifest.files.filter(
         (f) => f.stage === "text" && !f.seedOnce && !isCorpusRole(f.role) && !have.has(f.path),
@@ -604,14 +492,12 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
       booted!.home.addFiles(files);
       booted!.engine.loadCoreData();
     });
-    // Both are read exactly once, by loadCoreData, and the parsed forms live in
-    // the engine from here on. NOT the margin notes, which load_study re-reads on
-    // every authoring write, and NOT cross-references.tsv, whose lazy index can
-    // still be built on an arbitrary later tap.
-    // Every dictionary the pack could have delivered, not a hand-kept list:
-    // whichever one `strongs_for` picked, loadCoreData has parsed it and the
-    // home's copy is duplication. The paths come off the manifest, so a
-    // language added to the registry is evicted by having been added.
+    // Read exactly once, by loadCoreData, with the parsed forms living in the engine
+    // from here on — so the home's copies are duplication. NOT the margin notes, which
+    // load_study re-reads on every authoring write, and NOT cross-references.tsv, whose
+    // lazy index can still be built on a later tap. The dictionary paths come off the
+    // manifest rather than a hand-kept list, so a language added to the registry is
+    // evicted by having been added.
     const freedCore = booted!.home.evict([
       "data/strongs.json",
       "data/akjv.akjvb",
@@ -620,20 +506,17 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     if (freedCore) booted!.trace.push(["home evict after stage 2 (KB)", Math.round(freedCore / 1024)]);
     self.postMessage({ type: "coreReady" });
     await warmChunked();
-    // BEFORE the analysis pack, not after. Reconciling is normally one 5 KB
-    // manifest fetch and a pile of hash comparisons; queueing it behind a
-    // megabyte of optional analytics meant a device could sit on a stale pin for
-    // the length of that download, and pick the update up a launch later than it
-    // needed to.
-    // In its own try: a failed update must not cost the reader anything they
-    // already have, and being offline here is the normal case, not an error.
+    // Before the analysis pack, not after: reconciling is normally one 5 KB manifest
+    // fetch and some hash comparisons, and queued behind a megabyte of optional
+    // analytics a device sits on a stale pin for the length of that download. In its
+    // own try, because being offline here is the normal case, not an error.
     try {
       await reconcilePack();
     } catch {
       /* offline or a stalled manifest — the pin stands, the next launch retries */
     }
-    // THE OTHER BIBLES, last of the pack work and first of nothing: the reader
-    // has had text for a while by now, Strong's is parsed, the chapter is warm.
+    // The other Bibles, last: the reader has had text for a while by now, Strong's is
+    // parsed, the chapter is warm.
     await fetchOtherCorpora();
     if (await willAutoLoadRnd(machineOn, deferRnd)) await loadRndChunked();
   } catch {
@@ -641,34 +524,24 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
   }
 }
 
-/** Every language's Bible except the one open, into the depot.
+/** Every language's Bible except the one open, into the depot, so that picking a
+ *  language is a switch and not a download errand.
  *
- *  WHY THIS EXISTS: a phone set to Arabic used to open this app in Arabic and
- *  show the reader the English KJV — the interface promised a Bible and the text
- *  delivered somebody else's — because the Arabic corpus was an optional
- *  download behind a Settings screen. Now every Bible is on the device, so
- *  picking a language is a switch and not an errand, and a device whose locale
- *  we already translate for never opens on a text its reader cannot read.
+ *  Into the depot, never the home: these are compressed bytes, and only the corpus
+ *  this boot opened is ever inflated (`isOtherCorpus`) — all of them in the home would
+ *  be ~91 MB. That is why this is its own stage rather than `study`, which
+ *  `fetchStage2Pack` loads wholesale.
  *
- *  INTO THE DEPOT, NEVER THE HOME. These are compressed bytes on disk; only the
- *  corpus this boot opened is ever inflated (`isOtherCorpus`). Three in the home
- *  would be ~91 MB — the whole reason this is its own stage and not `study`,
- *  which `fetchStage2Pack` loads wholesale.
+ *  One file at a time with a yield between, per the scheduling rule at the top of this
+ *  file. Nothing the reader is waiting for is behind it.
  *
- *  LAST, and one file at a time with a yield between. The engine lives in one
- *  worker thread, so a long synchronous stretch here starves every layout and
- *  tap RPC queued behind it; `depotBytes` is awaited I/O and the yield gives the
- *  queue a turn between files. Nothing the reader is waiting for is behind this.
+ *  Deliberately unverified, unlike `reconcilePack`'s downloads: nothing reads these
+ *  bytes until a language switch, and that path opens the engine on them and falls
+ *  back to the KJV if they will not parse.
  *
- *  UNVERIFIED, deliberately, unlike `reconcilePack`'s downloads: nothing reads
- *  these bytes until a language switch, and that path opens the engine on them
- *  and falls back to the KJV if they will not parse. Hashing 9 MB here to catch
- *  what the open catches anyway would cost every reader time for a failure mode
- *  that already has a floor.
- *
- *  Failure is silent and per-file. Being offline is the normal case, not an
- *  error, and a device that gets two of three Bibles has two of three Bibles —
- *  the next launch picks up the third, because `depotHas` skips what is here. */
+ *  Failure is silent and per-file: a device that gets two of three Bibles has two of
+ *  three, and the next launch picks up the third because `depotHas` skips what is
+ *  here. */
 async function fetchOtherCorpora(): Promise<void> {
   const rest = otherCorpora(booted!.manifest, booted!.corpusRole);
   if (!rest.length) return;
@@ -688,34 +561,28 @@ async function fetchOtherCorpora(): Promise<void> {
   }
   if (!got) return;
   booted!.trace.push([`other Bibles fetched (${got}/${rest.length})`, Math.round(performance.now() - t0)]);
-  // NO RE-PIN, and its absence is load-bearing. Every pin writer — the boot's
-  // cold path, `reconcilePack`, `installLangPack` — claims the corpora's URLs
-  // UP FRONT, before the bytes exist: the URLs are content-addressed and
-  // deterministic, so a claim names exactly where these downloads land, and
-  // prune's keep-set covers them from the first pin on. A re-pin here therefore
-  // adds nothing — and the one this function briefly had was a hazard: it wrote
-  // `booted!.manifest` back over whatever `reconcilePack` had just pinned, and
-  // on an unlucky interleave that is a NEWER pin clobbered by an older manifest.
+  // No re-pin, and its absence is load-bearing. Every pin writer — the boot's cold
+  // path, `reconcilePack`, `installLangPack` — claims the corpora's URLs up front,
+  // before the bytes exist, and prune's keep-set covers them from the first pin on. A
+  // re-pin here would add nothing and could write `booted!.manifest` back over a newer
+  // pin `reconcilePack` had just written.
 }
 
 /** Reclaim everything the device no longer needs.
  *
- *  An ALLOWLIST, not a denylist: keep what the pin (and the generation before it)
- *  names, plus the shell this build is made of, and delete the rest. The old rule
- *  was "delete versioned entries whose `?v=` is not the current pack" — which
- *  could not see per-file hashes, and could not reclaim a file dropped from the
- *  pack entirely, because nothing referenced its version any more.
+ *  An allowlist, not a denylist: keep what the pin (and the generation before it)
+ *  names plus the shell this build is made of, and delete the rest. A denylist keyed
+ *  on `?v=` cannot see per-file hashes, and cannot reclaim a file dropped from the
+ *  pack entirely.
  *
- *  HARD PRECONDITION: prune only runs with a readable pin AND a non-empty shell
- *  list. Without both, the keep-set is incomplete and an allowlist would delete
- *  the app. Skipping costs nothing but disk; getting it wrong costs the reader
- *  their offline copy.
+ *  Hard precondition: prune runs only with a readable pin AND a non-empty shell list.
+ *  Without both the keep-set is incomplete and an allowlist would delete the app.
+ *  Skipping costs disk; getting it wrong costs the reader their offline copy.
  *
- *  TWO generations are kept, and prune runs at the START of a session rather than
- *  the end. That buys "one generation of grace" with no cross-tab coordination
- *  and no lock: a tab still reading the previous pack keeps working, and the worst
- *  case is one superseded pack lingering until the next launch — against the old
- *  behaviour, which was unbounded and had stranded three whole packs. */
+ *  Two generations are kept, and prune runs at the START of a session. That buys one
+ *  generation of grace with no cross-tab coordination and no lock: a tab still reading
+ *  the previous pack keeps working, and the worst case is one superseded pack
+ *  lingering until the next launch. */
 async function pruneToPin(shell: string[]): Promise<number> {
   const base = assetUrl("");
   const keep = await pinnedUrls(base);
@@ -726,13 +593,9 @@ async function pruneToPin(shell: string[]): Promise<number> {
   keep.add(assetUrl("shell-manifest.json"));
   keep.add(assetUrl("pack/manifest.json"));
   // The engine binary is versioned by build id rather than listed in the shell
-  // manifest (it is the worker's to fetch, and far too big for a shell list).
-  // From boot.ts, which is also what prefetches it: an allowlist that spells the
-  // URL out for itself deletes the engine the day the spelling changes.
+  // manifest. From boot.ts, which is also what prefetches it: an allowlist that spells
+  // the URL out for itself deletes the engine the day the spelling changes.
   keep.add(engineUrl());
-  // NOTHING ELSE IS EXEMPT. A retired artifact like the old "verses like this"
-  // model is unknown to this list, which is exactly right — an allowlist reclaims
-  // it on the next launch of a device that still carries one.
 
   let gone = 0;
   for (const url of await depotKeys()) {
@@ -743,50 +606,44 @@ async function pruneToPin(shell: string[]): Promise<number> {
 }
 
 // ── persisting the reader's own work ─────────────────────────────────────────
-// A plain debounced `void persistUserData()` loses writes two ways, and both are
-// guarded against here:
+// A plain debounced `void persistUserData()` loses writes two ways:
 //
-//  * A FAILED WRITE must not go nowhere. QuotaExceededError on a full phone, or a
-//    browser that has decided this origin may not have a database, rejects a
-//    promise nobody is holding — while the shell has already told the reader
-//    their note was saved. It was saved only in the in-memory home, which dies
-//    with the tab. So failures come back out to the shell, and are retried.
-//  * A TAB THAT GOES AWAY inside the debounce loses the note entirely: 50 ms is
-//    nothing, and a hidden page has its timers frozen, so the pending callback
-//    may simply never run. `flush` awaits the write instead of scheduling it,
-//    and the main thread calls it on pagehide / visibilitychange-hidden.
+//  * A failed write rejects a promise nobody is holding, while the shell has already
+//    told the reader their note was saved — saved only in the in-memory home, which
+//    dies with the tab. So failures come back out to the shell, and are retried.
+//  * A tab that goes away inside the debounce loses the note entirely: a hidden page
+//    has its timers frozen, so the pending callback may never run. `flush` awaits the
+//    write instead of scheduling it, and the main thread calls it on pagehide /
+//    visibilitychange-hidden.
 //
-// Everything funnels through `persistNow`, so "did this get told about?" has one
-// answer. The multi-tab contract is untouched: the flush runs the SAME per-file
-// diff (see home.ts), one moment earlier.
+// Everything funnels through `persistNow`, so "was this reported?" has one answer.
+// The flush runs the same per-file diff (see home.ts), one moment earlier.
 const PERSIST_DEBOUNCE = 50;
-/** Backoff between retries, ms. It ENDS. A device that has refused five times is
- *  out of room rather than busy, and a timer that never stops costs battery
- *  while promising something we cannot deliver; the shell's notice carries a
- *  "Try again" the reader can use once they have freed some space. */
+/** Backoff between retries, ms. It ends: a device that has refused five times is out
+ *  of room rather than busy, and a timer that never stops costs battery. The shell's
+ *  notice carries a "Try again" for once the reader has freed some space. */
 const PERSIST_BACKOFF = [250, 1_000, 4_000, 15_000];
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let persistRetry: ReturnType<typeof setTimeout> | null = null;
 let persistTries = 0;
-/** Whether the shell is currently showing a failure notice — so a healthy
- *  session posts nothing at all, and a recovered one posts exactly once. */
+/** Whether the shell is showing a failure notice — a healthy session posts nothing,
+ *  a recovered one posts exactly once. */
 let persistFailing = false;
 
-/** What went wrong, in the browser's own words. An aborted IndexedDB transaction
- *  can reject with a NULL error, and "null" is not something a reader (or a bug
- *  report) can do anything with. */
+/** What went wrong, in the browser's own words. An aborted IndexedDB transaction can
+ *  reject with a null error, which no bug report can act on. */
 function persistReason(e: unknown): string {
   if (e instanceof Error) return `${e.name}: ${e.message}`;
   return e == null ? "the browser gave no reason" : String(e);
 }
 
-/** Persist the authored subtree now. Resolves when THIS attempt has settled,
- *  which is what makes it awaitable from `flush`. Never rejects: a failed save
- *  is news for the reader, not an error for whoever happened to trigger it. */
+/** Persist the authored subtree now. Resolves when this attempt has settled, which is
+ *  what makes it awaitable from `flush`. Never rejects: a failed save is news for the
+ *  reader, not an error for whoever triggered it. */
 async function persistNow(): Promise<void> {
-  // Both timers are subsumed by running right now; leaving either armed would
-  // double-write (and the debounce's write would diff against a moving tree).
+  // Both timers are subsumed by running now; either left armed would double-write,
+  // and the debounce's write would diff against a moving tree.
   if (persistTimer) clearTimeout(persistTimer);
   if (persistRetry) clearTimeout(persistRetry);
   persistTimer = null;
@@ -801,9 +658,8 @@ async function persistNow(): Promise<void> {
   } catch (e) {
     persistFailing = true;
     const more = persistTries < PERSIST_BACKOFF.length;
-    // `detail` is the browser's own words ("QuotaExceededError…"). The shell does
-    // not shout it at the reader, but a failure we cannot name is a failure
-    // nobody can act on, so it travels.
+    // The browser's own words. The shell does not shout them at the reader, but a
+    // failure nobody can name is a failure nobody can act on.
     self.postMessage({
       type: "persistFailed",
       detail: persistReason(e),
@@ -834,14 +690,13 @@ function schedulePersist(): void {
 const fontsLoaded = new Set<string>();
 
 /**
- * Load one family's faces into the worker's OWN FontFaceSet and point the
- * measure context at it. Workers do not share the document's fonts, and
- * measurement must see the REAL metrics of the face the main thread paints, or
- * lines wrap where they are not drawn.
+ * Load one family's faces into the worker's own FontFaceSet and point the measure
+ * context at it. Workers do not share the document's fonts, and measurement must see
+ * the real metrics of the face the main thread paints, or lines wrap where they are
+ * not drawn.
  *
- * Returns how many faces the worker now has for that family — counted, not just
- * attempted, because a silent failure here is invisible until a reader notices
- * odd wrapping. The shell compares it against what the family should have.
+ * Returns how many faces the worker now has for that family — counted, not attempted,
+ * because a silent failure is invisible until a reader notices odd wrapping.
  */
 async function loadFonts(base: string, token: string): Promise<number> {
   const resolved = setReaderFont(token);
@@ -850,29 +705,19 @@ async function loadFonts(base: string, token: string): Promise<number> {
   const scope = self as unknown as { fonts?: FontFaceSet };
   const fonts = scope.fonts;
   if (!fonts) return 0; // very old engines: fall back to platform metrics
-  // THE SCRIPT FALLBACKS, always, whichever family was asked for.
+  // The script fallbacks, always, whichever family was asked for. Each is in every
+  // Latin family's CSS stack (fonts.generated), so the document paints Arabic,
+  // Gurmukhi and Devanagari in them; without them here the worker would measure that
+  // text in whatever system font its OffscreenCanvas found. Loaded before the family,
+  // and outside the `fontsLoaded` short-circuit below, which is keyed per family.
   //
-  // Each is in every Latin family's CSS stack (fonts.generated), so the document
-  // will paint Arabic, Gurmukhi and Devanagari in them. If this worker did not
-  // also have them, it would measure that text in whatever system font its
-  // OffscreenCanvas found while the page painted it in the real face — and the
-  // two are not obliged to agree, which is the measured-here-painted-there split
-  // that wraps lines where they are not drawn. Loaded before the family so they
-  // are present for the first layout, and outside the `fontsLoaded`
-  // short-circuit below, which is keyed per family.
+  // Unconditional even at 287 KB: `pane.textLanguage` lets a reader open the Van Dyck
+  // or the Hindi Bible in a second pane, so the script this worker must MEASURE is not
+  // a function of the language it paints the chrome in. Narrowing it safely means
+  // loading per corpus at layout time, which is a protocol change.
   //
-  // STILL UNCONDITIONAL, now that there are three of them and they cost 287 KB
-  // rather than 106. The cheap-looking narrowing — load only the script the
-  // reader's own language needs — is wrong, and the reason is the pane strip:
-  // `pane.textLanguage` lets a German reader open the Van Dyck or the Hindi
-  // Bible in the second pane, so the script this worker is asked to MEASURE is
-  // not a function of the language it is painting the chrome in. Narrowing it
-  // safely means loading per corpus at layout time, which is a protocol change,
-  // not a smaller constant.
-  //
-  // AWAITED IN PARALLEL. They were loaded one after another when there was one
-  // of them and the loop read the same either way; three serial `await`s on a
-  // slow link are three round trips before the first line can be measured.
+  // Awaited in parallel — three serial `await`s on a slow link are three round trips
+  // before the first line can be measured.
   await Promise.all(
     Object.entries(SCRIPT_FALLBACK_BY_TOKEN)
       .filter(([token]) => !fontsLoaded.has(token))
@@ -882,8 +727,7 @@ async function loadFonts(base: string, token: string): Promise<number> {
             const face = new FontFace(FONT_CSS_FAMILY[token], `url(${new URL(path, base).href})`, {
               style: "normal",
               // 400 alone: these are static regulars (or variable faces the CSS
-              // declares at 400), and claiming 400 700 would have the browser
-              // answer one for a bold request and paint it regular.
+              // declares at 400), and 400 700 would answer a bold request with one.
               weight: "400",
             });
             await face.load();
@@ -905,9 +749,8 @@ async function loadFonts(base: string, token: string): Promise<number> {
     try {
       const face = new FontFace(FONT_CSS_FAMILY[resolved], `url(${new URL(path, base).href})`, {
         style,
-        // 400 700, not the file's own axis range: Fira Code's `wght` DEFAULTS to
-        // 300, so a declaration that let the default through would measure and
-        // paint the Light instance as body text.
+        // 400 700, not the file's own axis range: Fira Code's `wght` defaults to 300,
+        // so letting the default through measures and paints the Light as body text.
         weight: "400 700",
       });
       await face.load();
@@ -933,10 +776,8 @@ function statics(): Record<string, (...a: any[]) => any> {
     guideBlocks: () => guideBlocks(w),
     aboutBlocks: () => aboutBlocks(w),
     engineVersion: () => engineVersion(w),
-    // Engine-independent, both of them: a share link is pure string work over
-    // the church clamps, and the reading spec is the core's own tuning table.
-    // They are on the STATIC path so the shell can ask for them before (or
-    // without) an engine, which is what the church button and the dwell timer
+    // Engine-independent, so they are on the static path and the shell can ask for
+    // them before (or without) an engine — what the church button and the dwell timer
     // both need.
     shareLink: (request: unknown) => shareLink(w, request as Parameters<typeof shareLink>[1]),
     readingSpec: () => readingSpec(w),
@@ -954,30 +795,24 @@ self.onmessage = async (ev: MessageEvent) => {
     switch (m.op) {
       case "boot": {
         setAssetBase(m.base);
-        // Before anything else, so the meter covers the whole boot — including
-        // the downloads, which is the window the numbers are argued over.
+        // Before anything else, so the meter covers the downloads too.
         if (PERF) startStallMeter();
-        // THE FONTS OVERLAP THE WHOLE BOOT. They are needed before the first
-        // LAYOUT, not before the boot — and awaited here they held everything
-        // behind two font files: the pack download, and the splash's first
-        // progress message with it, so the boot watchdog's opening silence
-        // window was spent on fonts before the reader saw a single percent.
+        // The fonts overlap the whole boot: they are needed before the first LAYOUT,
+        // not before the boot, and awaited here they would hold the pack download and
+        // the splash's first progress message behind two font files.
         const t0 = performance.now();
         let fontsMs = 0;
         const fonts = loadFonts(m.base, m.textFont ?? DEFAULT_FONT).then((n) => {
           fontsMs = Math.round(performance.now() - t0);
           return n;
         });
-        // Handled immediately so nothing here can become an unhandled rejection
-        // while it is un-awaited; the await below still sees a failure and it
-        // lands in the same catch as any other boot failure. `loadFonts` swallows
-        // a refused face itself, so this is the belt for a platform that throws
-        // somewhere it does not expect to.
+        // Handled immediately so nothing becomes an unhandled rejection while it is
+        // un-awaited; the await below still sees a failure. `loadFonts` swallows a
+        // refused face itself, so this is only for a platform that throws elsewhere.
         void fonts.catch(() => {});
         booted = await boot((p) => self.postMessage({ type: "progress", ...p }), m.locale ?? "", m.lang ?? "");
-        // BEFORE the reply, and therefore before any layout op can be answered:
-        // measurement must see the real metrics of the reader's chosen face or
-        // lines wrap where they are not painted.
+        // Before the reply, and so before any layout op can be answered: measurement
+        // must see the real metrics of the chosen face.
         const w0 = performance.now();
         const fontFaces = await fonts;
         booted.trace.unshift(
@@ -987,22 +822,17 @@ self.onmessage = async (ev: MessageEvent) => {
         );
         booted.engine.onAuthored = () => {
           schedulePersist();
-          // The alt engines hold their own view of the study files this write
-          // just changed. Re-read before the shell re-fetches, or a tag made on
-          // the English pane is missing from the German pane's word study until
-          // the next reload.
+          // The alt engines hold their own view of the study files this write just
+          // changed; re-read before the shell re-fetches.
           refreshAlts();
           self.postMessage({ type: "authored" });
         };
-        // Dwell reports persist ONLY the reading dir — see onReadingWrite — and
-        // announce themselves SEPARATELY from `authored`. The shell has to drop
-        // its cached reading reads or the navigator keeps painting the map it
-        // fetched hours ago; it must not drop everything else with them, which is
-        // the same reason this does not just fire `authored`.
-        //
-        // Its own retry ladder would be pointless — the next dwell tick rewrites
-        // the same file — but the reader still hears about a device that is
-        // refusing writes, because it is refusing THEIR notes too.
+        // Dwell reports persist only the reading dir, and announce themselves
+        // separately from `authored`: the shell must drop its cached reading reads or
+        // the navigator keeps painting an hours-old map, but it must not drop
+        // everything else with them. No retry ladder — the next dwell tick rewrites the
+        // same file — but the reader still hears about a device refusing writes,
+        // because it is refusing their notes too.
         booted.engine.onReadingWrite = () => {
           void booted!.home.persistUserDir("reading").catch((e) => {
             persistFailing = true;
@@ -1015,20 +845,14 @@ self.onmessage = async (ev: MessageEvent) => {
           self.postMessage({ type: "readingWrote" });
         };
         const cfg = configLoad(booted.wasm) ?? {};
-        // The language was set inside `boot`, before the engine opened — which is
-        // where it has to be, because the engine picks WHICH CORPUS to open.
-        // Opt-in: absent means off, so a first visit does NOT pull the analysis
-        // pack in the background.
+        // Opt-in: absent means off, so a first visit does not pull the analysis pack
+        // in the background. (The language was set inside `boot`, before the open.)
         const machineOn = cfg.machineAnalysis === true;
-        // Tell the shell up front, so it never offers a "Load analysis" button
-        // for a load that is already on its way.
+        // So the shell never offers "Load analysis" for a load already on its way.
         const rndAuto = await willAutoLoadRnd(machineOn, m.deferRnd === true);
-        // What the folded-in reads actually cost this device, in the same trace
-        // as every other boot stage. It is the same work either way; what changed
-        // is that it no longer needs four more queue hops to deliver it.
         const x0 = performance.now();
-        // Every concrete theme (core::theme::Theme) — the palettes the shell
-        // paints from without a round trip. Keep in step with the Rust enum and
+        // Every concrete theme (core::theme::Theme) — the palettes the shell paints
+        // from without a round trip. Keep in step with the Rust enum and
         // SettingsDialog's `themes` list.
         const THEME_TOKENS = [
           "light",
@@ -1053,11 +877,9 @@ self.onmessage = async (ev: MessageEvent) => {
         const palettes: Record<string, unknown> = {};
         for (const tk of THEME_TOKENS) palettes[tk] = themePalette(booted.wasm, tk);
         const toc = booted.engine.toc();
-        // Every word the shell paints, resolved against the reader's setting and
-        // the device's locale by the CORE (i18n::resolve), not by either shell.
-        // Here rather than as its own call for the palettes' reason: this thread
-        // answers one thing at a time, and the shell cannot paint a single screen
-        // without it.
+        // Resolved against the reader's setting and the device's locale by the core
+        // (i18n::resolve). Here rather than as its own call for the palettes' reason:
+        // this thread answers one thing at a time and no screen paints without it.
         const i18n = i18nCatalog(booted.wasm, typeof cfg.language === "string" ? cfg.language : "", m.locale ?? "");
         booted.trace.push(["boot reply extras (palettes + toc + i18n)", Math.round(performance.now() - x0)]);
         void backgroundLoad(machineOn, m.deferRnd === true);
@@ -1068,17 +890,12 @@ self.onmessage = async (ev: MessageEvent) => {
           bundledOn: booted.home.bundledOn,
           rndAuto,
           fontFaces,
-          // FOLDED INTO THE BOOT REPLY. This thread is the only one
-          // that can answer anything, so the shell's first four reads — three
-          // theme palettes and the TOC — were four more full queue hops between
-          // the boot reply and the first layout request, on the one path where
-          // nothing else can proceed. They are pure functions of the engine that
-          // just opened, so the reply that says "open" can carry them.
-          //
-          // Both are session-immutable and that is why this is safe to hand over
-          // once: the palettes are compiled-in tables (crates/core/src/theme.rs)
-          // and the TOC is corpus-derived, which is the same reason
-          // session.svelte.ts PINS the TOC in its read-through cache.
+          // Folded into the boot reply: this thread answers one thing at a time, so
+          // the shell's first reads would otherwise be full queue hops between the
+          // boot reply and the first layout request. Safe to hand over once because
+          // both are session-immutable — the palettes are compiled-in tables
+          // (crates/core/src/theme.rs) and the TOC is corpus-derived, which is why
+          // session.svelte.ts pins the TOC in its read-through cache.
           palettes,
           toc,
           i18n,
@@ -1092,15 +909,11 @@ self.onmessage = async (ev: MessageEvent) => {
         if (m.method === "setAkjvOverlay") akjvOn = m.args[0] === true;
         break;
       }
-      // The same call, against another language's text — word study on a German
-      // pane, its verse text, its chapter counts. The METHOD NAME is unchanged:
-      // every StudyEngine read works on any handle, so per-pane language costs
-      // no per-feature RPC (docs/PER-PANE-LANGUAGE.md).
-      //
-      // AUTHORING NEVER COMES THROUGH HERE. Two writers over one home is a
-      // corruption story the atomic store should not be asked to survive, and
-      // the reader's data is shared anyway — so a write is the primary's, and
-      // the alt engines re-read it.
+      // The same call against another language's text. The method name is unchanged:
+      // every StudyEngine read works on any handle, so per-pane language costs no
+      // per-feature RPC. Authoring never comes through here — two writers over one
+      // home is a corruption the atomic store should not be asked to survive, and the
+      // reader's data is shared anyway.
       case "callIn": {
         const e = engineFor(m.lang as string) as unknown as Record<string, (...a: any[]) => unknown>;
         reply(timedCall(`${m.method}@${m.lang}`, () => e[m.method](...m.args)));
@@ -1108,15 +921,11 @@ self.onmessage = async (ev: MessageEvent) => {
       }
       case "static": {
         reply(timedCall(m.fn, () => statics()[m.fn](...m.args)));
-        // Config writes land in the in-memory WASI home; mirror them to
-        // IndexedDB like any authoring write.
-        //
-        // NOT `schedulePersist()`: config is written at exactly the moments the
-        // page is about to go away — answering first run, then reloading;
-        // choosing a theme, then closing the tab — and a 50 ms debounce is long
-        // enough to lose all of them. `persistNow()` still reports failure and
-        // still retries; it just does not wait first. Debouncing this loses the
-        // first-run choice across a relaunch (app.spec.ts pins that it survives).
+        // Config writes land in the in-memory WASI home; mirror them to IndexedDB
+        // like any authoring write. Not `schedulePersist()`: config is written at
+        // exactly the moments the page is about to go away — answering first run then
+        // reloading, choosing a theme then closing the tab — and a 50 ms debounce is
+        // long enough to lose all of them. `persistNow()` still reports and retries.
         if (m.fn === "configSave") void persistNow();
         break;
       }
@@ -1126,8 +935,7 @@ self.onmessage = async (ev: MessageEvent) => {
       }
       case "prefetch": {
         // Warm the turn cache without shipping the display list back over
-        // postMessage — the shell asks for the neighbouring chapters at idle,
-        // so the next page turn is a cache hit.
+        // postMessage, so the next page turn is a cache hit.
         layoutChapter(m);
         reply(null);
         break;
@@ -1137,10 +945,9 @@ self.onmessage = async (ev: MessageEvent) => {
         break;
       }
       case "setTextFont": {
-        // The reader changed the scripture face. Load it here BEFORE replying:
-        // the shell relayouts as soon as this resolves, and a layout measured
-        // before the face arrived would be measured in the fallback and painted
-        // in the real one. Already-loaded families resolve immediately.
+        // Loaded before replying: the shell relayouts as soon as this resolves, and a
+        // layout measured before the face arrived is measured in the fallback and
+        // painted in the real one. Already-loaded families resolve immediately.
         reply(await loadFonts(m.base, m.token));
         break;
       }
@@ -1149,9 +956,8 @@ self.onmessage = async (ev: MessageEvent) => {
         break;
       }
       case "measure": {
-        // One-off text widths for callers that need engine-side metrics
-        // (space width etc. travel inside the layout cfg instead — this is
-        // a utility escape hatch).
+        // One-off text widths for callers needing engine-side metrics; space width
+        // and friends travel inside the layout cfg instead.
         reply(measureFor(readerFont(m.px))(m.text));
         break;
       }
@@ -1174,8 +980,8 @@ self.onmessage = async (ev: MessageEvent) => {
         return;
       }
       case "diagnostics": {
-        // Everything the worker knows, in one round trip, so a report cannot be
-        // assembled from readings taken at different moments.
+        // One round trip, so a report is not assembled from readings taken at
+        // different moments.
         reply({
           trace: booted ? [...booted.trace] : [],
           turn: [...lastTurn],
@@ -1192,13 +998,9 @@ self.onmessage = async (ev: MessageEvent) => {
         break;
       }
       case "flush": {
-        // The reader is leaving (or has asked us to try again). Persist NOW and
-        // answer only once the transaction has settled, so the caller knows
-        // whether it was worth waiting for — a `void` here would recreate the
-        // very hole this op closes.
-        //
-        // Boot may not have finished: a tab hidden during a cold boot has no home
-        // to write, and nothing was authored either, so there is nothing to lose.
+        // Persist now and answer only once the transaction has settled — a `void`
+        // here would recreate the hole this op closes. Boot may not have finished: a
+        // tab hidden during a cold boot has no home to write and nothing authored.
         if (!booted) {
           reply(null);
           break;
@@ -1219,10 +1021,8 @@ self.onmessage = async (ev: MessageEvent) => {
         break;
       }
       case "suggestedState": {
-        // What the Settings row needs to draw itself: whether this home already
-        // has the set, and what asking for it would cost. Size comes from the
-        // manifest rather than a constant, so the row can never quote a number
-        // the pack has since changed.
+        // What the Settings row needs to draw itself. The size comes from the
+        // manifest rather than a constant, so the row cannot quote a stale number.
         const entry = suggestedWeavesEntry(booted!.manifest);
         reply({
           available: entry !== null,
@@ -1232,35 +1032,27 @@ self.onmessage = async (ev: MessageEvent) => {
         break;
       }
       case "installSuggested": {
-        // One file, so no progress ladder: it is ~110 KB, and a bar that jumps
-        // 0→100 says less than the button simply staying busy.
+        // One file (~110 KB), so no progress ladder: a bar that jumps 0→100 says less
+        // than the button staying busy.
         const bundle = await fetchSuggestedWeaves(booted!.manifest);
         if (!bundle) {
           fail("this build has no suggested-weave bundle");
           break;
         }
         const written = await booted!.home.installSuggestedWeaves(bundle);
-        // RE-PIN. The bundle is part of this device's pack now, and prune keeps
-        // only what the pin names — without this the next sweep reclaims the
-        // download, and the device then looks like one that declined it.
+        // Re-pin: the bundle is part of this device's pack now, and prune keeps only
+        // what the pin names — without this the next sweep reclaims the download.
         await writePin(booted!.manifest, assetUrl(""), devicePackFiles(booted!.manifest, (f) => hasOptional(booted!.home, f)));
-        // The engine holds the weave library it read at open, so the files are
-        // on disk and invisible until it re-reads them. Same call stage 2 uses
-        // for exactly this reason.
+        // The engine holds the weave library it read at open, so the files are on
+        // disk and invisible until it re-reads them. Same call stage 2 uses.
         booted!.engine.loadCoreData();
         self.postMessage({ type: "authored" });
         reply(written);
         break;
       }
       // ── a language's scripture ───────────────────────────────────────────
-      // The reader picking the language IS the ask, so there is no Settings
-      // row: the picker calls this and then reloads. A progress fraction,
-      // unlike the suggested bundle, because this is a couple of MB and a phone
-      // deserves to see it moving.
-      // A language no pane reads any more is a Bible-sized allocation doing
-      // nothing. The SHELL owns the answer to "which are still in use" — it is
-      // the thing that knows what every pane is reading — so it passes the list
-      // and this frees the rest.
+      // A language no pane reads any more is a Bible-sized allocation doing nothing.
+      // The shell knows what every pane is reading, so it passes the keep list.
       case "releaseLangs": {
         const keep = new Set((m.keep as string[]) ?? []);
         let freed = 0;
@@ -1270,9 +1062,8 @@ self.onmessage = async (ev: MessageEvent) => {
           altEngines.delete(code);
           freed++;
         }
-        // The turn cache holds display lists laid out from those engines; a
-        // stale entry would be served if the reader came back to that language
-        // before anything else evicted it, and its engine is gone.
+        // The turn cache holds display lists laid out from those engines, and their
+        // engines are gone.
         if (freed) turnCache.clear();
         reply(freed);
         break;
@@ -1282,16 +1073,13 @@ self.onmessage = async (ev: MessageEvent) => {
         break;
       }
       case "langPackState": {
-        // THROUGH THE STALE-PIN WINDOW. A warm boot's manifest IS the pin, and
-        // on the first launch after an upgrade the pin describes the release
-        // BEFORE this one — a release that had never heard of the language the
-        // reader is right now picking. Answering "not available" from that
-        // manifest is how a phone switched to Arabic within a minute of
-        // updating got the Arabic interface over the English KJV (maintainer's
-        // own device, v0.63.0 launch day): the switch skipped the ensure, the
-        // reload booted from the old pin, and the corpus role resolved to
-        // nothing. One 5 KB manifest fetch closes the window; offline keeps the
-        // old answer, which is the truth about what this device can do offline.
+        // Through the stale-pin window. A warm boot's manifest IS the pin, and on the
+        // first launch after an upgrade that pin describes the release before this
+        // one — which may never have heard of the language the reader is picking.
+        // Answering "not available" from it gives the reader a translated interface
+        // over the English KJV. One 5 KB manifest fetch closes the window; offline
+        // keeps the old answer, which is the truth about what this device can do
+        // offline.
         let entry = langCorpusEntry(booted!.manifest, m.code as string);
         if (!entry) {
           try {
@@ -1301,17 +1089,12 @@ self.onmessage = async (ev: MessageEvent) => {
             /* offline: the pin's manifest is what this device has */
           }
         }
-        // `installed` is A CLAIM ABOUT THE DEPOT, not about the reader's
-        // history. The old answer — the `langsInstalled` opt-in marker — was
-        // right while a Bible was an optional download and is a lie now that
-        // every Bible ships in the background: a corpus can be sitting in the
-        // depot with no marker (the background pass put it there), or still be
-        // MID-FLIGHT with the marker about to matter. What the switch flow
-        // needs to know is "can the reload that follows actually open this
-        // text", and only the depot answers that. The marker still gates the
-        // DICTIONARY, which really is opt-in — so a language whose lexicon has
-        // not been taken still reports uninstalled, and the install (which
-        // fetches both and sets the marker) still runs once.
+        // `installed` is a claim about the depot, not about the reader's history:
+        // every Bible ships in the background, so a corpus can be in the depot with no
+        // `langsInstalled` marker, or mid-flight with one. What the switch flow needs
+        // is "can the reload that follows open this text", and only the depot answers
+        // that. The marker still gates the dictionary, which really is opt-in, so a
+        // language whose lexicon has not been taken still reports uninstalled.
         const bytesHere = !!entry && (await depotHas(packFileUrl(entry, booted!.manifest.version)));
         const lex = booted!.manifest.files.find((f) => f.role === `lexicon:${m.code as string}`);
         reply({
@@ -1321,10 +1104,9 @@ self.onmessage = async (ev: MessageEvent) => {
         });
         break;
       }
-      // OPEN A LANGUAGE FOR A PANE — download its text if this device has not
-      // got it, then open a second engine on it. No reload, which is the whole
-      // difference from the settings switch below: the English pane must keep
-      // reading while the German text arrives.
+      // Open a language for a pane: download its text if this device has not got it,
+      // then open a second engine on it. No reload — that is the whole difference from
+      // the settings switch below, since the other pane must keep reading.
       case "openPaneLang": {
         const code = m.code as string;
         if (altEngines.has(code)) {
@@ -1342,9 +1124,8 @@ self.onmessage = async (ev: MessageEvent) => {
             self.postMessage({ type: "paneLangProgress", code, fraction: p.fraction }),
           );
           if (!cache) return false;
-          // That language's own dictionary rides the same ask: without it a
-          // German pane's word study would serve English definitions, which is
-          // half a translation.
+          // That language's dictionary rides the same ask, or its word study serves
+          // English definitions.
           await fetchLangLexicon(booted!.manifest, code);
           await booted!.home.installLangCorpus(code, entry.path, cache);
           return true;
@@ -1354,15 +1135,14 @@ self.onmessage = async (ev: MessageEvent) => {
           fail(`the ${code} text could not be downloaded`);
           break;
         }
-        // OPENING IS SYNCHRONOUS — a corpus open on the one thread that also
-        // answers layout and taps. It reads the idxcache rather than parsing
-        // JSONL, so it is a load and a directory, not a canon-wide decode.
+        // Opening is synchronous, on the one thread that also answers layout and
+        // taps; it reads the idxcache rather than parsing JSONL, so it is a load and a
+        // directory, not a canon-wide decode.
         //
-        // RETRIED ONCE THROUGH THE SUPPLY PATH, because the home is not a
-        // promise: the eviction below frees this language's bytes after the
-        // engine has read them, so a reader who goes back to German later in
-        // the session finds the file gone. The depot still has it, so the cold
-        // path is the repair — exactly as it is for the core pack.
+        // Retried once through the supply path: the eviction below frees this
+        // language's bytes after the engine has read them, so a reader coming back to
+        // it later in the session finds the file gone. The depot still has it, so the
+        // cold path is the repair.
         let opened: StudyEngine;
         try {
           opened = timedCall(`open ${code} engine`, () => StudyEngine.openLang(booted!.wasm, "/home", code));
@@ -1379,10 +1159,9 @@ self.onmessage = async (ev: MessageEvent) => {
           }
         }
         altEngines.set(code, opened);
-        // EVICT WHAT THE ENGINE HAS ALREADY READ, exactly as the core boot does
-        // after stage 2. The WASI shim's `File` copies its input, so until this
-        // runs the home holds a second copy of every byte the corpus and the
-        // dictionary just parsed — ~33 MB per language, measured.
+        // Evict what the engine has already read, as the core boot does after stage
+        // 2: the WASI shim's `File` copies its input, so until this runs the home
+        // holds a second copy of everything just parsed — ~33 MB per language.
         const freed = booted!.home.evict(
           booted!.manifest.files
             .filter((f) => f.role === `corpus:${code}` || f.role === `lexicon:${code}`)
@@ -1395,10 +1174,8 @@ self.onmessage = async (ev: MessageEvent) => {
       case "installLangPack": {
         const code = m.code as string;
         let entry = langCorpusEntry(booted!.manifest, code);
-        // The stale-pin window again — see `langPackState`. The state call has
-        // usually already refreshed the manifest, but this op must hold on its
-        // own: Settings is not the only conceivable caller, and a race between
-        // the two RPCs must not resurrect the old answer.
+        // The stale-pin window again — see `langPackState`. The state call has usually
+        // refreshed the manifest already, but this op must hold on its own.
         if (!entry) {
           try {
             booted!.manifest = await fetchManifest();
@@ -1414,17 +1191,16 @@ self.onmessage = async (ev: MessageEvent) => {
           fail(`this build has no ${code} corpus`);
           break;
         }
-        // That language's lexicon rides the same ask, into the depot — the
-        // reload that follows reads it back through stage 2. A pack without one
-        // is fine: study serves the English dictionary until it ships.
+        // That language's lexicon rides the same ask, into the depot; the reload that
+        // follows reads it back through stage 2. A pack without one is fine — study
+        // serves the English dictionary until it ships.
         await fetchLangLexicon(booted!.manifest, code);
         await booted!.home.installLangCorpus(code, entry.path, cache);
-        // RE-PIN, for `installSuggested`'s reason: the corpus is part of this
-        // device's pack now, and prune keeps only what the pin names — without
-        // this the next sweep reclaims a 28 MB download.
+        // Re-pin, for `installSuggested`'s reason: without this the next sweep
+        // reclaims a 28 MB download.
         await writePin(booted!.manifest, assetUrl(""), devicePackFiles(booted!.manifest, (f) => hasOptional(booted!.home, f)));
-        // NOT `loadCoreData`: the corpus is chosen when the engine OPENS, so
-        // this one needs a reload rather than a re-read. The picker does that.
+        // Not `loadCoreData`: the corpus is chosen when the engine opens, so this
+        // needs a reload rather than a re-read. The picker does that.
         reply(true);
         break;
       }

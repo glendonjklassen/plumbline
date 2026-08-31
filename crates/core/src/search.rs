@@ -1,17 +1,20 @@
 //! Plain-text search over the canonical corpus, plus reference jumps and
 //! query-by-Strong's-code.
 //!
-//! Ported from overlay `Search.hs`. The inverted index is one fold over the
-//! corpus at startup. A single-word query is answered in four ranked tiers
-//! (exact → morphological variants → other renderings of the same Strong's
-//! lemma → near spellings); a multi-word query is a phrase match, falling back
-//! to every-word-in-any-order. A query that reads as a reference (`John 3:16`,
-//! `1 Cor 13`, `psalms`) becomes a jump. A bare Strong's code (`H430`) lists
-//! every verse tagged with it.
+//! Ported from overlay `Search.hs` (as are the individual functions below).
+//! The inverted index is one fold over the corpus at startup. A query that
+//! reads as a reference (`John 3:16`, `1 Cor 13`, `psalms`) becomes a `GoTo`
+//! jump; everything else answers `Hits`. A single word runs four ranked tiers —
+//! exact → stem variants → other renderings of the same Strong's lemma → near
+//! spellings — and the first tier to produce anything names the answer; a
+//! multi-word query is a phrase match falling back to every-word-in-any-order;
+//! a bare Strong's code lists every verse tagged with it. Margin notes are
+//! searched alongside the exact tier. Rows are capped at [`HIT_CAP`] in
+//! tier-then-canon order while the total stays honest.
 //!
 //! The morphology *form-predicate* path (`tense:aorist voice:passive`) needs
-//! the optional morphology layer and so is answered here only with a "needs
-//! the morphology layer" placeholder; `plumbline-rnd` will extend it.
+//! the optional morphology layer, so it answers with a placeholder here;
+//! `plumbline-rnd` will extend it.
 
 use crate::canon;
 use crate::corpus::{Corpus, Verse};
@@ -26,10 +29,9 @@ pub const HIT_CAP: usize = 200;
 const NT_FIRST_ORDER: usize = 39;
 
 /// Where a search looks — the search screen's scope chips. Every scope is a
-/// CONTIGUOUS run of canonical verse indices (the corpus is in canon order),
-/// so filtering is one range test per posting and the honest `total` counts
-/// only what the scope covers. A reference query ignores the scope on
-/// purpose: "John 3" is navigation, not filtering.
+/// contiguous run of canonical verse indices (the corpus is in canon order), so
+/// filtering is one range test per posting and `total` counts only what the
+/// scope covers. A reference query ignores the scope: it is navigation.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SearchScope {
     #[default]
@@ -42,13 +44,10 @@ pub enum SearchScope {
     OldTestament,
     /// Matthew–Revelation.
     NewTestament,
-    /// A contiguous span of chapters, INCLUSIVE at both ends — "John 3–8",
-    /// "Genesis 1 – Deuteronomy 34".
-    ///
-    /// The shells' range picker and their canon presets (Law, Gospels,
-    /// Letters…) both land here: a preset is a span over a
-    /// [`crate::reference::CANON_SEGMENTS`] row, so there is no second list of
-    /// groupings to drift from the canon strip's.
+    /// A contiguous span of chapters, inclusive at both ends. The range picker
+    /// and the canon presets (Law, Gospels, Letters…) both land here — a preset
+    /// is a span over a [`crate::reference::CANON_SEGMENTS`] row, so there is no
+    /// second list of groupings to drift from the canon strip's.
     Span { from_book: String, from_chapter: u16, to_book: String, to_chapter: u16 },
 }
 

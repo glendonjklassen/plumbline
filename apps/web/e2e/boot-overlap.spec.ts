@@ -1,37 +1,18 @@
-// Boot overlap: the engine binary, the reader faces and the scripture text all
-// download AT THE SAME TIME (TODO F, 2026-07-29).
+// Boot overlap: the engine binary, the reader faces and the scripture text download at the same
+// time. `boot()` starts the engine fetch un-awaited at the top and collects it at the instantiate
+// site; the worker starts `loadFonts` un-awaited and collects it just before the boot reply. The
+// bug is those awaits going back in order — the ~1.7 MB engine before the text, both faces before
+// the boot starts — which on a slow connection is dead time before first text.
 //
-// None of the three needs another until the moment it is used, and until this
-// change they were awaited in order — the ~1.7 MB engine binary before the text
-// (`boot()`), and both font files before the boot even started (the worker's boot
-// op). On a slow connection that was dead time before first text. `boot()` now
-// starts the engine fetch un-awaited at the top and collects it at the
-// instantiate site; the worker starts `loadFonts` un-awaited and collects it just
-// before the boot reply, which is still before any layout op can be answered.
+// These assert the overlap (one download had started before another finished), never a wall-clock
+// budget: a millisecond ceiling would be a constant a serialised boot can still fit inside, while
+// the ordering separates fixed from broken however fast the machine is. `CORPUS_HOLD_MS` and
+// `FONT_HOLD_MS` are fault injection, not budgets — nothing asserts on them and no value can turn
+// a serialised boot green.
 //
-// WHAT THIS ASSERTS, AND WHAT IT DELIBERATELY DOES NOT. It asserts the OVERLAP —
-// that one download had started before another finished — and never a wall-clock
-// budget. A millisecond ceiling here would be a constant, and CLAUDE.md records
-// two tests that passed against the very bugs they described for exactly that
-// reason. The overlap is a structural fact: with the awaits back in order the
-// engine request cannot begin until the corpus read has ended, and the corpus
-// read cannot begin until both faces have arrived — so the ordering separates
-// fixed from broken however fast or slow the machine is.
-//
-// The two holds below (`CORPUS_HOLD_MS`, `FONT_HOLD_MS`) are FAULT INJECTION, not
-// budgets. Nothing asserts on either number and no value for either can turn a
-// serialised boot green; they exist because a loopback origin serves the whole
-// pack in single-digit milliseconds, and against that an ordering fact would be
-// decided by whether a local storage probe happened to land first.
-//
-// AND IT IS OBSERVED FROM A REAL ORIGIN, not page.route(): interception bypasses
-// service workers, and more to the point it would be measuring Playwright's own
-// scheduling rather than the browser's. This proxy records, server-side, when
-// each request arrived and when its last byte went out — the requests actually
-// made, timed by something neither the app nor the test can talk its way past.
-// It doubles as the fault injector: it holds the corpus and the fonts back, and
-// it refuses the engine binary outright for the last test, where the failure has
-// to reach the reader instead of the runtime.
+// Timed at a real origin rather than page.route(): interception bypasses service workers, and it
+// would measure Playwright's scheduling instead of the browser's. This proxy records server-side
+// when each request arrived and when its last byte left, and doubles as the fault injector.
 
 import { expect, test, type Page } from "@playwright/test";
 import http from "node:http";
@@ -44,27 +25,23 @@ interface Hit {
   end: number;
 }
 
-/** A forwarding origin that records request timings, can refuse a path, and can
- *  hold one back.
- *
- *  `upstream` is the suite's own server (preview in CI, a dev server locally),
- *  taken from the config's baseURL rather than hardcoded — a second copy of the
- *  port is a test that silently stops testing the day the port moves. */
+/** A forwarding origin that records request timings, can refuse a path, and can hold one back.
+ *  `upstream` comes from the config's baseURL rather than hardcoded: a second copy of the port is
+ *  a test that silently stops testing the day the port moves. */
 function recordingOrigin(upstream: string): Promise<{
   url: string;
   /** Every request so far, in arrival order. */
   hits: Hit[];
-  /** Answer any request whose URL contains `match` with `status` instead of
-   *  forwarding it. */
+  /** Answer any request whose URL contains `match` with `status` instead of forwarding it. */
   refuse: (match: string, status: number) => void;
-  /** Sit on any request whose URL contains `match` for `ms` before forwarding
-   *  it. Fault injection: it makes the ORDER of two waits observable. */
+  /** Sit on any request whose URL contains `match` for `ms` before forwarding it. Fault injection:
+   *  it makes the order of two waits observable. */
   delay: (match: string, ms: number) => void;
   close: () => Promise<void>;
 }> {
   const up = new URL(upstream);
-  // Node dialling Node: pin the family (see network.spec.ts's UPSTREAM note) —
-  // the browser's baseURL stays "localhost", only this hop goes by number.
+  // Node dialling Node: pin the address family. The browser's baseURL stays "localhost"; only
+  // this hop goes by number.
   if (up.hostname === "localhost") up.hostname = "127.0.0.1";
   const hits: Hit[] = [];
   let refused: { match: string; status: number } | null = null;
@@ -80,8 +57,7 @@ function recordingOrigin(upstream: string): Promise<{
       },
     );
     fwd.on("error", () => res.destroy());
-    // A request whose body already ended has nothing left to pipe, and piping an
-    // ended stream never ends `fwd` — so the forward would hang. Reachable only
+    // Piping an already-ended stream never ends `fwd`, so the forward would hang. Reachable only
     // from the delayed path, where time passes before we get here.
     if (req.readableEnded) fwd.end();
     else req.pipe(fwd);
@@ -89,8 +65,7 @@ function recordingOrigin(upstream: string): Promise<{
   const server = http.createServer((req, res) => {
     const hit: Hit = { url: req.url ?? "", start: performance.now(), end: 0 };
     hits.push(hit);
-    // The moment the last byte left for the browser — the honest end of a
-    // download, and the anchor the overlap is measured against.
+    // The last byte out is the end of the download, and the anchor the overlap is measured from.
     res.on("finish", () => (hit.end = performance.now()));
     if (refused && hit.url.includes(refused.match)) {
       res.writeHead(refused.status, { "content-type": "text/plain" });
@@ -115,9 +90,8 @@ function recordingOrigin(upstream: string): Promise<{
         hits,
         refuse: (match, status) => (refused = { match, status }),
         delay: (match, ms) => (delayed = { match, ms }),
-        // closeAllConnections FIRST, and it is not tidiness: `server.close()`
-        // waits for every open socket, and the page it just served keeps several
-        // alive (a dev server's HMR client re-polls forever). Without this the
+        // closeAllConnections first: `server.close()` waits for every open socket, and the page
+        // keeps several alive (a dev server's HMR client re-polls forever), so without this the
         // origin never closes and the test times out having already passed.
         close: () =>
           new Promise((done) => {
@@ -131,10 +105,8 @@ function recordingOrigin(upstream: string): Promise<{
   });
 }
 
-/** A first visit, first-run dismissed, text on screen.
- *
- *  The analysis tiers are left OFF: this is a boot-path test, and the optional
- *  analytics pack would only add noise to the requests being counted. */
+/** A first visit, first-run dismissed, text on screen. The analysis tiers are left off: the
+ *  optional analytics pack would only add noise to the requests being counted. */
 async function firstVisit(page: Page, url: string): Promise<void> {
   await page.goto(url);
   const established = page.getByRole("button", { name: "Established believer" });
@@ -148,18 +120,11 @@ async function firstVisit(page: Page, url: string): Promise<void> {
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 120_000 });
 }
 
-/** How long the origin sits on the corpus cache before serving it.
- *
- *  FAULT INJECTION, NOT A BUDGET — nothing below asserts on this number, and no
- *  value for it can turn a serialised boot green, because a serialised boot does
- *  not ask for the engine binary until the corpus read has already returned.
- *
- *  It is here because a loopback origin serves the whole 37 MB pack in single-
- *  digit milliseconds, and against that the ordering would be decided by whether
- *  a Cache API probe happens to land first — a coin toss, and the failure would
- *  land on the fixed code. This restores the proportion the item is about: a
- *  connection where the text takes longer to arrive than a local lookup takes to
- *  answer, which is every phone. */
+/** How long the origin sits on the corpus cache before serving it. Fault injection, not a budget:
+ *  nothing asserts on it, and no value can turn a serialised boot green because a serialised boot
+ *  does not ask for the engine binary until the corpus read has returned. It exists because a
+ *  loopback origin serves the whole 37 MB pack in single-digit milliseconds, against which the
+ *  ordering would be decided by whether a Cache API probe happened to land first. */
 const CORPUS_HOLD_MS = 3_000;
 
 test("the engine binary is fetched beside the text, not after it", { tag: "@perf" }, async ({ page, baseURL }) => {
@@ -167,8 +132,8 @@ test("the engine binary is fetched beside the text, not after it", { tag: "@perf
   try {
     origin.delay("kjv.jsonl.idxcache", CORPUS_HOLD_MS);
     await firstVisit(page, origin.url);
-    // Snapshot at first text: the background load and the idle cache sweep start
-    // right after, and a count taken later is a count of a different question.
+    // Snapshot at first text: the background load and the idle cache sweep start right after, so
+    // a later count answers a different question.
     const hits = [...origin.hits];
 
     const engine = hits.filter((h) => h.url.includes("plumbline_ffi.wasm"));
@@ -179,19 +144,17 @@ test("the engine binary is fetched beside the text, not after it", { tag: "@perf
     );
     expect(corpus.length, "stage 1's corpus cache should be fetched once on a first visit").toBe(1);
 
-    // EXACTLY ONE. The prefetch hands the bytes over through the depot, so the
-    // read inside instantiate() is a local hit. Two requests here means the two
-    // sites disagree about the URL — a silent second 1.7 MB download on every
-    // first visit, which is the opposite of the point.
+    // Exactly one: the prefetch hands the bytes over through the depot, so instantiate()'s read is
+    // a local hit. Two means the two sites disagree about the URL — a silent second 1.7 MB
+    // download on every first visit.
     expect(
       engine.length,
       `the engine binary was requested ${engine.length}× — the prefetch and the ` +
         `instantiate must agree on its URL, or the overlap costs a whole extra download`,
     ).toBe(1);
 
-    // THE OVERLAP ITSELF. Serialised, the engine fetch cannot start until the
-    // corpus read has ended; overlapped, it starts before it — in fact before the
-    // corpus request is even made.
+    // The overlap itself: serialised, the engine fetch cannot start until the corpus read has
+    // ended; overlapped, it starts before the corpus request is even made.
     expect(corpus[0].end).toBeGreaterThan(0);
     expect(
       engine[0].start,
@@ -204,29 +167,22 @@ test("the engine binary is fetched beside the text, not after it", { tag: "@perf
   }
 });
 
-/** How long the origin sits on the two reader faces in the test below.
- *
- *  FAULT INJECTION, NOT A BUDGET — nothing is asserted about this number. It
- *  makes the order of two independent waits observable with the same margin in
- *  both directions: awaited in front of the boot, the corpus read cannot begin
- *  until both faces have arrived, and no value here can change that. Both faces,
- *  not one: `loadFonts` loads them in sequence, so holding only the first leaves
- *  a serialised boot starting the corpus read milliseconds after that face
- *  finished — a margin thin enough to be luck. */
+/** How long the origin sits on the two reader faces. Fault injection, not a budget: nothing
+ *  asserts on it, and awaited in front of the boot the corpus read cannot begin until both faces
+ *  have arrived whatever the value. Both faces, not one — `loadFonts` loads them in sequence, so
+ *  holding only the first leaves a margin thin enough to be luck. */
 const FONT_HOLD_MS = 8_000;
 
 test("the reader faces load beside the boot, not in front of it", { tag: "@perf" }, async ({ page, baseURL }) => {
   const origin = await recordingOrigin(baseURL!);
   try {
-    // Set before the first byte: the worker asks for these the moment it gets the
-    // boot message, which is the wait this test is about.
+    // Set before the first byte: the worker asks for these the moment it gets the boot message.
     origin.delay("EBGaramond", FONT_HOLD_MS);
     await firstVisit(page, origin.url);
     const hits = [...origin.hits];
 
-    // Requested by BOTH threads — the document paints with them, the worker
-    // measures with them — so this is several hits for two files, and the
-    // earliest completion is the anchor.
+    // Both threads request them (the document paints with them, the worker measures with them),
+    // so this is several hits for two files and the earliest completion is the anchor.
     const fonts = hits.filter((h) => /EBGaramond.*\.woff2/.test(h.url) && h.end > 0);
     const corpus = hits.filter((h) => h.url.includes("kjv.jsonl.idxcache"));
     console.log(
@@ -259,35 +215,25 @@ test("an engine binary that will not download reaches the reader, not an unhandl
   baseURL,
 }) => {
   const origin = await recordingOrigin(baseURL!);
-  // `pageerror`, and NOT a console listener. Chromium reports a DEDICATED
-  // WORKER's unhandled rejection to Playwright as a page error, not as a console
-  // message — measured 2026-07-30 on a throwaway origin whose worker did nothing
-  // but `Promise.reject(new Error("BOOM-PROBE"))` with a handler attached three
-  // seconds later (the exact shape boot.ts has): chromium emitted `pageerror
-  // "Error: BOOM-PROBE"` and no console output at all. The first version of this
-  // test watched console errors for /uncaught \(in promise\)/ and PASSED with the
-  // routed `.catch()` deleted — worthless, and the third such test this repo has
-  // caught. A console listener would also be noisy here for the wrong reason: the
-  // failure path deliberately console.errors through worker-client's #fail.
+  // `pageerror`, not a console listener: chromium reports a dedicated worker's unhandled rejection
+  // to Playwright as a page error and emits no console output at all, so a version watching
+  // console errors for /uncaught \(in promise\)/ passed with the routed `.catch()` deleted. A
+  // console listener would also be noisy here — the failure path console.errors through
+  // worker-client's #fail by design.
   const runtimeErrors: string[] = [];
   page.on("pageerror", (e) => runtimeErrors.push(String(e)));
   try {
     origin.refuse("plumbline_ffi.wasm", 503);
     await page.goto(origin.url);
 
-    // The same failure path an awaited instantiate() used: out of boot, out of the
-    // boot RPC, onto the splash in the browser's own words, with a Retry.
+    // Out of boot, out of the boot RPC, onto the splash in the browser's own words, with a Retry.
     const shown = page.locator(".splash .error");
     await expect(shown).toBeVisible({ timeout: 120_000 });
     await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
 
-    // The RAW string moved one disclosure away on 2026-07-30 (audit D-11): the
-    // reader now gets a sentence they can act on and `<details>` keeps the
-    // machine words. This test's subject is unchanged — that the failure is
-    // DELIVERED, naming the file and the status, because that is what a bug
-    // report pastes — so it follows the string rather than asserting where it
-    // used to sit. Both halves matter: `.error` must NOT be the raw exception,
-    // and the raw must still be somewhere on the screen.
+    // The raw string sits one disclosure away: the reader gets a sentence they can act on, and
+    // `<details>` keeps the machine words a bug report pastes. Both halves matter — `.error` must
+    // not be the raw exception, and the raw must still be somewhere on the screen.
     expect(
       await shown.textContent(),
       "the reader was shown the raw exception instead of a sentence they can act on",
@@ -298,11 +244,8 @@ test("an engine binary that will not download reaches the reader, not an unhandl
     );
     await expect(raw).toContainText("HTTP 503");
 
-    // Nothing may have reached the runtime unhandled. The splash above proves the
-    // error was DELIVERED; this proves it was delivered ONCE, down the path the
-    // caller controls, rather than also escaping the promise nobody was awaiting
-    // yet — which in a worker is a console error at best and a dead thread at
-    // worst, with the reader left on a splash that never moves.
+    // Delivered once, down the path the caller controls, rather than also escaping the promise
+    // nobody was awaiting yet — in a worker that is a dead thread and a splash that never moves.
     expect(
       runtimeErrors,
       `the un-awaited engine fetch left its rejection to the runtime: ${runtimeErrors.join(" | ")}`,

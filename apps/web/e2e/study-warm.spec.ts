@@ -1,15 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The Study hub's progress band used to be fetched when the reader ARRIVED:
-// four engine reads (plans, cards due, suggested weaves, the reading map) that
-// all started on first render, so the band held a placeholder until they
-// landed and the numbers appeared a beat later. Those reads are warmed in the
-// background now — at boot idle, and again after anything that empties the
-// cache they live in.
+// The Study hub's progress band is built from four engine reads (plans, cards due, suggested
+// weaves, the reading map), warmed in the background — at boot idle, and again after anything
+// that empties the cache they live in.
 //
-// What these tests watch is the CACHE, not a stopwatch: "the answers are
-// already there when the hub mounts" means the same thing on a fast machine and
-// a slow one, which a millisecond budget would not.
+// These tests watch the cache, not a stopwatch: "the answers are already there when the hub
+// mounts" means the same thing on a fast machine and a slow one; a millisecond budget would
+// not.
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
@@ -26,14 +23,10 @@ async function boot(page: Page): Promise<void> {
 /**
  * Wait out the background pipeline, as cache.spec.ts and search.spec.ts do.
  *
- * The boot stages (core, warm, R&D) each empty the read-through cache and each
- * schedule a warm of their own. A test that writes while they are still landing
- * cannot tell ITS re-warm from theirs — which is how the second test below
- * first passed with the behaviour it describes removed.
- *
- * POLLED FROM NODE: reading the trace is an async RPC, and an async predicate
- * handed to `page.waitForFunction` returns a promise — truthy — so the poller
- * fulfils immediately and waits for nothing.
+ * Each boot stage (core, warm, R&D) empties the read-through cache and schedules a warm of
+ * its own, so a test that writes while they are still landing cannot tell its re-warm from
+ * theirs. Polled from Node: an async predicate handed to `page.waitForFunction` returns a
+ * promise — truthy — so the poller fulfils immediately and waits for nothing.
  */
 async function settleBackground(page: Page): Promise<void> {
   const traceLen = () =>
@@ -53,8 +46,8 @@ async function settleBackground(page: Page): Promise<void> {
 async function bandCached(page: Page): Promise<Record<string, boolean>> {
   return await page.evaluate(() => {
     const s = (window as any).__plumbline;
-    // `dayStamp` is one definition shared by the hub, the navigator and the
-    // warm — computing it differently here would test a key nothing uses.
+    // `dayStamp` is one definition shared by the hub, the navigator and the warm —
+    // computing it differently here would test a key nothing uses.
     const day = new Date().toISOString().replace(/\.\d{3}Z$/, "Z").slice(0, 10) + "T12:00:00Z";
     return {
       plans: s.q("plans", "") !== null,
@@ -65,38 +58,28 @@ async function bandCached(page: Page): Promise<Record<string, boolean>> {
   });
 }
 
-// MUTATION: drop `this.scheduleStudyWarm()` from `rpc.onWarmReady`. Red: every
-// band read is still uncached when the hub opens, so the placeholder is what
-// the reader gets.
-//
-// The warm hangs off the pipeline finishing, NOT off boot idle — a warm at boot
-// put eight engine reads in front of the corpus opening on the one worker
-// thread and cost cold starts minutes (see Session.STUDY_WARM_MIN_GAP_MS). That
-// is why this test waits rather than expecting the cache to be warm instantly.
+// Mutation: drop `this.scheduleStudyWarm()` from `rpc.onWarmReady` — red, every band read is
+// still uncached when the hub opens. The warm hangs off the pipeline finishing rather than
+// boot idle, because eight engine reads in front of the corpus opening on the one worker
+// thread cost cold starts minutes (Session.STUDY_WARM_MIN_GAP_MS), so this test waits.
 test("the Study hub's progress is already loaded before you open it", async ({ page }) => {
   await boot(page);
-  // SETTLE THE PIPELINE FIRST, and step off the Read screen — the two lessons
-  // the test below this one already carries, which this one never got because
-  // it happened to pass. Each boot stage (core → warm → R&D) EMPTIES the cache
-  // and re-warms at idle; the product's documented floor is that a reader who
-  // arrives inside that gap gets the placeholder. Sampling "all cached" while
-  // the stages are still landing asserts more than the product promises — on a
-  // loaded CI runner the R&D stage finished after the warm, the click fell in
-  // its gap, and the hub honestly re-asked for plans and suggestedWeaves. And
-  // reading accrues dwell, a dwell write invalidates `plans`, so staying on the
-  // text keeps a second race open after the first is closed.
+  // Settle the pipeline first, and step off the Read screen. Each boot stage empties the
+  // cache and re-warms at idle, and the product's floor is that a reader arriving inside
+  // that gap gets the placeholder — so sampling "all cached" mid-stage asserts more than
+  // the product promises. Reading also accrues dwell, and a dwell write invalidates
+  // `plans`, which keeps a second race open.
   await settleBackground(page);
   await page.evaluate(() => ((window as any).__plumbline.screen = "share"));
   await page.waitForTimeout(1500);
 
-  // The warm runs at idle. Nothing on screen waits for it, which is exactly
-  // why the test has to.
+  // The warm runs at idle, and nothing on screen waits for it, so the test has to.
   await expect
     .poll(async () => Object.values(await bandCached(page)).every(Boolean), { timeout: 60_000 })
     .toBe(true);
 
-  // Arriving at the hub asks the engine for NOTHING: every question it has was
-  // answered while the reader was still in the text.
+  // Arriving at the hub asks the engine for nothing: every question it has was answered
+  // while the reader was still in the text.
   const asked: string[] = await page.evaluate(() => {
     const s = (window as any).__plumbline;
     const seen: string[] = [];
@@ -124,28 +107,22 @@ test("the Study hub's progress is already loaded before you open it", async ({ p
   await expect(page.locator("section.band .settled")).toBeVisible();
 });
 
-// MUTATION: drop `this.scheduleStudyWarm()` from `rpc.onAuthored`. Red: the
-// band's reads are never re-asked after a write, so the next visit to Study
-// waits for exactly the numbers that write changed.
-//
-// This watches for the re-warm HAPPENING rather than for the cache being
-// briefly empty. The gap between a write and the re-warm is what the fix
-// exists to close, so asserting on it would be asserting on a race — and the
-// obvious probe makes it worse, because reading through `q()` re-fills the
-// cache it is inspecting.
+// Mutation: drop `this.scheduleStudyWarm()` from `rpc.onAuthored` — red, the band's reads are
+// never re-asked after a write. This watches for the re-warm happening rather than for the
+// cache being briefly empty: that gap is what the fix closes, so asserting on it would be
+// asserting on a race, and probing through `q()` re-fills the cache it is inspecting.
 test("a write re-warms the hub instead of leaving it cold", async ({ page }) => {
   await boot(page);
-  // Every boot stage re-warms too; settle them first so what this observes can
-  // only be the write's own re-warm.
+  // Every boot stage re-warms too; settle them first so what this observes can only be the
+  // write's own re-warm.
   await settleBackground(page);
   await expect
     .poll(async () => Object.values(await bandCached(page)).every(Boolean), { timeout: 60_000 })
     .toBe(true);
 
-  // OFF THE READ SCREEN FIRST. Reading accrues dwell, a dwell report is itself
-  // a write, and it re-warms on the same reasoning — so a test that stays in
-  // the text cannot tell the authoring warm from the reading one, and passed
-  // with the authoring warm deleted. Share reads none of the three below.
+  // Off the Read screen first: reading accrues dwell, a dwell report is itself a write and
+  // re-warms on the same reasoning, so a test that stays in the text cannot tell the
+  // authoring warm from the reading one. Share reads none of the three below.
   await page.evaluate(() => ((window as any).__plumbline.screen = "share"));
   await page.waitForTimeout(1500);
 
@@ -173,22 +150,18 @@ test("a write re-warms the hub instead of leaving it cold", async ({ page }) => 
     .poll(
       async () => {
         const seen: string[] = await page.evaluate(() => (window as any).__afterWrite);
-        // NOT `plans` (the Read screen's chip re-fetches it on any write) and
-        // NOT `memoryDue` (the app badge asks for it directly in the same
-        // handler). These three are the hub's alone, so seeing them means the
-        // warm ran rather than something else refreshing itself.
+        // Not `plans` (the Read screen's chip re-fetches it on any write) and not
+        // `memoryDue` (the app badge asks for it directly in the same handler). These
+        // three are the hub's alone, so seeing them means the warm ran.
         return ["suggestedWeaves", "readingBooks", "tags"].every((m) => seen.includes(m));
       },
       { timeout: 60_000 },
     )
     .toBe(true);
 
-  // And what it warmed is the POST-write answer — the new tag is in the count
-  // the hub will show, without the reader having opened it.
-  //
-  // POLLED, because the warm walks its reads in order and the card counts come
-  // after the band: reading this the instant the band landed caught `tags`
-  // mid-warm and failed about one run in three.
+  // And what it warmed is the post-write answer: the new tag is in the count the hub will
+  // show, without the reader having opened it. Polled, because the warm walks its reads in
+  // order and the card counts come after the band.
   await expect
     .poll(
       async () =>

@@ -4,8 +4,7 @@
 //! every handle/string. No GUI, fully deterministic (monospace measurement).
 
 use super::*;
-// The reading-map endpoints live in their own module (see reading_map.rs — lib.rs
-// was already past the no-3k-line rule); `use super::*` does not reach into it.
+// The reading-map and plan endpoints are their own modules; `use super::*` does not reach them.
 use crate::plans::*;
 use crate::reading_map::*;
 use serde_json::Value;
@@ -465,9 +464,9 @@ fn plans_and_concept_study_via_abi() {
         assert_eq!(v["running"].as_array().unwrap().len(), 0);
         assert!(v["builtins"].as_array().unwrap().iter().any(|b| b["id"] == "nt-90"));
 
-        // A curated-table plan is offered only where its table loads: this toy
-        // home ships no chronological.json, so the row is hidden and a direct
-        // start REFUSES rather than starting a plan that reads "finished".
+        // A curated-table plan is offered only where its table loads: this toy home
+        // ships no chronological.json, so the row is hidden and a direct start refuses
+        // rather than starting a plan that reads "finished".
         assert!(!v["builtins"].as_array().unwrap().iter().any(|b| b["id"] == "chronological"));
         assert!(take(plumbline_engine_plan_start(e, c("chronological").as_ptr(), now.as_ptr()))
             .unwrap()
@@ -487,19 +486,11 @@ fn plans_and_concept_study_via_abi() {
         assert_eq!(run["today"]["day"], 1);
         assert_eq!(run["today"]["chapters"][0]["book"], "John");
         assert_eq!(run["today"]["chapters"][0]["chapter"], 3);
-        // THE CARD IS NAMED IN THE READER'S LANGUAGE, and it was not.
-        //
-        // `book` above is the OSIS id and stays English forever — it is
-        // storage. `display` is the only part a reader sees, and it was built
-        // with `canon::display_name`, the frozen English table, so a German
-        // reader's plan card read "John 3" while the passage navigator, the
-        // search results and every reference on the same screen read
-        // "Johannes 3". Nothing errored and English never noticed.
-        //
-        // Asserted against `VRef::chapter_display_in`, which is what the rest
-        // of the app names a chapter with, rather than against a spelled
-        // "Johannes 3" — the separator is a catalogue template and the point is
-        // that this agrees with everything else, not that it matches a string.
+        // Fails against a plan card built with `canon::display_name` (the frozen English
+        // table), which left a German reader reading "John 3" while every other reference
+        // on the screen read "Johannes 3". `book` stays the English OSIS id: it is storage.
+        // Asserted against `VRef::chapter_display_in` rather than a spelled "Johannes 3",
+        // since the point is agreement with the rest of the app, not a literal.
         let de = plumbline_core::i18n::Lang::De;
         let want = plumbline_core::reference::VRef::new("John", 3, 1).chapter_display_in(de);
         assert_eq!(run["today"]["chapters"][0]["display"], "John 3", "English reads as it always did");
@@ -527,9 +518,8 @@ fn plans_and_concept_study_via_abi() {
         assert_eq!(run["paused"], false);
         assert_eq!(run["started"], "2026-08-08T12:00:00Z");
 
-        // Read the day's one chapter (this toy NT is John 3 alone) TODAY: the
-        // day's worth is done, and the wire says so — while a query dated the
-        // NEXT day asks again.
+        // Read the day's one chapter today: the day's worth is done and the wire says
+        // so, while a query dated the next day asks again.
         let _ = take(plumbline_engine_reading_record_json(e, c("John").as_ptr(), 3, 999, 3600.0, now.as_ptr()));
         let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
         assert_eq!(v["running"][0]["doneToday"], true, "a day's worth was read today");
@@ -580,8 +570,8 @@ fn plans_and_concept_study_via_abi() {
         // Two plans run in parallel (a schedule and a concept study).
         assert_eq!(v["running"].as_array().unwrap().len(), 2);
 
-        // Stop the concept study; it goes, the schedule stays. (The tag it filed
-        // under is untouched — not asserted here, that is core::tag's contract.)
+        // Stop the concept study; it goes, the schedule stays. The tag it filed under
+        // is untouched — core::tag's contract, not asserted here.
         assert!(plumbline_engine_plan_stop(e, c("run-grace").as_ptr()).is_null());
         let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
         assert_eq!(v["running"].as_array().unwrap().len(), 1);
@@ -1338,9 +1328,8 @@ fn tier0_endpoints_via_abi() {
     }
 }
 
-/// Boot-phase timing harness for TODO #28 (PWA mobile performance): times
-/// engine open + each lazy analytics build over the repo's own data home.
-/// Ignored by default — run manually, release mode, when tuning boot:
+/// Boot-phase timing harness: engine open + each lazy analytics build over the
+/// repo's own data home. Ignored by default — run manually when tuning boot:
 ///   cargo test --release -p plumbline-ffi timing_harness -- --ignored --nocapture
 #[test]
 #[ignore]
@@ -1432,19 +1421,14 @@ fn timing_harness_concept_parts() {
     let comms = concept::communities(30, &knn);
     println!("communities:      {:?} ({} groups)", t.elapsed(), comms.len());
 
-    // The warm phases that are still ONE call each: whichever is
-    // worst is the next slice to cut.
+    // The warm phases still one call each: the worst is the next slice to cut.
     let t = Instant::now();
     let lw = burst::discover_leitworter(&burst::BurstParams::default(), &corpus);
     println!("leitwort:         {:?} ({} found)", t.elapsed(), lw.len());
 }
 
-/// The web boot order (TODO #28): open on the core pack only, warm, then the
-/// R&D artifacts arrive late — `load_rnd_data` + a re-warm must light up the
-/// embedding/morphology tiers, and the early warm must NOT have pinned the
-/// SIF model empty.
-/// The overlay rides in with stage 2 (beside Strong's), and is refused when it
-/// was aligned to a different tokenization — an overlay over the wrong text
+/// The overlay rides in with stage 2 (beside Strong's), and must be refused when
+/// it was aligned to a different tokenization: an overlay over the wrong text
 /// points every span at the wrong word, quietly, in scripture.
 #[test]
 fn akjv_overlay_loads_with_stage_two() {
@@ -1596,8 +1580,7 @@ fn rnd_data_loads_after_open() {
 }
 
 /// A corpus of `chapters * per` verses over Psalms, every verse carrying the
-/// four Strong's codes the fixtures use. Deliberately bigger than one warm slice — see
-/// `sif_model_is_built_in_slices` for why that is the whole point.
+/// four Strong's codes the fixtures use. Deliberately bigger than one warm slice.
 fn generated_kjv(chapters: u16, per: u16) -> String {
     const CODES: [&str; 4] = ["G2316", "G25", "G4100", "H7225"];
     let mut out =
@@ -1614,17 +1597,13 @@ fn generated_kjv(chapters: u16, per: u16) -> String {
     out
 }
 
-/// A reader's tap must never BUILD an index while a sliced warm is running.
+/// A reader's tap must never build an index while a sliced warm is running.
+/// Fails against `wordStudyBlocks` building the occurrence index, rendering lens,
+/// cross-references, concept model and bridge in one synchronous lump — tens of
+/// seconds during which the one thread answers nothing, downloads included.
 ///
-/// Tap a word before the chunked warm reaches them and `wordStudyBlocks` builds
-/// the occurrence index, the rendering lens, the cross-references, the concept
-/// model and the bridge in ONE synchronous lump — tens of seconds during which
-/// the only thread that can answer a tap answers nothing, including its own
-/// downloads. Slicing the warm is pointless if a tap can undo it.
-///
-/// Both halves matter, so both are asserted: the tap builds NOTHING, and the tap
-/// still answers. An engine that returned an error, or empty blocks, would
-/// satisfy the first half and be useless.
+/// Both halves are asserted: the tap builds nothing, and it still answers. An
+/// engine returning an error or empty blocks satisfies the first and is useless.
 #[test]
 fn a_tap_never_builds_indexes_under_a_sliced_warm() {
     use std::ffi::CString;
@@ -1632,8 +1611,7 @@ fn a_tap_never_builds_indexes_under_a_sliced_warm() {
         let home = std::env::temp_dir().join(format!("plumbline-ffi-tapbuild-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join("data")).unwrap();
-        // Bigger than one warm slice, so the warm is genuinely mid-flight when
-        // the tap lands — which is the situation being tested.
+        // Bigger than one warm slice, so the warm is genuinely mid-flight when the tap lands.
         std::fs::write(home.join("data").join("kjv.jsonl"), generated_kjv(150, 20)).unwrap();
         std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
 
@@ -1698,18 +1676,11 @@ fn a_tap_never_builds_indexes_under_a_sliced_warm() {
     }
 }
 
-/// The window the first attempt at this fix missed entirely.
-///
-/// v0.29.0 armed the no-building rule on the first `warm_next` call, which reads
-/// as equivalent and is not. The web's warm starts only after stage 2 has been
-/// fetched AND parsed — ~550 ms after text appears on a phone — and a reader taps
-/// a word inside that gap. So the flag was still off, the tap built all five
-/// indexes, and the phone froze for 26,042 ms on the very build that shipped the
-/// fix. A desktop could not reproduce it: stage 2 there takes 40 ms and the warm
-/// happens to win the race.
-///
-/// The rule is therefore declared AT OPEN, and this pins the case the previous
-/// version passed while failing: no warm has run at all, not one slice.
+/// Fails against arming the no-building rule on the first `warm_next` call rather
+/// than at open: the web's warm starts ~550 ms after text appears, and a tap
+/// inside that gap builds every index. This pins the case with no warm at all,
+/// not one slice — a desktop cannot reproduce it, since stage 2 wins the race
+/// there.
 #[test]
 fn a_tap_before_the_warm_has_even_started_builds_nothing() {
     use std::ffi::CString;
@@ -1725,8 +1696,8 @@ fn a_tap_before_the_warm_has_even_started_builds_nothing() {
         let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(err.is_null() && !e.is_null());
         let eng = &*e;
-        // What the web shell does the instant the engine opens — and NOTHING
-        // else. No stage 2, no warm slice, no layout.
+        // What the web shell does the instant the engine opens, and nothing else: no
+        // stage 2, no warm slice, no layout.
         eng.set_defer_builds(true);
         eng.load_core_data();
 
@@ -1755,23 +1726,14 @@ fn a_tap_before_the_warm_has_even_started_builds_nothing() {
     }
 }
 
-/// NO reader-facing export may build a lazy index. Not one.
+/// No reader-facing export may build a lazy index. Gating only the word-study
+/// path is whack-a-mole: `plumbline_engine_concept_map_json` reached past the
+/// panel's "ready" accessors to `e.concept()` and took 10 s. Every export below
+/// is reachable in the first seconds of a launch, so all are walked and the
+/// whole engine checked afterwards.
 ///
-/// Gating only the word-study path was whack-a-mole and it lost the very next
-/// round: with `wordStudyBlocks` fixed, the phone's slowest call became
-///
-///     10205 ms  conceptMap
-///
-/// — a different door into the same room, because `plumbline_engine_concept_map_json`
-/// reached straight past the panel's "ready" accessors and called `e.concept()`.
-/// Every export below can be triggered by an ordinary reader before the warm has
-/// finished, so every one of them is walked here and the whole engine is checked
-/// afterwards. A new export that forgets the rule fails this test rather than the
-/// maintainer's phone.
-///
-/// `search` is deliberately NOT in this list: it is an explicit query where an
-/// empty answer would be a wrong answer rather than a partial one, and the warm
-/// builds its index first for exactly that reason.
+/// `search` is deliberately absent: it is an explicit query where an empty answer
+/// would be wrong rather than partial, so the warm builds its index first.
 #[test]
 fn no_reader_facing_export_builds_an_index_under_a_sliced_warm() {
     use std::ffi::CString;
@@ -1820,10 +1782,9 @@ fn no_reader_facing_export_builds_an_index_under_a_sliced_warm() {
     }
 }
 
-/// The control for the test above: WITHOUT a sliced warm — the Android path,
-/// which calls `plumbline_engine_warm_indexes` and builds everything up front —
-/// a tap still builds on demand exactly as it always has. The deferral is scoped
-/// to shells that promised to slice, and this pins that scope.
+/// The control for the test above: without a sliced warm — a caller that uses
+/// `plumbline_engine_warm_indexes` and builds everything up front — a tap still
+/// builds on demand. The deferral is scoped to shells that promised to slice.
 #[test]
 fn a_tap_still_builds_on_demand_when_no_sliced_warm_is_running() {
     use std::ffi::CString;
@@ -1851,8 +1812,8 @@ fn a_tap_still_builds_on_demand_when_no_sliced_warm_is_running() {
     }
 }
 
-/// The web's stage-1 boot (TODO #28): open on the corpus ALONE — text first —
-/// then strongs.json arrives and `load_core_data` lights the dictionary up.
+/// The web's stage-1 boot: open on the corpus alone (text first), then
+/// strongs.json arrives and `load_core_data` lights the dictionary up.
 #[test]
 fn core_data_loads_after_open() {
     use std::ffi::CString;
@@ -1986,18 +1947,12 @@ fn reading_map_round_trip_via_abi() {
 
 // ── the wire's key sets (golden) ──────────────────────────────────────────────
 //
-// `#[serde(rename_all)]` on an **enum** renames its VARIANTS, not the fields
-// inside them. `WireBlock` shipped `mark_glyph` / `mark_color` / `top_gap` while
-// both shells asked for `markGlyph` / `markColor` / `topGap`; Android's decoder
-// ignores unknown keys (as it must, for additive evolution), so tier marks and
-// paragraph gaps simply never rendered there, and the web had matched the wrong
-// names so nothing looked broken. A test naming one field would not have caught
-// that — no key was missing, every key was misspelled.
-//
-// So the tests below pin the COMPLETE key set of every variant of every tagged
-// union on the wire, and check each key against the contract itself (camelCase).
-// Changing a payload on purpose is one edited list; a rename or a wrong-cased
-// new field fails here with the whole set in the diff.
+// These fail against `WireBlock` shipping `mark_glyph` / `mark_color` / `top_gap`
+// where shells ask for `markGlyph` / `markColor` / `topGap`: a decoder that
+// ignores unknown keys (as it must, for additive evolution) simply renders
+// nothing. A test naming one field would not catch it — no key was missing, every
+// key was misspelled — so these pin the COMPLETE key set of every variant of
+// every tagged union, and check each key against the camelCase contract itself.
 
 /// An object's JSON keys, sorted — what the golden lists compare against.
 fn json_keys(v: &Value) -> Vec<&str> {
@@ -2007,9 +1962,8 @@ fn json_keys(v: &Value) -> Vec<&str> {
     ks
 }
 
-/// The frozen contract in one assertion: every wire key is camelCase. This holds
-/// even when the golden list beside it agrees with the bug, because a golden is
-/// only as good as the person who typed it.
+/// Every wire key is camelCase — held separately from the golden lists, which are
+/// only as good as the person who typed them.
 fn assert_camel_keys(keys: &[&str], what: &str) {
     for k in keys {
         assert!(
@@ -2059,9 +2013,8 @@ fn wire_block_keys_are_golden() {
     assert_eq!(json_keys(&v), ["blocks"]);
     let b = v["blocks"].as_array().unwrap();
 
-    // A marked and an unmarked section emit the SAME keys — `markGlyph` /
-    // `markColor` are explicit nulls, which is what lets a strict decoder bind
-    // them as always-present optionals.
+    // A marked and an unmarked section emit the SAME keys: `markGlyph` / `markColor`
+    // are explicit nulls, so a strict decoder can bind them as always-present.
     let golden: &[(&str, &[&str])] = &[
         ("section (marked)", &["kind", "markColor", "markGlyph", "title"]),
         ("section (plain)", &["kind", "markColor", "markGlyph", "title"]),
@@ -2126,9 +2079,8 @@ fn link_verb(l: &crate::wire::WirePanelLink) -> &'static str {
     }
 }
 
-/// Every panel-link verb, keys and all. `refKey` is the field most exposed to
-/// this class of bug — three verbs carry it, and serde spells it `ref_key` unless
-/// told otherwise.
+/// Every panel-link verb, keys and all. `refKey` is the field most exposed here:
+/// three verbs carry it, and serde spells it `ref_key` unless told otherwise.
 #[test]
 fn wire_panel_link_keys_are_golden() {
     // (the URI the panel bakes, the verb on the wire, the complete key set)
@@ -2214,27 +2166,20 @@ fn wire_search_keys_are_golden() {
     assert_eq!(v["capped"], true);
 }
 
-// ── the token-flag mirror: core → this crate → the header → both shells ──────
+// ── the token-flag mirror: core → this crate → the header → the shell ────────
 //
 // A shell paints an italic, a divine-name ink or the AKJV's dotted underline by
-// bit-testing `flags` off a display-list item, so each of those bits is one
-// contract with four copies: the core's `FLAG_*`, this crate's exported
-// `PLUMBLINE_FLAG_*`, the `#define` cbindgen folds into include/plumbline.h, and
-// the shell's own named constant. lib.rs carries the mechanism that keeps copies
-// 1 and 2 honest (`const _: () = assert!(…)`) and cbindgen keeps 3 in step.
+// bit-testing `flags` off a display-list item, so each bit is one contract with
+// four copies: the core's `FLAG_*`, this crate's exported `PLUMBLINE_FLAG_*`, the
+// `#define` cbindgen folds into include/plumbline.h, and the shell's own named
+// constant. lib.rs's `const _: () = assert!(…)` keeps copies 1 and 2 honest and
+// cbindgen keeps 3 in step; these two tests cover the rest.
 //
-// `FLAG_RERENDERED` went around all of it. It arrived with the AKJV overlay as
-// `core::akjv::FLAG_RERENDERED = 16` and was then written straight into both
-// shells as a bare `16` — never exported here, never asserted, never in the
-// header. Three unrelated copies of one number: the single place the value was
-// written down was not a place either shell read.
-//
-// These two are SOURCE assertions and the choice is forced (the precedent is
-// `f55a668`, which took the same route for the same reason). The copies agree
-// today, so every behavioural test — paint an AKJV word, read the bit back —
-// passes while the mechanism is entirely absent. That is the failure the working
-// rules record twice. What was broken is not the number but that nothing checked
-// the number, so the check is on the wiring.
+// They fail against `FLAG_RERENDERED`, which arrived as `core::akjv::
+// FLAG_RERENDERED = 16` and was then written into the shell as a bare `16` —
+// never exported here, never asserted, never in the header. SOURCE assertions on
+// purpose: the copies agree today, so every behavioural test passes while the
+// mechanism is absent. What breaks is not the number but that nothing checks it.
 
 /// Read a repo file for the guards below (this crate sits two levels down).
 fn repo_file(rel: &str) -> String {
@@ -2243,12 +2188,9 @@ fn repo_file(rel: &str) -> String {
 }
 
 /// Every source file under `rel` with one of `exts`, as `(repo-relative path,
-/// contents)`, sorted so a failure names files in a stable order.
-///
-/// The bare-literal guard walks a whole shell TREE rather than the one file that
-/// bit-tests flags today: the recurrence it exists to stop is a *new* paint site
-/// written with a `16` in it, and naming files would leave every new file
-/// unguarded by default.
+/// contents)`, sorted so a failure names files in a stable order. The guard walks
+/// a whole tree because the recurrence it stops is a *new* paint site with a `16`
+/// in it, and naming files would leave every new file unguarded.
 fn repo_tree(rel: &str, exts: &[&str]) -> Vec<(String, String)> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel);
     let mut out = Vec::new();
@@ -2307,23 +2249,18 @@ fn header_flags(src: &str) -> std::collections::BTreeMap<String, u32> {
     out
 }
 
-/// Every place a shell bit-tests `flags` against something that is NOT one of the
-/// named mirrors `mirrored` accepts, as `line: operand`.
+/// Every place a shell bit-tests `flags` against something that is not one of the
+/// named mirrors `mirrored` accepts, as `line: operand`. `flags & FLAG_RERENDERED`
+/// is the contract; `flags & 16` is the bug, and so is `flags & MY_OWN_BIT` — a
+/// privately named 16 answers to nothing either. `op` is the bitwise-and.
 ///
-/// `flags & FLAG_RERENDERED` is the contract; `flags & 16` is the bug this file
-/// exists to stop coming back — and so is `flags & MY_OWN_BIT`, because a
-/// privately named 16 answers to nothing either. `op` is the shell language's
-/// bitwise-and (`&` in TS).
-///
-/// Deliberately narrow in SHAPE: it recognises `flags <op> [(] <operand>`, which
-/// is the shape both shells write and the shape a re-hardcode takes — the
-/// optional paren so `flags & (16 | 4)` is judged on its first term rather than
-/// skipped. A reversed `16 & flags` would slip past. The looser rule — any number
-/// beside a bitwise-and on a line mentioning flags — false-positives on ordinary
-/// masking (`(n >> 16) & 255`), and a guard that cries wolf gets deleted.
+/// Deliberately narrow in shape: it recognises `flags <op> [(] <operand>`, the
+/// optional paren so `flags & (16 | 4)` is judged on its first term. A reversed
+/// `16 & flags` slips past. The looser rule — any number beside a bitwise-and on a
+/// line mentioning flags — false-positives on ordinary masking (`(n >> 16) & 255`),
+/// and a guard that cries wolf gets deleted.
 fn unchecked_flag_tests(src: &str, op: &str, mirrored: &dyn Fn(&str) -> bool) -> Vec<String> {
-    // A word operator must be followed by space, or `flags andSomething` would
-    // parse as a bit test.
+    // A word operator must be followed by space, or `flags andSomething` parses as a bit test.
     let word_op = op.ends_with(|c: char| c.is_ascii_alphanumeric());
     let mut out = Vec::new();
     for (i, line) in src.lines().enumerate() {
@@ -2345,8 +2282,7 @@ fn unchecked_flag_tests(src: &str, op: &str, mirrored: &dyn Fn(&str) -> bool) ->
                 .chars()
                 .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '.')
                 .collect();
-            // Empty operand: `it.flags && x`, `flags and -x` — not a bit test
-            // against a name this guard can judge.
+            // Empty operand (`it.flags && x`): not a bit test this guard can judge.
             if operand.is_empty() || mirrored(&operand) {
                 continue;
             }
@@ -2364,8 +2300,8 @@ fn flag_bits_are_exported_with_their_assertion() {
     let lib = repo_file("crates/ffi/src/lib.rs");
     let exported = assigned_flags(&lib, "pub const PLUMBLINE_FLAG_");
 
-    // The parser is checked against the compiled constants, so a silent parse
-    // miss cannot make the rest of this test vacuous. A new bit lands here first.
+    // Checked against the compiled constants, so a silent parse miss cannot make the
+    // rest of this test vacuous. A new bit lands here first.
     let live = [
         ("ADDED", PLUMBLINE_FLAG_ADDED, corpus::FLAG_ADDED),
         ("DIVINE", PLUMBLINE_FLAG_DIVINE, corpus::FLAG_DIVINE),
@@ -2435,14 +2371,9 @@ fn flag_bits_are_mirrored_by_the_shell() {
         );
     }
 
-    // The other half, over the whole SOURCE TREE: every place the shell
-    // bit-tests `flags`, the operand is one of the mirror constants just checked
-    // against the header. A bare `flags & 16` fails — that is the literal coming
-    // back — and so does `flags & SOME_LOCAL_BIT`, because a privately named 16
-    // answers to nothing either.
-    //
-    // Tree-wide rather than file-named: the recurrence is a NEW paint site, and
-    // it will not be in the one file that tests flags today.
+    // The other half, tree-wide: every place the shell bit-tests `flags`, the operand
+    // must be one of the mirror constants just checked against the header. A bare
+    // `flags & 16` fails, and so does `flags & SOME_LOCAL_BIT`.
     const ROOT: &str = "apps/web/src";
     let files = repo_tree(ROOT, &["ts", "svelte"]);
     assert!(
@@ -2451,8 +2382,8 @@ fn flag_bits_are_mirrored_by_the_shell() {
          almost nothing",
         files.len()
     );
-    // The site that paints the AKJV mark must be inside the walk, or the guard
-    // could pass by looking in the wrong place.
+    // The site that paints the AKJV mark must be inside the walk, or the guard passes
+    // by looking in the wrong place.
     assert!(
         files.iter().any(|(p, _)| p.ends_with("reader/paint.ts")),
         "reader/paint.ts is not under {ROOT} any more — the flag-testing paint site moved out \
@@ -2644,10 +2575,9 @@ fn the_catalogue_crosses_the_abi_whole_and_falls_back_to_english() {
             assert!(de_strings.contains_key(k), "the German catalogue is missing {k}");
         }
 
-        // A region tag is still that language; anything unknown is English
-        // rather than an error, so an unsupported locale gets a working app.
-        // ("it" was "fr" until French shipped; the zh tags pin the routing
-        // between the two Chinese rows across the ABI.)
+        // A region tag is still that language; anything unknown is English rather than
+        // an error, so an unsupported locale gets a working app. The zh tags pin the
+        // routing between the two Chinese rows.
         for (asked, want) in [
             ("de-CH", "de"),
             ("de_AT", "de"),
@@ -2664,9 +2594,8 @@ fn the_catalogue_crosses_the_abi_whole_and_falls_back_to_english() {
             assert_eq!(got["lang"], want, "{asked:?} should resolve to {want}");
         }
 
-        // The DEVICE locale is the second argument and only decides when the
-        // reader has not: a German phone opens in German with nobody visiting
-        // Settings, and a reader who picked English keeps it.
+        // The device locale is the second argument and only decides when the reader has
+        // not: a German phone opens in German, and a reader who picked English keeps it.
         let device_wins: Value =
             serde_json::from_str(&take(plumbline_i18n_catalog_json(ptr::null(), c"de-DE".as_ptr())).unwrap()).unwrap();
         assert_eq!(device_wins["lang"], "de");
@@ -2682,15 +2611,13 @@ fn the_catalogue_crosses_the_abi_whole_and_falls_back_to_english() {
     }
 }
 
-/// The German corpus, opened for real from the repo's own `data/`.
-///
-/// Reads the shipped 15 MB file rather than a fixture, deliberately: the claim
-/// worth testing is not that the loader works — `corpus.rs` covers that — but
-/// that THE FILE WE SHIP sits at the KJV's verse addresses and comes back as
-/// German. A fixture would prove neither.
+/// The German corpus, opened for real from the repo's own `data/`. Reads the
+/// shipped 15 MB file rather than a fixture on purpose: the claim is not that the
+/// loader works (`corpus.rs` covers that) but that the file we ship sits at the
+/// KJV's verse addresses and comes back German.
 ///
 /// `#[ignore]`d so the default `cargo test` stays fast and works in a checkout
-/// with no data pack hydrated. Run it with:
+/// with no data pack hydrated:
 ///
 /// ```sh
 /// cargo test --locked -p plumbline-ffi -- --ignored german_corpus
@@ -2706,16 +2633,14 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
     let home = CString::new(repo.to_str().unwrap()).unwrap();
 
     unsafe {
-        // The language is what selects the text, and it is set before open —
-        // exactly as both shells do it.
+        // The language selects the text, and is set before open, as the shell does it.
         let _ = take(plumbline_i18n_set_language(c"de".as_ptr(), ptr::null()));
         let mut err: *mut c_char = ptr::null_mut();
         let e = plumbline_engine_open(home.as_ptr(), &mut err);
         assert!(!e.is_null(), "German open failed: {:?}", opt_str(err));
 
-        // The same address, in the other language. John 3:16 is the test the
-        // whole design turns on: if the German corpus had its own versification
-        // this refKey would land somewhere else.
+        // The same address, in the other language: if the German corpus had its own
+        // versification this refKey would land somewhere else.
         let v: Value =
             serde_json::from_str(&take(plumbline_engine_verse_json(e, c"John 3:16".as_ptr())).unwrap()).unwrap();
         let body = v["body"].as_str().unwrap();
@@ -2732,14 +2657,10 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         assert_eq!(books.iter().find(|b| b["id"] == "Mal").unwrap()["chapters"], 4, "Malachi keeps the KJV's 4");
         assert_eq!(books.iter().find(|b| b["id"] == "Joel").unwrap()["chapters"], 3, "Joel keeps the KJV's 3");
 
-        // The plain-English overlay is a delta over KJV TOKEN RUNS, so it must
-        // not be offered here — it would rewrite whichever German words happened
-        // to sit at those indices.
-        //
-        // AFTER `load_core_data`, which is what loads the overlay: without this
-        // call the assertion below is vacuously true, because nothing had tried
-        // to load one yet. (Found by mutation-testing this test — removing the
-        // gate left it green.)
+        // The plain-English overlay is a delta over KJV token runs, so it must not be
+        // offered here — it would rewrite whichever German words sat at those indices.
+        // Asserted AFTER `load_core_data`, which is what loads the overlay: without
+        // that call the assertion below is vacuously true.
         let _ = take(plumbline_engine_load_core_data(e));
         assert!(!plumbline_engine_akjv_available(e), "the KJV overlay was offered over German text");
         // The German corpus carries its OWN Strong's tags (merge-strongs.py),
@@ -2756,17 +2677,16 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         });
         let tagged = tagged.expect("no tagged token in the first 8 of German John 3:16 — did the merge run?");
 
-        // THE STUDY CARD STUDIES, in German: the tapped code's dictionary entry
-        // and concordance serve, while the KJV-token-anchored tiers (renderings,
-        // same-root, morphology) stay off — they are evidence about the other
-        // text's words.
+        // The study card studies in German: the tapped code's dictionary entry and
+        // concordance serve, while the KJV-token-anchored tiers (renderings, same-root,
+        // morphology) stay off — they are evidence about the other text's words.
         let blocks = take(plumbline_engine_word_study_blocks2_json(e, c"John 3:16".as_ptr(), tagged, 3)).unwrap();
         for english in ["Renderings", "same root"] {
             assert!(!blocks.contains(english), "KJV-token evidence {english:?} reached a German reader: {blocks}");
         }
         assert!(blocks.contains("occ:"), "the German study card has no concordance link: {blocks}");
-        // Nor any of the PANEL'S OWN LABELS — they are catalogue strings, not
-        // English literals, so they localize with the rest.
+        // Nor any of the panel's own labels: they are catalogue strings, not English
+        // literals, so they localize with the rest.
         for label in ["＋ tag verse", "＋ add to thread", "your note", "cross-references ("] {
             assert!(!blocks.contains(label), "the study panel's English label {label:?} reached a German reader");
         }
@@ -2775,19 +2695,17 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
             "the German study card has no German tag action: {blocks}"
         );
 
-        // THE PRINTED-BIBLE ANNOTATION. Malachi 4:1 is what German tradition
-        // prints as 3,19 — 357 verses out of 31,102 disagree — and a reader who
-        // was handed "Maleachi 3,19" has to be able to find it. Annotated, never
-        // renumbered: see crates/core/src/versification.rs.
+        // The printed-Bible annotation: German tradition prints Malachi 4:1 as 3,19, so
+        // a reader handed "Maleachi 3,19" has to be able to find it. Annotated, never
+        // renumbered — see crates/core/src/versification.rs.
         let mal = take(plumbline_engine_word_study_blocks2_json(e, c"Mal 4:1".as_ptr(), 0, 3)).unwrap();
         assert!(mal.contains("3,19"), "Maleachi 4,1 does not say what a printed German Bible calls it: {mal}");
         assert!(mal.contains("Luther"), "the annotation does not say whose numbering it is: {mal}");
         // And where they agree — which is almost everywhere — nothing is added.
         assert!(!blocks.contains("Luther "), "John 3:16 was annotated with a numbering that does not differ: {blocks}");
 
-        // THE CROSS-REFERENCES STAY. They key on refKey, not on a token index, so
-        // they are as true of this text as of the KJV — and they are a lot of real
-        // study value.
+        // The cross-references stay: they key on refKey, not a token index, so they are
+        // as true of this text as of the KJV.
         assert!(
             blocks.contains(&plumbline_core::i18n::t(
                 plumbline_core::i18n::Lang::De,
@@ -2798,18 +2716,14 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         );
         assert!(blocks.contains("Römer 5,8"), "a German cross-reference is not in German: {blocks}");
 
-        // THE MORPHOLOGY IS NOT EVEN PARSED for this text, and this is about work
-        // rather than about correctness — `is_kjv_text` already withholds the
-        // gloss, so a German reader saw nothing wrong either way. What they paid
-        // was 355,603 entries parsed in ONE synchronous block on the only thread
-        // that answers taps, to build an index nothing would read: 3.3 MB of
-        // download and seconds of a phone's CPU.
+        // The morphology is not even parsed for this text. About work, not correctness:
+        // `is_kjv_text` already withholds the gloss, but parsing 355,603 entries in one
+        // synchronous block on the only thread that answers taps costs seconds of CPU
+        // to build an index nothing reads. `new` had the gate and `load_morph_only` did
+        // not — and the deferred load is the only path the web takes, since its
+        // analysis pack lands after the engine has opened.
         //
-        // `new` had the gate; `load_morph_only` did not, and that is the path the
-        // WEB takes — its analysis pack lands after the engine has opened, so the
-        // deferred load is the only one that runs there. Android is unaffected.
-        //
-        // MUTATION: drop the tokenization check from `load_morph_only`. Red here.
+        // Mutation: drop the tokenization check from `load_morph_only`. Red here.
         let _ = take(plumbline_engine_load_rnd_data(e));
         assert!(
             e.as_ref().unwrap().morph.get().is_none(),
@@ -2822,16 +2736,13 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
     }
 }
 
-/// The Spanish corpus, and the reason this test is nearly a copy of the German
-/// one above: THAT IS THE POINT OF THE LANGUAGE REGISTRY. Nothing between these
-/// two tests knows a language by name — `corpus_for`, `strongs_for`, the
-/// modernization gate and the printed-numbering annotation all read the row —
-/// so the second language should behave like the first without a line of code
-/// having been written for it.
+/// The Spanish corpus. Nearly a copy of the German test above on purpose: nothing
+/// between them knows a language by name — `corpus_for`, `strongs_for`, the
+/// modernization gate and the printed-numbering annotation all read the registry
+/// row — so a second language behaves like the first with no code written for it.
 ///
-/// Named into the `german_corpus` CI filter's company and `#[ignore]`d with its
-/// siblings: it reads the real hydrated pack and flips the process-global
-/// language.
+/// `#[ignore]`d with its siblings: it reads the real hydrated pack and flips the
+/// process-global language.
 ///
 /// ```sh
 /// cargo test --locked -p plumbline-ffi -- --ignored spanish_corpus
@@ -2868,15 +2779,13 @@ fn spanish_corpus_opens_at_the_kjv_addresses_and_reads_spanish() {
         // carries no `numbering` row — Joel is the book where German does not.
         assert_eq!(books.iter().find(|b| b["id"] == "Joel").unwrap()["chapters"], 3);
 
-        // The modernization is a delta over KJV token runs. Spanish names none
-        // in its row, so none is offered — and nothing here checks for Spanish
-        // to decide that.
+        // The modernization is a delta over KJV token runs. Spanish names none in its
+        // row, so none is offered — and nothing here checks for Spanish to decide that.
         let _ = take(plumbline_engine_load_core_data(e));
         assert!(!plumbline_engine_akjv_available(e), "the KJV modernization was offered over Spanish text");
 
-        // THE TAGS ARE THE SOURCE'S OWN. The Reina-Valera edition ships
-        // Strong's inline, so a Spanish word study is real study: the codes on
-        // these tokens belong to these words.
+        // The tags are the source's own: the Reina-Valera edition ships Strong's inline,
+        // so the codes on these tokens belong to these words.
         let tagged = (0..8)
             .find(|i| {
                 let w: Value =
@@ -2896,14 +2805,10 @@ fn spanish_corpus_opens_at_the_kjv_addresses_and_reads_spanish() {
             "the Spanish study card has no Spanish tag action: {blocks}"
         );
 
-        // THE DEFINITIONS ARE SPANISH NOW (the 2026-08-16 translation run), and
-        // the same disclosure the German dictionary carries comes with them:
-        // the AI caveat, named for the reader's own Bible, with the report
-        // link. `machine_translated: true` on the row is what turns both on —
-        // while the definitions were still English the flag was false and this
-        // caveat was absent, which was the honest state then as this is now.
-        // The discovery loop above lands on token 0, "Porque" (G1063) — the
-        // first tagged token of RV John 3:16 — so the card carries that entry.
+        // The definitions are Spanish, and `machine_translated: true` on the registry
+        // row brings the AI caveat with them, named for the reader's own Bible and
+        // carrying the report link. The discovery loop above lands on token 0,
+        // "Porque" (G1063), so the card carries that entry.
         assert!(blocks.contains("asignando una razón"), "G1063's Spanish definition did not serve: {blocks}");
         assert!(
             !blocks.contains("assigning a reason"),
@@ -2920,9 +2825,9 @@ fn spanish_corpus_opens_at_the_kjv_addresses_and_reads_spanish() {
             "the report link is missing: {blocks}"
         );
 
-        // NO PRINTED-NUMBERING ANNOTATION ANYWHERE, because Reina-Valera agrees
-        // with the KJV's breaks. Malachi 4:1 is the verse German annotates, so
-        // it is the one that proves the row — not a global switch — decides.
+        // No printed-numbering annotation anywhere, since Reina-Valera agrees with the
+        // KJV's breaks. Malachi 4:1 is the verse German annotates, so it proves the
+        // registry row decides rather than a global switch.
         let mal = take(plumbline_engine_word_study_blocks2_json(e, c"Mal 4:1".as_ptr(), 0, 3)).unwrap();
         assert!(!mal.contains("Luther"), "a Spanish reader was told what a German Bible prints: {mal}");
         assert!(!mal.contains("3,19"), "Malaquías 4:1 was annotated with a numbering Spanish does not use: {mal}");
@@ -2935,11 +2840,9 @@ fn spanish_corpus_opens_at_the_kjv_addresses_and_reads_spanish() {
     }
 }
 
-/// The other half of the morphology gate: on the KJV the deferred load DOES
-/// bring it in, so the assertion above cannot pass by the loader being broken
-/// for everybody.
-///
-/// `#[ignore]`d with its sibling — it reads the real hydrated data pack.
+/// The other half of the morphology gate: on the KJV the deferred load does bring
+/// it in, so the assertion above cannot pass by the loader being broken for
+/// everybody. `#[ignore]`d with its sibling — it reads the real hydrated pack.
 #[test]
 #[ignore]
 fn the_deferred_load_still_brings_the_morphology_to_an_english_reader() {
@@ -2960,14 +2863,13 @@ fn the_deferred_load_still_brings_the_morphology_to_an_english_reader() {
     }
 }
 
-/// The German dictionary: with `strongs-de.json` in the home, a German
-/// reader's word study serves the GERMAN entry — renderings labelled for
-/// Luther, the machine-translation caveat and its report link attached —
-/// and the English dictionary demonstrably did not win the pick.
+/// The German dictionary: with `strongs-de.json` in the home, a German reader's
+/// word study serves the German entry — renderings labelled for Luther, the
+/// machine-translation caveat and its report link attached — and the English
+/// dictionary demonstrably did not win the pick.
 ///
-/// Named into the `german_corpus` CI filter and `#[ignore]`d with its
-/// siblings: it flips the process-global language, which must not race the
-/// parallel default suite.
+/// `#[ignore]`d with its siblings: it flips the process-global language, which
+/// must not race the parallel default suite.
 #[test]
 #[ignore]
 fn german_corpus_lexicon_serves_the_german_dictionary_with_caveat() {
@@ -3009,8 +2911,8 @@ fn german_corpus_lexicon_serves_the_german_dictionary_with_caveat() {
         assert!(blocks.contains("Gott, Gottheit"), "the German definition did not serve: {blocks}");
         assert!(!blocks.contains("a deity"), "the English definition leaked past the German dictionary: {blocks}");
         assert!(blocks.contains("Luther:"), "the renderings are not labelled for the reader's Bible: {blocks}");
-        // Named for the Bible the renderings came out of, from the language's
-        // row — the sentence used to spell "Luther" itself, in both catalogues.
+        // Named for the Bible the renderings came out of, from the language's registry
+        // row rather than a "Luther" spelled into each catalogue.
         let caveat = plumbline_core::i18n::t(
             plumbline_core::i18n::Lang::De,
             "study.lexCaveat",
@@ -3035,9 +2937,8 @@ fn german_corpus_lexicon_serves_the_german_dictionary_with_caveat() {
             "a non-https ext: link parsed"
         );
 
-        // THE ESCAPE HATCH: `strongsDeOff` in the config gives a German reader
-        // the original English definitions back — applied at open, like the
-        // language, so a fresh engine sees it.
+        // The escape hatch: `strongsDeOff` in the config gives a German reader the
+        // English definitions back — applied at open, so a fresh engine sees it.
         let cfg_dir = home.join("cfg");
         std::fs::create_dir_all(cfg_dir.join("plumbline")).unwrap();
         std::fs::write(cfg_dir.join("plumbline").join("config.json"), r#"{"strongsDeOff":true}"#).unwrap();
@@ -3057,13 +2958,13 @@ fn german_corpus_lexicon_serves_the_german_dictionary_with_caveat() {
     let _ = std::fs::remove_dir_all(&home);
 }
 
-/// A SECOND engine on another language's text — what a per-pane language rides
-/// on. The two invariants that make it safe to put beside the first:
+/// A second engine on another language's text — what a per-pane language rides
+/// on. Two invariants make it safe beside the first:
 ///
-/// 1. it opens the language it was ASKED for, from the same home;
-/// 2. it FAILS when that text is not on the device, rather than falling back to
-///    English the way `plumbline_engine_open` deliberately does. A pane labelled
-///    Deutsch quietly painting the KJV is the bug this half exists to prevent.
+/// 1. it opens the language it was asked for, from the same home;
+/// 2. it fails when that text is not on the device, rather than falling back to
+///    English as `plumbline_engine_open` deliberately does — a pane labelled
+///    Deutsch quietly painting the KJV is the bug this half prevents.
 #[test]
 fn a_second_engine_opens_a_named_language_and_never_substitutes_english() {
     use std::ffi::CString;
@@ -3084,29 +2985,27 @@ fn a_second_engine_opens_a_named_language_and_never_substitutes_english() {
         plumbline_string_free(err);
         err = ptr::null_mut();
 
-        // A language this build does not ship is refused by name, not read as
-        // English the way a UI-language code would be.
+        // A language this build does not ship is refused by name, not read as English
+        // the way a UI-language code would be.
         let zz = CString::new("zz").unwrap();
         assert!(plumbline_engine_open_lang(home_c.as_ptr(), zz.as_ptr(), &mut err).is_null());
         assert!(take(err).unwrap().contains("zz"));
         err = ptr::null_mut();
 
-        // Now the text IS on the device. The sample is the KJV's bytes under
-        // Luther's name and stamp — this asserts the FILE CHOICE, which is the
-        // part that decides which Bible a pane paints.
+        // Now the text IS on the device. The sample is the KJV's bytes under Luther's
+        // name and stamp: what is asserted is the file choice, which decides which
+        // Bible a pane paints.
         let luther = KJV.replacen(plumbline_core::canon::TOKENIZATION_VERSION, "luther1912-tok1", 1);
         std::fs::write(home.join("data").join("luther1912.jsonl"), &luther).unwrap();
         let alt = plumbline_engine_open_lang(home_c.as_ptr(), de.as_ptr(), &mut err);
         assert!(err.is_null(), "{:?}", take(err));
         assert!(!alt.is_null(), "the German text is present and must open");
 
-        // It really opened a text — and the ONE that matters here is which
-        // file was chosen, which the stamp on the loaded corpus settles.
+        // It really opened a text; the stamp on the loaded corpus settles which file.
         let v = take(plumbline_engine_verse_json(alt, c"John 3:16".as_ptr())).unwrap();
         assert!(!v.is_empty(), "the alt engine must serve verses");
 
-        // Both engines are live at once and answer independently — the point of
-        // the whole exercise.
+        // Both engines are live at once and answer independently.
         let en = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(!en.is_null());
         assert!(!take(plumbline_engine_toc_json(en)).unwrap().is_empty());
@@ -3118,22 +3017,14 @@ fn a_second_engine_opens_a_named_language_and_never_substitutes_english() {
     }
 }
 
-/// THE TWO LANGUAGE LISTS AGREE.
+/// The two language lists agree. A language is described twice on purpose —
+/// `i18n::registry_json` for the web pack build, `wire::WireLanguage` for the
+/// running shell — and no compiler notices when a column is added to one and
+/// forgotten in the other.
 ///
-/// A language is described twice on purpose — `i18n::registry_json` for the web
-/// PACK BUILD (a Node script reads it via `plumbline-hydrate languages`) and
-/// `wire::WireLanguage` for the RUNNING SHELL. Two consumers, two shapes, and no
-/// compiler anywhere that notices when a column is added to one and forgotten in
-/// the other.
-///
-/// FAILS AGAINST THE BUG IT DESCRIBES: `rtl` went into the registry and not into
-/// the wire, and the app shipped an Arabic interface with `dir="ltr"` — mirrored
-/// scripture inside chrome that had not moved. Nothing was broken enough to
-/// throw; it just quietly was not right, which is the failure mode this whole
-/// registry exists to end.
-///
-/// Checked field by field over the names both carry, so a third column added to
-/// one side and not the other fails here rather than on a device.
+/// Fails against `rtl` going into the registry and not the wire, which shipped an
+/// Arabic interface with `dir="ltr"`. Checked field by field over the names both
+/// carry, so a third column added to one side fails here rather than on a device.
 #[test]
 fn the_registry_and_the_wire_describe_the_same_languages() {
     let registry: serde_json::Value = serde_json::from_str(&plumbline_core::i18n::registry_json()).unwrap();
@@ -3153,29 +3044,22 @@ fn the_registry_and_the_wire_describe_the_same_languages() {
                 wire[key]
             );
         }
-        // The names differ by design — the registry calls the English name
-        // `name`, the wire splits `name`/`bible` — so those are compared by the
-        // value rather than the key.
+        // The names differ by design — the registry calls the English name `name`, the
+        // wire splits `name`/`bible` — so those compare by value, not key.
         assert_eq!(row["name"], wire["name"], "{} disagrees about its English name", lang.code());
         assert_eq!(row["label"], wire["bible"], "{} disagrees about which Bible it reads", lang.code());
     }
 }
 
-/// A LANGUAGE'S BIBLE IS NOT A DOWNLOAD.
+/// A language's Bible is not a download. `pack_files` is the shell's whole answer
+/// to "does picking this language mean fetching something first" (`needsPack` in
+/// the web Settings reads exactly this), and every Bible ships with the app
+/// (`stage: "corpus"`, scripts/build-web-pack.mjs), so the only honest content is
+/// the machine-translated dictionary.
 ///
-/// `pack_files` is the shell's whole answer to "does picking this language mean
-/// fetching something first" — `needsPack` in the web Settings reads exactly
-/// this and nothing else. While a corpus was listed here, choosing Arabic meant
-/// an errand: the interface switched immediately and the scripture did not, so a
-/// phone set to Arabic opened in Arabic over the English KJV and the reader had
-/// to find a Settings screen to fix it.
-///
-/// Every Bible ships now (`stage: "corpus"`, scripts/build-web-pack.mjs), so the
-/// only honest content of this list is the machine-translated dictionary. This
-/// test fails the moment a corpus cache is put back into it — the regression
-/// would be invisible otherwise, because listing a file the device ALREADY has
-/// costs nothing visible: the download is instant, and the bug is only that the
-/// reader was asked at all.
+/// Fails the moment a corpus cache is put back into the list. That regression is
+/// otherwise invisible: listing a file the device already has downloads
+/// instantly, and the bug is only that the reader was asked at all.
 #[test]
 fn picking_a_language_downloads_no_scripture() {
     for lang in plumbline_core::i18n::Lang::ALL {
@@ -3188,9 +3072,8 @@ fn picking_a_language_downloads_no_scripture() {
             lang.code(),
             wire.pack_files,
         );
-        // The dictionary is the one thing that IS still an ask, and the list is
-        // exactly it — so this cannot pass by `pack_files` being empty for a
-        // language that has one.
+        // The dictionary is the one thing still an ask, and the list is exactly it — so
+        // this cannot pass by `pack_files` being empty for a language that has one.
         match lang.spec().lexicon {
             Some(lex) if lang != plumbline_core::i18n::Lang::En => {
                 assert_eq!(
@@ -3216,10 +3099,9 @@ fn picking_a_language_downloads_no_scripture() {
     );
 }
 
-/// The word-usage view over a REAL engine: exact postings, canon counts,
-/// verbatim segments. This drives the same `PanelSource::word_usage` the
-/// wasm-only `plumbline_engine_word_usage_blocks_json` endpoint serves — the
-/// endpoint itself is cfg-gated to wasm32, so this is its native twin.
+/// The word-usage view over a real engine: exact postings, canon counts, verbatim
+/// segments. The native twin of `plumbline_engine_word_usage_blocks_json`, which
+/// is cfg-gated to wasm32; both drive the same `PanelSource::word_usage`.
 #[test]
 fn word_usage_reads_the_real_index() {
     unsafe {

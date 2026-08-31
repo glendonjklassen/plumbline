@@ -1,24 +1,21 @@
 //! The hymnal (`hymnal-v1`): public domain hymns, with chords inline.
 //!
 //! `data/hymnal.json` is one object — `{format:"hymnal-v1", hymns:[...]}` —
-//! assembled offline by `scripts/build-hymnal.mjs` from the per-hymn source
-//! files in `data-prep/hymnal/` (which carry sourcing URLs and maintainer
-//! notes that never ship). Like every on-disk format here, the tag is frozen:
+//! assembled offline by `scripts/build-hymnal.mjs` from the per-hymn sources in
+//! `data-prep/hymnal/`. Like every on-disk format here the tag is frozen:
 //! additive evolution only.
 //!
 //! A hymn is one entry with a stable book `number` and one text per language
-//! (`texts: {"en": ..., "de": ...}`) — a translation is a second text on the
-//! SAME hymn, not a second hymn, because the language toggle is the seed of
-//! full multi-language support and a hymn split across
-//! entries would need stitching back together the day that lands.
+//! (`texts: {"en": ..., "de": ...}`): a translation is a second text on the SAME
+//! hymn, never a second hymn, or the language toggle would have to stitch
+//! entries back together.
 //!
 //! Chords ride ChordPro-style inside the text — `A[G]mazing [C]grace` — so a
-//! stanza is a plain string a human can read and diff. The parser here turns a
-//! line into (chord?, text) segments for the shells to paint, and transposition
-//! rewrites chord roots by semitone offset. An UNPARSEABLE bracket stays in the
-//! text as literal characters rather than vanishing: the file is
-//! maintainer-authored data, and swallowing a typo would hide it from exactly
-//! the person who can fix it.
+//! stanza is a plain string a human can read and diff. [`parse_line`] turns a
+//! line into (chord?, text) segments for the shell to paint, and transposition
+//! rewrites chord roots by semitone offset. An unparseable bracket stays in the
+//! text as literal characters: the file is maintainer-authored, and swallowing a
+//! typo would hide it from the person who can fix it.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -41,7 +38,7 @@ pub struct HymnText {
     pub year: Option<u32>,
     /// One string per stanza; lines joined with `\n`, chords in brackets.
     pub stanzas: Vec<String>,
-    /// The refrain, stanza-shaped, sung after every stanza. Chords are on the
+    /// The refrain, stanza-shaped, sung after every stanza. Chords appear on the
     /// first stanza and the chorus only — a songbook chart, not a score.
     #[serde(default)]
     pub chorus: Option<String>,
@@ -80,10 +77,10 @@ impl Hymnal {
     }
 }
 
-/// Load `data/hymnal.json`. A missing file is an EMPTY hymnal, not an error —
-/// an old pack or a trimmed home simply has no hymn tab content — but a file
-/// that exists and does not parse, or carries the wrong format tag, is a real
-/// error: data is present and unusable, and pretending otherwise hides it.
+/// Load `data/hymnal.json`. A missing file is an empty hymnal, not an error (an
+/// old pack or a trimmed home has no hymn content); a file that exists and does
+/// not parse, or carries the wrong format tag, is an error — data is present and
+/// unusable, and pretending otherwise hides it.
 pub fn load(path: impl AsRef<Path>) -> Result<Hymnal, Error> {
     let path = path.as_ref();
     match std::fs::read_to_string(path) {
@@ -117,9 +114,8 @@ pub struct Segment {
 ///
 /// Text before the first bracket becomes a chordless segment, so lyrics keep
 /// their exact spelling when a chord lands mid-word (`A[G]mazing`). A bracket
-/// pair whose content is not a chord by [`is_chord`] is kept verbatim in the
-/// text (see the module docs for why), and an unclosed `[` is likewise
-/// literal.
+/// pair whose content is not a chord by [`is_chord`], and an unclosed `[`, stay
+/// verbatim in the text — see the module docs.
 pub fn parse_line(line: &str) -> Vec<Segment> {
     let mut segs: Vec<Segment> = Vec::new();
     let mut text = String::new();
@@ -137,8 +133,8 @@ pub fn parse_line(line: &str) -> Vec<Segment> {
                 match after.find(']') {
                     Some(end) if is_chord(&after[..end]) => {
                         // A real chord starts the next segment; flush this one
-                        // (even if its text is empty and it only carried the
-                        // previous chord — `[G][C]` is two zero-width strikes).
+                        // even if it only carried the previous chord, since
+                        // `[G][C]` is two zero-width strikes.
                         if chord.is_some() || !text.is_empty() {
                             segs.push(Segment { chord: chord.take(), text: std::mem::take(&mut text) });
                         }
@@ -174,8 +170,8 @@ pub fn stanza_lines(stanza: &str, semis: i32, flats: bool) -> Vec<Vec<Segment>> 
         .split('\n')
         .map(|line| {
             let mut segs = parse_line(line);
-            // At 0 semitones the chords pass through untouched — transposition
-            // never rewrites the author's own spelling (F# stays F#).
+            // At 0 semitones chords pass through untouched, so the author's own
+            // spelling is never rewritten (F# stays F#).
             if semis != 0 {
                 for s in &mut segs {
                     if let Some(c) = &s.chord {
@@ -190,10 +186,9 @@ pub fn stanza_lines(stanza: &str, semis: i32, flats: bool) -> Vec<Vec<Segment>> 
 
 // ── chords and keys ───────────────────────────────────────────────────────────
 
-/// Quality tokens the grammar accepts. Concatenations of these are valid
-/// (`m7b5` is itself a token; `madd9` is `m` + `add9`). ORDER MATTERS: the
-/// scan takes the first prefix match, so every token must come before its own
-/// prefixes (`maj7` before `m`, `add9` before `9`, `dim7` before `dim`).
+/// Quality tokens the grammar accepts; concatenations are valid (`madd9` is `m`
+/// + `add9`). Order matters — the scan takes the first prefix match, so every
+/// token must precede its own prefixes (`maj7` before `m`, `dim7` before `dim`).
 const QUALITIES: [&str; 23] = [
     "mmaj7", "7sus4", "add11", "add13", "m7b5", "maj7", "dim7", "aug7", "sus2", "sus4", "add9", "add2", "maj", "min",
     "dim", "aug", "m7", "11", "13", "m", "6", "7", "9",
@@ -270,12 +265,9 @@ fn spell(pitch: i32, flats: bool) -> &'static str {
     table[pitch.rem_euclid(12) as usize]
 }
 
-/// Transpose one chord by `semis` semitones, spelling roots with flats when
-/// the TARGET key is a flat key. The quality is carried through untouched —
-/// only the root and the slash bass move.
-///
-/// A non-chord comes back unchanged: `parse_line` never labels one as a chord,
-/// so this is pure defence in depth.
+/// Transpose one chord by `semis` semitones, spelling roots with flats when the
+/// TARGET key is a flat key. Only the root and the slash bass move; the quality
+/// carries through untouched. A non-chord comes back unchanged.
 pub fn transpose_chord(chord: &str, semis: i32, flats: bool) -> String {
     if !is_chord(chord) {
         return chord.to_string();
@@ -305,8 +297,8 @@ pub fn key_uses_flats(key: &str) -> bool {
     matches!(major.rem_euclid(12), 1 | 3 | 5 | 6 | 8 | 10)
 }
 
-/// The key `semis` above `key`, spelled by its own signature; `"?"` never —
-/// an unparseable key transposes to itself.
+/// The key `semis` above `key`, spelled by its own signature. An unparseable
+/// key transposes to itself.
 pub fn transpose_key(key: &str, semis: i32) -> String {
     let Some((pitch, rest)) = parse_root(key) else { return key.to_string() };
     if !(rest.is_empty() || rest == "m") {

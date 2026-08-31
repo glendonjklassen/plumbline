@@ -1,23 +1,14 @@
 //! `plumbline-hydrate` — assemble and verify the Plumbline data pack into a home.
 //!
 //! The reader needs only `kjv.jsonl` + `strongs.json` (+ optional notes); the
-//! R&D tier adds `cross-references.tsv` and `morphology.jsonl`. These are
-//! produced once by the offline pipeline (see `data-prep/README.md`) — this tool
-//! does not generate them; it **places** them into a home and **verifies** each
-//! by actually loading it through the same code the app uses, so "will this
-//! light up?" is answered concretely rather than by guessing from file presence.
-//!
-//! `concept-vectors.vec` (with its `.meta` / `.freq` sidecars) and the `vecb`
-//! subcommand that packed it are gone: the concept embedding left the product
-//! with the two features that read it, "verses like this" and the concept map.
-//! The file is still an output of the offline pipeline; nothing in the shipped
-//! product opens it, so a home does not need it.
+//! R&D tier adds `cross-references.tsv` and `morphology.jsonl`. The offline
+//! pipeline (`data-prep/README.md`) produces them; this tool places them into a
+//! home and verifies each by loading it through the same code the app uses,
+//! rather than guessing from file presence.
 //!
 //! Usage:
 //!   plumbline-hydrate check [--home <dir>]        # inspect a home (default: resolved)
 //!   plumbline-hydrate copy  --from <dir> [--to <dir>]   # copy the pack, then verify
-//!
-//! All paths join cross-platform; copies create the target `data/` as needed.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -34,14 +25,10 @@ const CORE_FILES: &[(&str, bool)] = &[("data/kjv-notes.jsonl", false)];
 /// Every file a language's row names: its corpus, its Strong's dictionary, its
 /// modernization. The bool is "the reader is broken without it".
 ///
-/// DERIVED, because a hand-written list is a place to forget — and it had
-/// already been forgotten once. `strongs-de.json` shipped in the pack and in
-/// the APK but was never on this list, so a home hydrated with `plumbline-hydrate`
-/// gave a German reader English definitions with no sign anything was missing.
-///
-/// Only English's files are required. A checkout that has not built the German
-/// or Spanish text is not broken: the engine falls back to the KJV, which is
-/// exactly what a web reader who has not downloaded that language sees.
+/// Derived from the registry rather than hand-written, so a language added to the
+/// core cannot be silently left out of a hydrated home. Only English's files are
+/// required — without another language's text the engine falls back to the KJV,
+/// exactly as it does for a web reader who has not downloaded it.
 fn language_files() -> Vec<(String, bool)> {
     let mut out = Vec::new();
     for lang in Lang::ALL {
@@ -54,8 +41,7 @@ fn language_files() -> Vec<(String, bool)> {
             out.push((format!("data/{}", l.file), required));
         }
         if let Some(m) = spec.modernization {
-            // Never required: it is a toggle, and a reader who never turns it on
-            // cannot tell it is absent. The packed sibling comes too — the
+            // Never required: it is a toggle. The packed sibling comes too — the
             // loader prefers it (`akjv::akjvb_path`) and falls back to the JSONL,
             // so copying only one of the two is a silent parse on every launch.
             out.push((format!("data/{m}"), false));
@@ -78,16 +64,10 @@ const RND_FILES: &[&str] = &[
     // The graded text-as-witness (its gate keeps it silent until qualified).
     "data/text-witness.json",
 ];
-/// Authored / seed content copied as whole directories. The home keeps the
-/// user's weaves (parallel passages), threads, tags and the suggested-weave
-/// review queue here; seeding them means a fresh Plumbline home opens with the
-/// same study aids instead of an empty reader.
-///
-/// `patches` is gone: the Ed25519 point-patch/rule layer was never ported, so
-/// advertising a dir nothing writes sent readers looking for a feature that
-/// does not exist. This list is also NOT the whole user subtree —
-/// notes, memory and reading are the reader's alone and are never seeded — which
-/// is one of the four hand-kept copies TODO §H proposes to single-source.
+/// Authored / seed content copied as whole directories: the user's weaves,
+/// threads, tags and the suggested-weave review queue, so a fresh home opens with
+/// the stock study aids instead of an empty reader. Not the whole user subtree —
+/// notes, memory and reading are the reader's alone and are never seeded.
 const USER_DIRS: &[&str] = &["weaves", "suggested", "threads", "tags"];
 
 fn main() -> ExitCode {
@@ -116,18 +96,10 @@ fn main() -> ExitCode {
                 }
             }
         }
-        // THE LANGUAGE REGISTRY, FOR THE BUILD SCRIPTS.
-        //
-        // `scripts/build-web-pack.mjs` decides which files go in the pack and
-        // what role each carries, and it used to know German by name: a
-        // `GERMAN_TEXT` constant, a `germanCorpus` role, a `germanLexicon` role,
-        // three exclusions from the generic walk. Node cannot read a Rust
-        // static, so either the table is duplicated there — the exact thing this
-        // refactor is undoing — or it is asked for. It is asked for.
-        //
-        // Printed as one JSON object on stdout. The pack script already shells
-        // out to this binary for the idxcache, so this adds no new machinery and
-        // there is no generated file to drift.
+        // The language registry as one JSON object on stdout, for the build
+        // scripts: `scripts/build-web-pack.mjs` needs per-language files and
+        // roles, and Node cannot read a Rust static, so it asks rather than
+        // duplicating the table. No generated file to drift.
         "languages" => {
             println!("{}", plumbline_core::i18n::registry_json());
             ExitCode::SUCCESS
@@ -142,9 +114,9 @@ fn main() -> ExitCode {
                 s.push(".idxcache");
                 PathBuf::from(s)
             });
-            // Stamped mtime 0: the browser WASI shim reports 0 for every file,
-            // so this cache validates on the web's very first boot (native
-            // runtimes see their real mtime and correctly ignore it).
+            // Stamped mtime 0: the browser WASI shim reports 0 for every file, so
+            // the cache validates on the web's first boot (native runtimes see a
+            // real mtime and correctly ignore it).
             match corpus::build_cache_stamped(&data, &out, 0) {
                 Ok(()) => {
                     println!("wrote {} (web-stamped idxcache)", out.display());
@@ -157,9 +129,8 @@ fn main() -> ExitCode {
             }
         }
         "morphb" => {
-            // Pack `morphology.jsonl` (10.4 MB of JSONL — 31,091 serde calls
-            // building 355,603 entries) into interned fixed-width records. Same
-            // reason as `vecb`: the parse cannot outlive a browser tab, so a
+            // Pack `morphology.jsonl` (10.4 MB, 31,091 serde calls) into interned
+            // fixed-width records: the parse cannot outlive a browser tab, so a
             // phone repeated all of it on every launch.
             let Some(from) = flag("--from") else {
                 eprintln!("morphb needs --from <morphology.jsonl> [--out <file>]");
@@ -181,9 +152,8 @@ fn main() -> ExitCode {
                 eprintln!("morphb: cannot write {}: {e}", out.display());
                 return ExitCode::FAILURE;
             }
-            // Verify by LOADING it back, as `check` does for everything else —
-            // the loader prefers this file, so one that doesn't read is worse
-            // than none at all.
+            // Verify by loading it back: the loader prefers this file, so one
+            // that does not read is worse than none at all.
             match morph::parse_morph_bin(TOKENIZATION_VERSION, &bytes) {
                 Some(m) => {
                     println!(
@@ -202,8 +172,8 @@ fn main() -> ExitCode {
             }
         }
         "akjvb" => {
-            // Pack the plain-English overlay. 46k spans over only ~3k distinct
-            // replacement phrases, so interned it is three small integers each.
+            // Pack the plain-English overlay: 46k spans over only ~3k distinct
+            // replacement phrases, so interned each is three small integers.
             let Some(from) = flag("--from") else {
                 eprintln!("akjvb needs --from <akjv.jsonl> [--out <file>]");
                 return ExitCode::from(2);
@@ -293,15 +263,13 @@ fn resolve_home() -> PathBuf {
 
 /// Copy every pack file that exists under `from` into `to`, creating `to/data`.
 ///
-/// Pack files land atomically (temp sibling → rename, mirroring
-/// `plumbline_core::store::write_atomic`) so a crash mid-copy can never leave a
-/// truncated file where a good one stood. The authored dirs are seeded without
-/// ever overwriting an existing file — those hold the user's own study aids.
+/// Pack files land atomically (temp sibling → rename) so a crash mid-copy cannot
+/// leave a truncated file. The authored dirs are seeded without ever overwriting
+/// an existing file — those hold the user's own study aids.
 fn copy(from: &Path, to: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(to.join("data"))?;
-    // Refuse to copy a home onto itself: `fs::copy` onto the source truncates
-    // it, so this would silently destroy the pack. Canonicalize so different
-    // spellings of the same directory are caught too.
+    // Refuse to copy a home onto itself — that truncates the source and destroys
+    // the pack. Canonicalize so different spellings of one directory are caught.
     if let (Ok(f), Ok(t)) = (from.canonicalize(), to.canonicalize()) {
         if f == t {
             return Err(std::io::Error::new(
@@ -334,8 +302,7 @@ fn copy(from: &Path, to: &Path) -> std::io::Result<()> {
             copied += 1;
         }
     }
-    // Seed the authored-content directories (weaves/threads/tags/…) so the home
-    // opens with its study aids, not empty — but never clobber what the user
+    // Seed the authored-content directories, never clobbering what the user
     // already has there.
     for dir in USER_DIRS {
         let src = from.join(dir);
@@ -355,10 +322,9 @@ fn copy(from: &Path, to: &Path) -> std::io::Result<()> {
 }
 
 /// Copy `src` over `dst` atomically: stream into a hidden temp sibling in the
-/// destination directory, fsync, close, then rename into place — the same
-/// dance as `plumbline_core::store::write_atomic` (a rename within one directory is
-/// atomic on Unix and Windows, so a crash mid-copy never leaves a truncated
-/// pack file behind). Returns the number of bytes copied.
+/// destination directory, fsync, close, then rename into place (a rename within
+/// one directory is atomic), so a crash mid-copy never leaves a truncated pack
+/// file. Returns the number of bytes copied.
 fn copy_atomic(src: &Path, dst: &Path) -> std::io::Result<u64> {
     let name = dst.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "out".to_string());
     let tmp = dst.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
@@ -369,8 +335,8 @@ fn copy_atomic(src: &Path, dst: &Path) -> std::io::Result<u64> {
             let n = std::io::copy(&mut reader, &mut writer)?;
             writer.sync_all()?;
             n
-            // writer drops (closes) here — Windows will not replace a file
-            // that still has an open handle.
+            // writer drops (closes) here — Windows will not replace a file that
+            // still has an open handle.
         };
         std::fs::rename(&tmp, dst)?;
         Ok(bytes)
@@ -382,11 +348,9 @@ fn copy_atomic(src: &Path, dst: &Path) -> std::io::Result<u64> {
 }
 
 /// Recursively seed `src` into `dst` without ever overwriting an existing file
-/// (these directories hold user-authored content). Cross-platform:
-/// `create_dir_all` + atomic file copy, `Path::join` for every path; `rel` is
-/// the destination-relative prefix used for messages. Returns
-/// `(copied, skipped)` counts, printing each skipped file so nothing is
-/// silently left stale.
+/// (these directories hold user-authored content). `rel` is the
+/// destination-relative prefix used for messages. Returns `(copied, skipped)`,
+/// printing each skipped file so nothing is silently left stale.
 fn seed_dir_all(src: &Path, dst: &Path, rel: &str) -> std::io::Result<(usize, usize)> {
     std::fs::create_dir_all(dst)?;
     let (mut copied, mut skipped) = (0, 0);
@@ -420,12 +384,10 @@ fn check(home: &Path) -> ExitCode {
     let data = home.join("data");
     let mut core_ok = true;
 
-    // ── reader core ──────────────────────────────────────────────────────────
     println!("Reader (core):");
-    // ONE LOOP OVER THE REGISTRY, so a language added to the core is reported
+    // One loop over the registry, so a language added to the core is reported
     // here by having been added. English is required; every other text is
-    // optional and reported as such, because a reader without it falls back to
-    // the KJV rather than meeting a broken app.
+    // optional, since a reader without it falls back to the KJV.
     for lang in Lang::ALL {
         let file = lang.corpus().file;
         if !lang.has_own_corpus() && lang != Lang::En {
@@ -456,7 +418,6 @@ fn check(home: &Path) -> ExitCode {
         _ => println!("  · kjv-notes.jsonl — absent (margin notes off)"),
     }
 
-    // ── R&D tiers ──────────────────────────────────────────────────────────────
     println!("\nR&D tiers (Full study):");
 
     // Fused bridge: etymology (from strongs.json) + external witnesses + priors.
@@ -483,9 +444,6 @@ fn check(home: &Path) -> ExitCode {
         println!("  ✓ cross-references.tsv — {} refs over {} verses", crossref::xref_count(&xr), xr.len());
     }
 
-    // `concept-vectors.vec` is deliberately not checked: the embedding left the
-    // product with "verses like this" and the concept map, so a home neither
-    // needs it nor is worse off without it.
     match morph::load_morph(TOKENIZATION_VERSION, data.join("morphology.jsonl")) {
         Some(m) => println!("  ✓ morphology.jsonl — {} verses annotated", m.verse_count()),
         None => println!("  · morphology.jsonl — absent or stale (morphology off)"),
@@ -522,8 +480,8 @@ mod tests {
     use super::*;
     use std::fs;
 
+    /// A unique-per-process scratch dir under the OS temp dir.
     fn scratch(tag: &str) -> PathBuf {
-        // A unique-per-process scratch dir under the OS temp dir (portable).
         std::env::temp_dir().join(format!("plumbline-hydrate-{}-{tag}", std::process::id()))
     }
 

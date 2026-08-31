@@ -1,23 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The concept study: a non-linear concept sweep with its own reader mode
-// (docs/READING-PLANS.md §Concept Study). Three properties, and each is a way the
-// feature would quietly fail:
+// The concept study is a non-linear sweep with its own reader mode. Three properties,
+// each a way the feature fails quietly:
 //
-//   1. A verse tap in the mode TAGS (with a confirm) instead of opening word
-//      study — and the tag it files under is the run's preset. A tap that
-//      opened the study panel would make the sweep unusable.
-//   2. The reading tracker is SUSPENDED in the mode: skimming credits no dwell
-//      to the reading map. A sweep that advanced the map would corrupt the
-//      thing reading plans derive their progress from.
-//   3. Leaving the mode restores word-study taps AND resumes the tracker, and
-//      the gathered tag survives — the whole point of the sweep.
-//
-// No mutation recipes run here (shared dist/, one preview port) — but each
-// assertion is written to go red on the obvious break: (1) dies if the tap
-// path ignores `inConceptStudy`; (2) dies if Shell's tracker `target` drops the
-// `inConceptStudy` guard; (3) dies if exitConceptStudy does not clear
-// config.conceptStudy.
+//   1. A verse tap tags under the run's preset instead of opening word study. Dies if
+//      the tap path ignores `inConceptStudy`.
+//   2. The reading tracker is suspended, so skimming credits no dwell to the reading
+//      map that plans derive progress from. Dies if Shell's tracker `target` drops
+//      the `inConceptStudy` guard.
+//   3. Leaving restores word-study taps and the tracker, and the tag survives. Dies
+//      if exitConceptStudy does not clear config.conceptStudy.
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
@@ -37,7 +29,7 @@ const st = (page: Page): Promise<{ conceptStudy: string; panelKind: string | nul
     return { conceptStudy: s?.config?.conceptStudy ?? "", panelKind: s?.panel?.kind ?? null };
   });
 
-/** How many verses the tag holds, straight from the engine — the sweep's yield. */
+/** How many verses the tag holds, straight from the engine: the sweep's yield. */
 const tagCount = (page: Page, tag: string): Promise<number> =>
   page.evaluate(async (t) => {
     const tags = await (window as any).__plumbline.engine.tags();
@@ -47,57 +39,46 @@ const tagCount = (page: Page, tag: string): Promise<number> =>
 test("a concept study tags on tap, suspends the tracker, and its tag outlives the run", async ({ page }) => {
   await boot(page);
 
-  // Start a concept study straight through the engine (the Plans-panel UI is driven
-  // in its own test; here the mode is the subject). The session method does the
-  // config write + mode entry the panel button would.
+  // Enter the mode through the engine; the Plans-panel launcher has its own test.
   await page.evaluate(async () => {
     await (window as any).__plumbline.startConceptStudy("grace");
   });
 
-  // (2) In the mode, the reading tracker reports nothing: its target is null.
-  //     Shell's `target()` is the source of truth the tracker samples.
+  // (2) In the mode the tracker's target is null, so it reports nothing.
   expect(await st(page)).toMatchObject({ conceptStudy: "run-grace" });
   await expect(page.locator(".concept-study-banner")).toBeVisible();
 
-  // (1) A verse tap opens the confirm, not word study. Auto-accept the confirm
-  //     dialog by clicking its named button (the app's own ConfirmDialog, whose
-  //     verb button names the act — "Tag …").
+  // (1) A verse tap opens the app's ConfirmDialog, not word study; its verb button
+  //     names the act ("Tag …"), which is how the confirm is accepted below.
   const canvas = page.locator(".pane canvas").first();
   const box = (await canvas.boundingBox())!;
   await canvas.click({ position: { x: box.width / 2, y: 40 } });
 
-  // The confirm names the act; accept it.
   const confirm = page.getByRole("button", { name: /^Tag / });
   await expect(confirm).toBeVisible({ timeout: 10_000 });
   await confirm.click();
 
-  // The study panel never opened. Asserted as "no panel at all" rather than
-  // "not word study": a tap that fell through opens whatever the tap answer is
-  // that release (kind "wordUsage" since the word-first candidate), and a
-  // not-that-one-kind check would sleep through the regression.
+  // Asserted as "no panel at all" rather than "not word study": a fallen-through tap
+  // opens whatever that release's tap answer is, so a one-kind check would sleep
+  // through the regression.
   expect((await st(page)).panelKind).toBeNull();
 
-  // (1) The tag now holds the tapped verse — the gather worked.
   await expect
     .poll(() => tagCount(page, "grace"), { message: "the tap did not file a verse under the preset tag", timeout: 10_000 })
     .toBeGreaterThan(0);
 
-  // (3) Leave the mode: config clears, the banner goes, taps are word study
-  //     again — and the tag stays.
+  // (3) Leaving clears the config and the banner, and the tag stays.
   await page.getByRole("button", { name: "Exit Concept Study" }).click();
   expect((await st(page)).conceptStudy).toBe("");
   await expect(page.locator(".concept-study-banner")).toHaveCount(0);
   expect(await tagCount(page, "grace")).toBeGreaterThan(0);
 });
 
-// The mode on TOUCH — the input the sweep was built for and the one the mouse
-// tests above cannot exercise. A touch tap is delivered TWICE: pointerup, then
-// a synthesized `click` a few milliseconds later. Unswallowed, the second
-// delivery either ran the tap again (two confirmations for one tap) or — once
-// the confirm had rendered — landed on the dialog's backdrop and answered "no"
-// to a question the reader never saw, which on a phone read as "tapping a
-// verse does nothing". Dies if ReaderPane stops setting `suppressClick` on the
-// touch-tap path, or if the confirm backdrop goes back to dismissing on click.
+// A touch tap is delivered twice: pointerup, then a synthesized `click` a few ms
+// later. Unswallowed, the second delivery either runs the tap again or lands on the
+// confirm's backdrop and answers "no" to a question the reader never saw. Dies if
+// ReaderPane stops setting `suppressClick` on the touch-tap path, or if the confirm
+// backdrop goes back to dismissing on click.
 test.describe("touch", () => {
   test.use({ hasTouch: true });
 
@@ -106,12 +87,10 @@ test.describe("touch", () => {
     await page.evaluate(async () => {
       await (window as any).__plumbline.startConceptStudy("mercy");
     });
-    // Warm the plans read: the bug lived on the WARM path, where the tag is
-    // cached and the confirm opens fast enough for the synthesized click to
-    // land on its backdrop. (Cold, the RPC outran the ghost click and hid it.)
+    // Warm the plans read: only on the warm path does the confirm open fast enough
+    // for the ghost click to land on its backdrop. Cold, the RPC outruns it.
     await page.evaluate(() => (window as any).__plumbline.fetchQ("plans", ""));
-    // Count the tap handler's invocations — a double-delivered tap calls it
-    // twice whichever element the ghost click lands on.
+    // A double-delivered tap calls the handler twice, wherever the ghost click lands.
     await page.evaluate(() => {
       const s = (window as any).__plumbline;
       (window as any).__tagCalls = 0;
@@ -126,7 +105,7 @@ test.describe("touch", () => {
     const box = (await canvas.boundingBox())!;
     await canvas.tap({ position: { x: box.width / 2, y: 40 } });
 
-    // The confirm appears — and STAYS: past any ghost-click window.
+    // The confirm appears and stays, past any ghost-click window.
     const confirm = page.getByRole("button", { name: /^Tag / });
     await expect(confirm).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(400);
@@ -135,7 +114,7 @@ test.describe("touch", () => {
     // One tap, one ask.
     expect(await page.evaluate(() => (window as any).__tagCalls)).toBe(1);
 
-    // Accepting it files the verse and no second confirmation surfaces.
+    // Accepting files the verse, and no second confirmation surfaces.
     await confirm.click();
     await expect(page.locator('[data-surface="confirm"]')).toHaveCount(0);
     await expect
@@ -146,11 +125,9 @@ test.describe("touch", () => {
   });
 });
 
-// The sweep's progress is VISIBLE in the mode: the banner counts chapters, and
-// the navigator paints swept coverage instead of the frozen reading map (whose
-// glow cannot move while the tracker is suspended, and so said nothing about
-// the study). Dies if the banner loses its count, if `swept` falls off the
-// plans wire, or if BookNav goes back to painting the reading map in the mode.
+// In the mode the navigator paints swept coverage, not the reading map, whose glow
+// cannot move while the tracker is suspended. Dies if the banner loses its count, if
+// `swept` falls off the plans wire, or if BookNav paints the reading map here again.
 test("the mode shows sweep progress — the banner counts and the navigator paints coverage", async ({ page }) => {
   await boot(page);
   await page.evaluate(async () => {
@@ -160,14 +137,13 @@ test("the mode shows sweep progress — the banner counts and the navigator pain
   // Entering the mode swept the chapter on screen; the banner says so.
   await expect(page.locator(".concept-study-banner .prog")).toHaveText(/^1 \/ \d+/, { timeout: 10_000 });
 
-  // The navigator's chapter grid paints the SWEEP: the swept chapter's tile is
-  // tinted, its neighbour is not, and the tooltip names the state.
+  // The swept chapter's tile is tinted, its neighbour is not, and the title names it.
   await page.locator(".pane .nav .passage").first().click();
   const current = page.locator(".grid.books button.current");
   await expect(current).toBeVisible();
   await expect(current).toHaveAttribute("title", / chapters studied$/);
   await current.click();
-  // The swept tile is the chapter the reader was IN when the mode started.
+  // The swept tile is the chapter the reader was in when the mode started.
   const chapter = await page.evaluate(() => (window as any).__plumbline.panes[0].chapter as number);
   const tiles = page.locator(".grid.nums button");
   const sweptTile = tiles.nth(chapter - 1);
@@ -176,8 +152,8 @@ test("the mode shows sweep progress — the banner counts and the navigator pain
   await expect(sweptTile).toHaveAttribute("style", /background/);
   await expect(neighbour).not.toHaveAttribute("style", /background/);
 
-  // Long-press's menu marks by hand in the mode: the neighbour sweeps without
-  // being opened, and the banner's count moves with it.
+  // The tile menu marks by hand: the neighbour sweeps without being opened, and the
+  // banner's count moves with it.
   await neighbour.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Mark chapter studied" }).click();
   await expect(neighbour).toHaveAttribute("style", /background/, { timeout: 10_000 });
@@ -185,10 +161,8 @@ test("the mode shows sweep progress — the banner counts and the navigator pain
   await expect(page.locator(".concept-study-banner .prog")).toHaveText(/^2 \/ \d+/);
 });
 
-// The Plans-screen path the reader actually walks: type a tag, press Start, and
-// the mode is entered; the run then shows as a card that can re-enter the mode.
-// Dies if the launcher stops wiring the input through startConceptStudy, or if
-// the running card loses its Resume button.
+// The Plans-screen path a reader walks. Dies if the launcher stops wiring its input
+// through startConceptStudy, or if the running card loses its Resume button.
 test("the Plans screen launches a concept study and re-enters it from its card", async ({ page }) => {
   await boot(page);
 
@@ -196,11 +170,10 @@ test("the Plans screen launches a concept study and re-enters it from its card",
   await page.getByPlaceholder("Tag to add verses to (e.g. grace)").fill("faith");
   await page.getByRole("button", { name: "Start Concept Study" }).click();
 
-  // Launch enters the mode and records the run.
   await expect(page.locator(".concept-study-banner")).toBeVisible();
   expect(await st(page)).toMatchObject({ conceptStudy: "run-faith" });
 
-  // Leave, then re-enter from the run's card — coverage (the run) persists.
+  // Leaving and re-entering from the card keeps the run and its coverage.
   await page.getByRole("button", { name: "Exit Concept Study" }).click();
   await expect(page.locator(".concept-study-banner")).toHaveCount(0);
   await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));

@@ -1,23 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The passage navigator, against Android's version (ui/BookNav.kt) — the UX gold
-// standard. Three things the web shell was missing (audit 2026-07-29):
+// The passage navigator: a testament toggle so one testament is listed at a time, and
+// a "you are here" marker on the book the pane is showing.
 //
-//   * a testament toggle, so one testament is on screen at a time
-//   * a "you are here" marker on the book the pane is already showing
-//   * a legend for the reading tint, IN THE DOM. The meaning lived only in each
-//     tile's `title`, and a title never fires on touch — so on the platform most
-//     readers use, the colours explained nothing.
-//
-// Selectors are data attributes on purpose. `.grid button` is shared by the book
-// grid, the chapter grid and half the dialogs in the shell, and a shared class is
-// exactly how a test comes back green about something it never looked at.
-//
-// And the grid is asserted as ONE SNAPSHOT rather than as a series of
-// `toHaveCount(0)`s. A bare "no Genesis tile" is equally satisfied by the dialog
-// having closed — which really happened during the mutation runs below, when a dev
-// server's hot reload remounted the app mid-assertion and a broken build passed.
-// Every check here names what must be present as well as what must not.
+// Selectors are data attributes on purpose: `.grid button` is shared by the book grid,
+// the chapter grid and half the dialogs, so a class here would let a test come back
+// green about something it never looked at. The grid is asserted as ONE snapshot
+// rather than a series of `toHaveCount(0)`s — a bare "no Genesis tile" is equally
+// satisfied by the dialog having closed, which has happened.
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
@@ -28,8 +18,8 @@ async function boot(page: Page): Promise<void> {
     await page.getByRole("button", { name: "Start reading" }).click();
   }
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
-  // A fresh profile opens at John 3 — which is what makes the testament default
-  // and the "you are here" marker testable without seeding anything.
+  // A fresh profile opens at John 3, which makes the testament default and the
+  // "you are here" marker testable without seeding anything.
   await expect(page.locator(".pane .nav button.passage").first()).toHaveText(/John\s+3/);
 }
 
@@ -43,9 +33,8 @@ const ot = (page: Page) => page.locator('.dialog [data-testament="ot"]');
 const nt = (page: Page) => page.locator('.dialog [data-testament="nt"]');
 const tile = (page: Page, id: string) => page.locator(`.dialog [data-book="${id}"]`);
 
-/** What the book grid is showing right now: which testament is pressed, how many
- *  books are listed, whether two landmark books are among them, and which tiles
- *  claim to be where the reader is. */
+/** What the book grid shows now: the pressed testament, the book count, two landmark
+ *  books, and which tiles claim to be where the reader is. */
 async function grid(page: Page) {
   return page.evaluate(() => {
     const ids = [...document.querySelectorAll(".dialog [data-book]")].map((e) =>
@@ -69,16 +58,8 @@ async function grid(page: Page) {
 const NT_ONLY = { tab: "nt", count: 27, hasGen: false, hasJohn: true };
 const OT_ONLY = { tab: "ot", count: 39, hasGen: true, hasJohn: false };
 
-// Mutation 2026-07-29: `books` in BookNav.svelte changed to `all` — both
-// testaments listed at once, the pre-fix behaviour. Failed with
-//   Error: the navigator should open on the testament the reader is in
-//   expect(received).toEqual(expected) // deep equality
-//     Object {
-//   -   "count": 27,
-//   +   "count": 66,
-//   -   "hasGen": false,
-//   +   "hasGen": true,
-//       "hasJohn": true, "marked": Array ["John"], "tab": "nt" }
+// Dies if BookNav lists both testaments at once instead of the reader's one: the
+// snapshot comes back with count 66 and Genesis present.
 test("the testament toggle switches which books are listed, by mouse and by key", async ({ page }) => {
   await boot(page);
   await openNav(page);
@@ -87,8 +68,8 @@ test("the testament toggle switches which books are listed, by mouse and by key"
   await expect
     .poll(() => grid(page), {
       message: "the navigator should open on the testament the reader is in",
-      // The grid paints from the boot-prefetched TOC, which on a cold CI boot
-      // may still be a query in flight for a tick or two.
+      // The grid paints from the boot-prefetched TOC, still a query in flight for a
+      // tick or two on a cold CI boot.
       timeout: 15_000,
     })
     .toEqual({ ...NT_ONLY, marked: ["John"] });
@@ -100,15 +81,15 @@ test("the testament toggle switches which books are listed, by mouse and by key"
     .toEqual({ ...OT_ONLY, marked: [] });
   await expect(tile(page, "Mal")).toBeVisible();
 
-  // Keyboard, because a toggle you can only reach with a thumb is half a toggle.
+  // The toggle must work from the keyboard, not only from a thumb.
   await nt(page).focus();
   await page.keyboard.press("Enter");
   await expect
     .poll(() => grid(page), { message: "the toggle should work from the keyboard" })
     .toEqual({ ...NT_ONLY, marked: ["John"] });
 
-  // And the choice survives stepping into a book and back out — from the moment
-  // the navigator opens the tab is the reader's, not the pane's.
+  // Once the navigator is open the tab belongs to the reader, not the pane: it
+  // survives stepping into a book and back out.
   await ot(page).click();
   await tile(page, "Gen").click();
   await expect(page.locator(".grid.nums button")).toHaveCount(50);
@@ -118,20 +99,13 @@ test("the testament toggle switches which books are listed, by mouse and by key"
     .toEqual({ ...OT_ONLY, marked: [] });
 });
 
-// Mutation 2026-07-29: the `aria-current` binding deleted from the book tile in
-// BookNav.svelte. Failed with
-//   Error: exactly one tile should say where the reader is
-//   expect(received).toEqual(expected) // deep equality
-//     Object { "count": 27, "hasGen": false, "hasJohn": true,
-//   -   "marked": Array [ "John" ],
-//   +   "marked": Array [],
-//       "tab": "nt" }
+// Dies if the `aria-current` binding comes off the book tile: nothing is marked.
 test("the book the reader is in is marked, and only that one", async ({ page }) => {
   await boot(page);
   await openNav(page);
 
-  // Semantics, not a colour: the reading tint already paints every tile, so a
-  // test that looked at a background would be satisfied by the map alone.
+  // Semantics, not a colour: the reading tint paints every tile, so a test looking at
+  // a background would be satisfied by the map alone.
   await expect
     .poll(() => grid(page), {
       message: "exactly one tile should say where the reader is",
@@ -139,8 +113,8 @@ test("the book the reader is in is marked, and only that one", async ({ page }) 
     })
     .toEqual({ ...NT_ONLY, marked: ["John"] });
 
-  // The other testament holds nothing the reader is in, so nothing is marked —
-  // and the count proves the grid is still there while nothing is marked.
+  // Nothing is marked in the other testament, and the count proves the grid is still
+  // there while nothing is marked.
   await ot(page).click();
   await expect
     .poll(() => grid(page), { message: "the Old Testament is not where the reader stands" })
@@ -157,24 +131,20 @@ test("the book the reader is in is marked, and only that one", async ({ page }) 
     .toEqual({ ...OT_ONLY, marked: ["Gen"] });
 });
 
-// THE COLOUR LEGEND IS GONE ON PURPOSE (Glendon, 2026-08-04): "your PWA still
-// has the color guide on nav, I don't want that." It was added on 2026-07-29 so
-// the tint would explain itself where a `title` never fires, and the test that
-// used to live here asserted exactly that. The product call outranks it — a row
-// of colour words above the grid is chrome in front of picking a book — so the
-// assertion is inverted rather than deleted, to keep it from drifting back in.
-//
-// What survives from it: the long chapter grid must still scroll to its end.
+// The colour legend is absent on purpose: a row of colour words above the grid is
+// chrome in front of picking a book. The assertion is inverted rather than deleted,
+// to keep the legend from drifting back in. Also holds that a long chapter grid still
+// scrolls to its end.
 test("the navigator is the grid, with no colour legend above it", async ({ page }) => {
   await boot(page);
   await openNav(page);
 
   await expect(page.locator("[data-tint-legend]")).toHaveCount(0);
-  // Nor the copy by any other route: no hue words in the dialog's rendered text.
+  // Nor the copy by any other route: no tint words in the dialog's rendered text.
   const shown = await page.locator(".dialog").innerText();
   expect(shown, "the tint copy came back into the navigator").not.toMatch(/not read yet|partway|read through/i);
 
-  // The tiles keep their own explanation, which is where it belongs.
+  // The tiles keep their own explanation in a `title`.
   await ot(page).click();
   await expect(tile(page, "Ps")).toHaveAttribute("title", /.+/);
 
@@ -184,11 +154,9 @@ test("the navigator is the grid, with no colour legend above it", async ({ page 
   await expect(page.locator(".grid.nums button").last()).toBeInViewport();
 });
 
-// Mark-as-read moved off the first verse's context menu onto the navigator
-// (UAT, 2026-08-07): a long-press / right-click on a chapter tile marks it read,
-// and a book-level button marks them all. Drives the right-click path (a
-// deterministic stand-in for the long-press) and checks the engine actually
-// recorded the read.
+// Mark-as-read lives on the navigator: a long-press or right-click on a chapter tile
+// marks it read. Right-click is the deterministic stand-in for the long-press, and
+// the read must reach the engine, not just the tile.
 test("a chapter is marked read from the navigator", async ({ page }) => {
   await boot(page);
   await openNav(page);

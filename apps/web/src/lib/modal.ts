@@ -1,31 +1,17 @@
-// ONE dialog behaviour, for every `aria-modal` surface in the shell.
-//
-// There are fourteen of them, and before this each one answered the keyboard
-// differently or not at all: none moved focus in, none held Tab, none gave focus
-// back, and Escape was a single ladder on `svelte:window` (Shell.svelte) that
-// returns early whenever the event came from a field — so Escape inside the
-// "New thread…" box, the note editor or the church fields did nothing at all.
-// That is the reported gap, and it is the one a keyboard reader meets first.
-//
-// A modal that does not take focus is a modal only to the mouse: a screen reader
-// stays parked wherever it was, Tab walks the page BEHIND the dialog, and the
-// reader never learns anything opened. So this is an action rather than a note in
-// a review checklist — the next dialog gets it by adding one word.
+// One dialog behaviour — focus in, Tab trapped, focus back, Escape — for every
+// `aria-modal` surface in the shell. Applied as an action so the next dialog
+// gets it by adding one word.
 
 import type { Action } from "svelte/action";
 
 export interface ModalOptions {
   /**
-   * The dialog's OWN close path, called on Escape.
+   * The dialog's own close path, called on Escape — never a close invented here,
+   * since each dialog already knows what leaving it means (PromptDialog resolves
+   * null, the confirmation resolves "no", FirstRun refuses while it is asking).
    *
-   * Never a close invented here. Each of these dialogs already knows what
-   * leaving it means — PromptDialog resolves its promise with null, FirstRun
-   * refuses to be dismissed while it is asking a question, the confirmation
-   * resolves "no" — and a second answer to that question is how the two drift.
-   *
-   * Omitted where Escape must NOT close: SettingsDialog's restore-failed alert
-   * has no backdrop dismiss for the same reason (a stray tap must not take the
-   * message away before it is read, and a stray Escape is the same tap).
+   * Omitted where Escape must not close, e.g. SettingsDialog's restore-failed
+   * alert: a stray key must not take the message away before it is read.
    */
   close?: () => void;
 }
@@ -45,12 +31,11 @@ const FOCUSABLE = [
 /**
  * The focusable controls actually on screen, in tab order.
  *
- * Filtered by whether the element has a box, not by `offsetParent`: every one of
- * these dialogs is `position: fixed`, and a fixed element's `offsetParent` is
- * null whether or not it is visible. It also drops the controls that are only
- * notionally there — the `hidden` file input behind "Restore from backup…" has
- * no box and cannot be tabbed to, so counting it would put a dead stop in the
- * cycle.
+ * Filtered on having a box, not `offsetParent`: these dialogs are
+ * `position: fixed`, whose `offsetParent` is null whether or not they are
+ * visible. It also drops boxless controls that cannot be tabbed to anyway (the
+ * `hidden` file input behind "Restore from backup…"), which would otherwise be
+ * a dead stop in the cycle.
  */
 function focusables(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
@@ -66,20 +51,15 @@ interface Entry {
 }
 const OPEN: Entry[] = [];
 
-/** ESCAPE IS DOCUMENT-LEVEL, ON PURPOSE, and it is the one key that is.
- *
- *  Tab is handled on the dialog node, because Tab only means anything when focus
- *  is already inside it. Escape is not like that: it has to work even when focus
- *  has ended up somewhere else, which happens whenever the control the reader was
+/** Escape is the one key handled document-level, because it must work even when
+ *  focus has left the dialog — which happens whenever the control the reader was
  *  on is removed while the dialog is still up. A node listener silently stops
- *  firing then — and for `askConfirm`, whose promise is only settled by a close
- *  path, that is not a dead key but a PROMISE THAT NEVER SETTLES: the caller
- *  waits forever and the action looks like a dead button
- *  (e2e/destructive.spec.ts pins exactly this).
+ *  firing then, and for `askConfirm`, settled only by a close path, that leaves
+ *  a promise that never settles.
  *
  *  Capture, so it runs before Shell's own Escape ladder, and it stops the event
  *  whether or not the top dialog closes on it: a press aimed at the surface in
- *  front of the reader must never reach past it and peel something behind. */
+ *  front of the reader must never peel something behind it. */
 function onDocumentEscape(e: KeyboardEvent): void {
   if (e.key !== "Escape" || OPEN.length === 0) return;
   e.preventDefault();
@@ -93,48 +73,37 @@ if (typeof document !== "undefined") {
 /**
  * Focus in, Tab trapped, focus back on close, Escape handled by the stack above.
  *
- * WHERE FOCUS LANDS is the one judgement call. Blindly focusing the first
- * focusable thing is wrong in both directions: on ConfirmDialog it would be
- * Cancel (harmless but arbitrary), and any dialog that grows a destructive
- * button at the top would hand a keyboard reader the trigger. So the default is
- * the DIALOG ITSELF — which is what the ARIA authoring practices say to do when
- * there is no obvious first control, and it makes a screen reader read the
- * dialog's label and heading before anything else. A dialog with an obvious
- * first control says so with `data-modal-focus`, and only PromptDialog's field
- * and the restore-failed acknowledgement do.
+ * Focus lands on the dialog itself by default (the ARIA authoring practice when
+ * there is no obvious first control: the screen reader reads the label and
+ * heading first, and no dialog can hand a keyboard reader a destructive button).
+ * A dialog with an obvious first control marks it `data-modal-focus`. One with
+ * no focusable control at all still works — the container takes `tabindex="-1"`
+ * and Tab is swallowed rather than escaping to the page underneath.
  *
- * A dialog with NO focusable control at all still works: the container takes
- * `tabindex="-1"` and holds focus, and Tab is swallowed rather than escaping to
- * the page underneath.
- *
- * CONTENT THAT ARRIVES LATE is why the observer is here. Several of these fill
- * from an engine round trip, so `data-modal-focus` may not exist when the action
- * runs. Focus goes to the container immediately either way (never nowhere), and
- * moves on to the marked control if it appears — but only while focus is still
- * on the container, because a reader who has already tabbed somewhere must not
- * have it taken back.
+ * The observer is for content that arrives late: several of these fill from an
+ * engine round trip, so `data-modal-focus` may not exist yet. Focus goes to the
+ * container immediately either way and moves on to the marked control if it
+ * appears — but only while focus is still on the container, so a reader who has
+ * already tabbed somewhere does not have it taken back.
  */
 export const modal: Action<HTMLElement, ModalOptions | undefined> = (node, options) => {
   let opts: ModalOptions = options ?? {};
 
-  // Captured BEFORE anything is focused: this is the control the reader was on
-  // when the dialog opened, and it is where they are owed a return. `body` is
-  // not a control — it is what the browser reports when nothing has focus — and
-  // focusing it back would be a blur dressed up as a restore.
+  // Captured before anything is focused: the control the reader was on when the
+  // dialog opened, and where they are owed a return. `body` is what the browser
+  // reports when nothing has focus, so restoring to it would be a blur.
   const opener = document.activeElement;
   const returnTo = opener instanceof HTMLElement && opener !== document.body ? opener : null;
 
-  // The container has to be able to hold focus itself. Only added when the
-  // dialog has not already said so (PromptDialog had it by hand).
+  // The container has to be able to hold focus itself.
   if (!node.hasAttribute("tabindex")) node.setAttribute("tabindex", "-1");
 
   const marked = (): HTMLElement | null => node.querySelector<HTMLElement>("[data-modal-focus]");
 
   const target = marked();
   if (target) target.focus();
-  // `preventScroll`: the container is the whole dialog, and focusing a
-  // scrollable box scrolls it to the top — which on a long settings dialog would
-  // undo a reader's position for no reason.
+  // `preventScroll`: the container is the whole dialog, and focusing a scrollable
+  // box scrolls it to the top, losing a reader's position in a long settings list.
   else node.focus({ preventScroll: true });
 
   let watcher: MutationObserver | null = null;
@@ -155,13 +124,13 @@ export const modal: Action<HTMLElement, ModalOptions | undefined> = (node, optio
   }
 
   function onKeydown(e: KeyboardEvent): void {
-    // Escape is NOT handled here; see the document-level handler and OPEN below.
+    // Escape is not handled here; see the document-level handler above.
     if (e.key !== "Tab") return;
 
     const items = focusables(node);
     if (items.length === 0) {
-      // Nothing to move to, so Tab must not move at all — the page behind a
-      // modal is not somewhere Tab may go.
+      // Nothing to move to, and the page behind a modal is not somewhere Tab
+      // may go.
       e.preventDefault();
       node.focus({ preventScroll: true });
       return;
@@ -196,9 +165,9 @@ export const modal: Action<HTMLElement, ModalOptions | undefined> = (node, optio
       const at = OPEN.indexOf(entry);
       if (at >= 0) OPEN.splice(at, 1);
       // Give focus back, but never take it from somewhere it has since gone.
-      // At teardown the control the reader was on has usually just been removed,
-      // so the browser has already dropped focus to the body — that, or focus
-      // still inside the dying dialog, are the two cases worth restoring from.
+      // Only two states are worth restoring from: dropped to the body (the usual
+      // case, the reader's control having just been removed) or still inside the
+      // dying dialog.
       const active = document.activeElement;
       const stranded =
         active === null || active === document.body || (active instanceof Node && node.contains(active));

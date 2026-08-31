@@ -8,53 +8,18 @@ edition of the 1865 Smith & Van Dyck (SVD/AVD), `arb-vd`, marked public domain
 in its own `copr.htm` and in eBible's catalogue. The 1865 text has no copyright
 page to inherit.
 
-WHY THIS TEXT. It is the Arabic Bible with the standing the KJV has in English,
-and then some: begun by Eli Smith in Beirut in 1847, finished by Cornelius Van
-Dyck in 1865, and in 2008 adopted for public church use by all three church
-families in Egypt at once — Orthodox, Catholic and Evangelical. A translation
-made by American Presbyterian missionaries is the pulpit Bible of the Coptic
-Orthodox Church. Nothing in English is shared like that, so shipping it is not
-the sectarian choice that picking an English translation would be.
+Its Old Testament is the Masoretic Hebrew and its New Testament the Textus
+Receptus — the same two texts the KJV stands on. `check-svd.py` proves the TR
+readings are actually present rather than taking the label on trust.
 
-It is also the right text for THIS app. Its Old Testament is the Masoretic
-Hebrew and its New Testament is the Textus Receptus — the same two texts the
-KJV stands on. That is not taken on the tin: this build's companion
-`check-svd.py` proves the TR readings are actually present (Acts 8:37, Acts
-15:34, the Comma Johanneum, Mark 16:9-20, the Pericope Adulterae, the Matthew 6
-doxology), because a "Van Dyck" that had been quietly conformed to a critical
-text would sit beside the KJV saying different things in the same app.
+What the source gives: KJV verse addresses (31,102 of its 31,104 verses; the two
+extras are splits — see MERGES), full vocalization, real paragraphs, and `\\d`
+Psalm superscriptions. What it does not: Strong's tags (Arabic's registry row
+carries `lexicon: None` — the available alignments are LLM-generated and are
+deliberately not shipped) and `\\add` markup, so FLAG_ADDED is never set.
 
-WHAT THIS SOURCE GIVES, AND WHAT IT DOES NOT:
-
-  - IT VIRTUALLY SITS AT KJV VERSE ADDRESSES. 66 books, 1,189 chapters, and
-    31,102 of its 31,104 verses at the same address as `data/kjv.jsonl`. The
-    two exceptions are SPLITS, not extra text — see MERGES below.
-  - IT IS FULLY VOCALIZED. Every word carries its tashkeel, which is the hard
-    thing to find in a digital Arabic Bible and the right thing for a reader
-    who is studying rather than skimming.
-  - IT HAS REAL PARAGRAPHS. 4,625 verses open one, 15% of the text, ranging
-    9%-40% by book with no book at 100%. `build-rv1909.py` refused its source's
-    paragraphs because they were one per chapter and a pilcrow at every chapter
-    opening would have been an invention; these are the genuine article, and at
-    a rate near the KJV's own 10%.
-  - IT MARKS PSALM SUPERSCRIPTIONS with `\\d`, 120 of them — which `kjv.jsonl`
-    carries as FLAG_TITLE and `rv1909.jsonl` could not carry at all.
-  - IT HAS NO STRONG'S TAGS, and this build ships none. Word-level alignments
-    for this text do exist (BibleAquifer/ArabicVanDyckBible, CC0) but they are
-    LLM-generated, and Arabic would have been the first corpus here whose codes
-    were machine-guessed rather than a publisher's own claim. Maintainer's call,
-    2026-08-28: don't ship them. Arabic's registry row carries `lexicon: None`
-    and every token's code list is empty. A word study in Arabic is not a
-    degraded word study, it is honestly absent.
-  - IT HAS NO TRANSLATOR-SUPPLIED-WORD MARKUP, so FLAG_ADDED is never set. The
-    KJV's italics have no Van Dyck counterpart; the tradition is not there to
-    record.
-
-The output is `kjv.jsonl`'s frozen shape (CLAUDE.md §Data formats): a header
-line, then one verse per line with positional tokens
-`[pre, word, post, [strongs], flags]`.
-
-Of the flag bits, DIVINE NAME (2), TITLE (4) and PARAGRAPH (8) are set.
+The output is `kjv.jsonl`'s frozen shape (CLAUDE.md §Data formats). Of the flag
+bits, DIVINE NAME (2), TITLE (4) and PARAGRAPH (8) are set.
 """
 
 import json
@@ -75,72 +40,45 @@ FLAG_DIVINE = 2
 FLAG_TITLE = 4
 FLAG_PARA = 8
 
-# THE TWO VERSE SPLITS, and why they are merged rather than annotated away.
+# The two verse splits, merged back to KJV addressing. No text is added or
+# lost; the choice is only which numbering the engine addresses by, and refKeys
+# are frozen KJV addresses, so it must be the KJV's.
 #
-# The SVD numbers 31,104 verses to the KJV's 31,102. Both extras are the same
-# thing: a verse the KJV ends one clause later, split in two.
+#   1 Tim 6:22  = the KJV's 6:21b
+#   3 John 1:15 = the KJV's 14b
 #
-#   1 Tim 6:22  = the KJV's 6:21b, "Grace be with thee. Amen."
-#   3 John 1:15 = the KJV's 14b,   "Peace be to thee. Our friends salute thee…"
-#
-# No text is added or lost either way, so the choice is only about which
-# numbering the ENGINE addresses by — and that has to be the KJV's, because
-# every weave link, bookmark, note, reading plan and cross-reference in this app
-# is keyed by refKey and those keys are frozen. A corpus that addressed two
-# verses differently from every other corpus would put an Arabic reader's own
-# notes at addresses their English ones could never reach.
-#
-# The reader is not left guessing. `crates/core/src/versification/` gets a
-# two-row table so the app can say "Van Dyck 6:22" beside the KJV address, the
-# same courtesy German gets for Luther's numbering — a reader holding a printed
-# Van Dyck must be able to find the verse they are looking at.
+# `crates/core/src/versification/` carries a two-row table so the app can show
+# "Van Dyck 6:22" beside the KJV address, as it does for Luther's numbering.
 MERGES = {("1Tim", 6, 22): ("1Tim", 6, 21), ("3John", 1, 15): ("3John", 1, 14)}
 
-# The Tetragrammaton, and why the bare word only.
+# The Tetragrammaton, spelled out — the bare word only. The ordinary word for
+# "the Lord" cannot be flagged: it renders Adonai too, and nothing in the text
+# distinguishes them.
 #
-# Van Dyck renders YHWH as ٱلرَّبّ ("the Lord") almost everywhere and spells
-# يهوه just 14 times — the same shape as the KJV's four "JEHOVAH"s against its
-# thousands of "LORD"s. Flagging ٱلرَّبّ is not open to this build: the same
-# word renders Adonai, and nothing in the text distinguishes them. So the flag
-# marks what the text itself marks, which is what `build-rv1909.py` does with
-# "Jehová" and no more.
-#
-# Matched against the word with its tashkeel stripped, because the vowelling
-# varies with the word's position in the sentence and the consonantal skeleton
-# does not.
+# Matched against the word with its tashkeel stripped: the vowelling varies
+# with the word's position in the sentence, the consonantal skeleton does not.
 DIVINE = {"يهوه"}
 
 # Punctuation that belongs beside a word rather than being a word of its own.
-#
-# The Arabic-script members are the ones easy to forget: ، is U+060C (comma),
-# ؛ U+061B (semicolon), ؟ U+061F (question mark) — distinct codepoints from
-# their ASCII lookalikes, and the text uses the Arabic forms.
-#
-# The HYPHEN is punctuation here and not part of a word. Van Dyck uses it as a
-# parenthetical dash pinned to a word edge ("-ٱلَّذِي", "ٱلْأَوْثَانِ-"), so
-# leaving it attached — which is what the English tokenizer does, where a hyphen
-# joins a compound — would put "-ٱلَّذِي" in the search index under a leading
-# dash and make the word unfindable.
+# The Arabic forms are distinct codepoints from their ASCII lookalikes and the
+# text uses them (U+060C comma, U+061B semicolon, U+061F question mark). The
+# hyphen belongs here too: it is a parenthetical dash pinned to a word edge, so
+# leaving it attached would index the word under a leading dash, unfindable.
 POST = ".,;:!?)]»\u201d\u2019\u060C\u061B\u061F\u2026-"
 PRE = "([«\u201c\u201e\u2018-"
 
-# Everything this build reads. Any other marker is skipped, and \s1 is skipped
-# ON PURPOSE: its 1,998 section headings are a modern publisher's editorial
-# apparatus, not the 1865 text, and there is nowhere in the token model to put
-# them that would not be an invention.
+# Everything this build reads. Any other marker is skipped, `\s1` deliberately:
+# its section headings are a modern publisher's apparatus, not the 1865 text.
 ID = re.compile(r"\\id\s+(\S+)")
 CHAPTER = re.compile(r"\\c\s+(\d+)")
 VERSE = re.compile(r"\\v\s+(\d+)\s*(.*)", re.S)
 PARA = re.compile(r"\\(p|m|pi\d?|nb|q\d?|qa|qc|b)\b")
 TITLE = re.compile(r"\\d\s+(.*)", re.S)
 MARKER = re.compile(r"\\\S+\s*")
-# NOT VERSE TEXT, and the reason this list exists rather than a bare "ignore
-# unknown markers": the fallback branch keeps whatever text a line carries,
-# because that is how the continuation on a `\p` line survives. Without a stated
-# exception the same branch quietly appends all 1,998 `\s1` section headings to
-# whichever verse precedes them — a heading is text on a line, and nothing about
-# its shape says otherwise. The reader would find a publisher's editorial
-# subtitle sitting inside the last verse of the paragraph above it.
+# NOT VERSE TEXT. The list has to be stated rather than "ignore unknown
+# markers", because the fallback branch keeps whatever text a line carries
+# (that is how a continuation on a `\p` line survives) — so an unnamed `\s1`
+# heading would be appended to the verse above it.
 SKIP = re.compile(r"\\(id|ide|h|toc\d?|mt\d?|ms\d?|s\d?|sr|r|sp|cl|cp|rem|ip)\b")
 
 
@@ -193,11 +131,9 @@ def tokenize(text: str, lead_flags: int, title: bool) -> list:
         while word and word[-1] in POST:
             post = word[-1] + post
             word = word[:-1]
-        # A LEADING COMBINING MARK IS A SOURCE TYPO, and there is exactly one in
-        # the Bible: Num 2:1 reads "وَهَارُونَ َقَائِلًا", with a bare fatha
-        # stranded after the space. A word cannot begin with a mark — that is
-        # malformed Unicode, it renders as a dotted circle, and the word is
-        # unfindable by any search because nobody types the stray mark.
+        # A leading combining mark is a source typo (there is one, in Num 2:1):
+        # malformed Unicode that renders as a dotted circle and makes the word
+        # unfindable, because nobody types the stray mark.
         #
         # Peeled into `pre` rather than deleted: `pre` already holds what sits
         # before the word without being part of it, so the verse still rebuilds

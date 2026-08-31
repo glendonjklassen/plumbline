@@ -1,26 +1,22 @@
 import { expect, test, type Page } from "@playwright/test";
 import { zipWrite } from "../src/engine/zip";
 
-// A backup zip written before the Plumbline rename carries the config under
-// ".config/pure-study/"; the live home reads ".config/plumbline/". Both shells
-// remap it on the way in — SettingsDialog.svelte's `currentConfigPath` here,
-// Backup.kt's `currentConfigDir` on Android — and neither remap was tested, so
-// the shim sat one careless refactor away from dropping a reader's whole config
-// on restore. That failure does not look like a failure: the restore reports
-// success, the app reloads, and every setting is quietly back to default.
+// A backup zip written before the Plumbline rename carries the config under ".config/pure-study/";
+// the live home reads ".config/plumbline/", and SettingsDialog.svelte's `currentConfigPath` remaps
+// it on the way in. Untested, that shim sits one refactor away from dropping a reader's whole
+// config on restore — a failure that does not look like one, since the restore reports success,
+// the app reloads, and every setting is quietly back to default.
 //
-// What this asserts is deliberately NOT "the key turned up in IndexedDB". A
-// remap that wrote the bytes to a path the engine never opens would satisfy that
-// and still lose the settings. So it checks what reaches the reader: the chapter
-// that opens, the theme on the screen, the text size Settings shows back to
-// them — and, for the modern-named entries riding along in the same zip, the
-// note the engine answers with, because a shim that widened into a general
-// prefix rewrite would break those instead.
+// What this asserts is deliberately not "the key turned up in IndexedDB": a remap that wrote the
+// bytes to a path the engine never opens would satisfy that and still lose the settings. So it
+// checks what reaches the reader — the chapter that opens, the theme on screen, the text size
+// Settings shows back — plus the note the engine answers with for the modern-named entries riding
+// along in the same zip, which a shim widened into a general prefix rewrite would break instead.
 
 const enc = new TextEncoder();
 
-/** A config.json as an OLDER build wrote it — the frozen camelCase wire keys,
- *  with values a reader can see rather than flags only a test can. */
+/** A config.json as an older build wrote it — the frozen camelCase wire keys, with values a reader
+ *  can see rather than flags only a test can. */
 const LEGACY_CONFIG = {
   studyMode: "full",
   bodySize: 33,
@@ -34,9 +30,8 @@ const LEGACY_CONFIG = {
   machineAnalysis: false,
 };
 
-/** One of the reader's own notes, named the way the store names them
- *  (`notes/<slug of the refKey>.json`) — a modern entry, whose path the shim
- *  must leave completely alone. */
+/** One of the reader's own notes, named the way the store names them (`notes/<slug of the
+ *  refKey>.json`) — a modern entry, whose path the shim must leave alone. */
 const NOTE = {
   format: "pure-note-v1",
   ref: "John 3:16",
@@ -72,9 +67,9 @@ async function openSettings(page: Page): Promise<void> {
   await expect(page.locator('[data-surface="settings"]')).toBeVisible();
 }
 
-/** Hand the zip to the Restore row and wait for the reload it triggers.
- *  `waitForLoadState` resolves against the document we already have, so the
- *  marker is what tells us the new one is up (the idiom app.spec.ts uses). */
+/** Hand the zip to the Restore row and wait for the reload it triggers. `waitForLoadState`
+ *  resolves against the document we already have, so the marker is what tells us the new one
+ *  is up. */
 async function restore(page: Page, zip: Buffer): Promise<void> {
   await page.evaluate(() => ((window as any).__preRestore = true));
   await page.locator('input[type="file"]').setInputFiles({
@@ -83,10 +78,9 @@ async function restore(page: Page, zip: Buffer): Promise<void> {
     buffer: zip,
   });
   await expect
-    // The evaluate can land INSIDE the navigation it is waiting for — the old
-    // context is torn down mid-call and it THROWS, which fails expect.poll
-    // rather than retrying it (CI caught this; retries hit the same race).
-    // Bridge the gap: a destroyed context means "still navigating", not null.
+    // The evaluate can land inside the navigation it is waiting for: the old context is torn
+    // down mid-call and it throws, which fails expect.poll rather than retrying it. A destroyed
+    // context has to be read as "still navigating", not as null.
     .poll(
       async () => page.evaluate(() => (window as any).__preRestore ?? null).catch(() => "navigating"),
       { timeout: 30_000 },
@@ -99,8 +93,8 @@ test("a backup written before the rename restores the reader's settings, not the
 }) => {
   await boot(page);
 
-  // This device's own settings first, so the restore has something to replace —
-  // and so none of the assertions below can pass by accident on a default.
+  // This device's own settings first, so the restore has something to replace and none of the
+  // assertions below can pass by accident on a default.
   const before = await page.evaluate(() => {
     const s = (window as any).__plumbline;
     return { bodySize: Number(s.config.bodySize ?? 18), theme: s.config.theme ?? "system" };
@@ -136,14 +130,14 @@ test("a backup written before the rename restores the reader's settings, not the
   expect(after.sideMargin, lost).toBe(44);
   expect(after.copyStyle, lost).toBe("verseMarkdown");
 
-  // And the app is USING it, not merely holding it: the pane the backup was
-  // last in is what opened, and the theme it chose is what paints.
+  // And the app is using it, not merely holding it: the pane the backup was last in is what
+  // opened, and the theme it chose is what paints.
   expect(after.pane, "the restored session opened somewhere else entirely").toBe("Rev 22");
   await expect(page.locator(".subtitle")).toHaveText("Revelation 22", { timeout: 30_000 });
   expect(after.paper.toLowerCase(), "the restored night theme is not on the page").toContain("#0");
 
-  // Settings shows the restored size back to the reader (the Aa preview is
-  // rendered at it) — the same number, arrived at through the DOM.
+  // Settings shows the restored size back to the reader: the Aa preview is rendered at it, so the
+  // same number is arrived at through the DOM.
   await openSettings(page);
   const aa = await page.locator(".dialog .aa").evaluate((el) => getComputedStyle(el).fontSize);
   expect(aa, "Settings is not showing the restored text size").toBe("33px");

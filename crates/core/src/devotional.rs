@@ -1,46 +1,36 @@
 //! Devotionals: a bundled booklet of dated readings, one entry a day.
 //!
-//! Two halves, and they are different kinds of thing.
+//! **The catalogue** (`data/devotional.json`, format `devotional-v1`) is authored
+//! content that ships with the app — a numbered run of entries, each with a
+//! scripture passage, a reflection, and an activity. `scripts/build-devotional.mjs`
+//! compiles and validates it, so everything here may assume a well-formed file.
 //!
-//! **The catalogue** (`data/devotional.json`, format `devotional-v1`) is
-//! authored content that ships with the app — a booklet is a numbered run of
-//! entries, each with a scripture passage, a reflection, and an activity.
-//! `scripts/build-devotional.mjs` compiles it and does the validating, so
-//! everything here may assume a well-formed file; a reader's home is never the
-//! place to discover that day 12 has no activity.
+//! References are stored STRUCTURED (`{book:"John", chapter:14, verse:15, end:18}`),
+//! never as the string "John 14:15–18", so the shell can render the passage from
+//! whichever corpus the reader is in and label it in their own language. An entry
+//! may carry more than one range.
 //!
-//! References are stored STRUCTURED (`{book:"John", chapter:14, verse:15,
-//! end:18}`), never as the string "John 14:15–18". That is what lets the shell
-//! render the passage from whichever corpus the reader is in and print the
-//! label in their own language ("Johannes 14,15–18") — the same reasoning the
-//! welcome screen's quotes follow. An entry may carry more than one range: the
-//! booklet's day 4 is `John 14:15–18, 25–27`.
+//! Text is keyed by language (`texts: {"en": …}`): a translation is a second text on
+//! the SAME entry, not a second booklet, so adding one is additive against a frozen
+//! format.
 //!
-//! Text is keyed by language (`texts: {"en": …}`) for the same reason the
-//! hymnal's is: a translation is a second text on the SAME entry, not a second
-//! booklet, so adding German later is additive against a frozen format.
+//! **A run** (`home/devotionals/<id>.json`, format `plumbline-devotional-run-v1`) is
+//! the reader's own data: which booklet, when started, which days finished. One file
+//! per running booklet, beside `plans/` and `reading/` in the backup zip.
 //!
-//! **A run** (`home/devotionals/<id>.json`, format
-//! `plumbline-devotional-run-v1`) is the reader's own data: which booklet they
-//! started, when, and which days they have finished. One file per running
-//! booklet, beside `plans/` and `reading/` in the backup zip.
+//! The pacing is **sequence-anchored, one entry a day** — a different model from
+//! `plan.rs`:
 //!
-//! The pacing is **sequence-anchored, one entry a day**, which is a different
-//! model from `plan.rs` and deliberately so:
+//!   - "Today's entry" is the lowest day not yet marked done; missing a week skips
+//!     no content.
+//!   - Completion is DECLARED, not derived. A day is a reflection and an activity,
+//!     and nothing observable says those were done — the reader presses Done.
+//!   - Having banked a day, the next waits for the next local midnight. This is the
+//!     one place the model consults a calendar, and why [`Run::last_done`] exists.
 //!
-//!   - "Today's entry" is the lowest day not yet marked done — start in March
-//!     and you still begin at day 1, and missing a week skips no content.
-//!   - Completion is DECLARED, not derived. A reading plan infers a finished
-//!     day from the reading tracker, but a devotional's day is a reflection and
-//!     an activity, and nothing observable says those were done. The reader
-//!     presses Done at the foot of the page; that is the only signal there is.
-//!   - Having banked a day, the next one waits for the next local midnight
-//!     (maintainer, 2026-08-26). This is the one place the model consults a
-//!     calendar, and it is why [`Run::last_done`] stores a date at all.
-//!
-//! The core has no clock: the *reader's own local* `YYYY-MM-DD` arrives from
-//! the shell, as it does for the seating slots. A UTC date would roll the
-//! entry over at the wrong hour for most of the world.
+//! The core has no clock: the *reader's own local* `YYYY-MM-DD` arrives from the
+//! shell. A UTC date would roll the entry over at the wrong hour for most of the
+//! world.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -63,12 +53,10 @@ pub const BASE_LANG: &str = "en";
 
 // ── the catalogue ─────────────────────────────────────────────────────────────
 //
-// camelCase throughout, like every other wire and on-disk type here — and it is
-// load-bearing rather than cosmetic: `newBeliever` in the data would otherwise
-// deserialize into nothing and take its `#[serde(default)]` false, which is a
-// booklet quietly declining to be the one a new believer is handed. A `default`
-// on a misspelled field never errors, so only a test that reads the SHIPPED
-// file can catch it (see `the_shipped_catalogue_loads`).
+// camelCase throughout, and load-bearing: a `#[serde(default)]` field whose rename
+// does not match the data never errors, it silently reads false — `newBeliever`
+// would become a booklet quietly declining to be the new-believer one. Only a test
+// over the SHIPPED file catches that (`the_shipped_catalogue_loads`).
 
 /// One passage an entry sits on. `end` absent is a single verse.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,9 +91,8 @@ pub struct Entry {
     pub texts: BTreeMap<String, EntryText>,
 }
 
-/// A titled run of days ("days 8–14, Growing in Faith and Understanding"). The
-/// booklet calls these weeks; the format does not, because `from`/`to` are day
-/// numbers and a booklet need not be week-shaped.
+/// A titled run of days. The booklet calls these weeks; the format does not, since
+/// `from`/`to` are day numbers and a booklet need not be week-shaped.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Section {
@@ -130,10 +117,10 @@ pub struct BookletText {
 pub struct Devotional {
     pub id: String,
     pub days: u32,
-    /// Whether the new-believer welcome starts this booklet automatically. A
-    /// flag on the DATA rather than an id written into a shell, so shipping a
-    /// second booklet cannot quietly change which one a new believer is handed.
-    /// Absent reads as false: a booklet opts in, it is never defaulted into.
+    /// Whether the new-believer welcome starts this booklet automatically. On the
+    /// DATA rather than an id in a shell, so shipping a second booklet cannot
+    /// change which one a new believer is handed. Absent reads as false — a booklet
+    /// opts in, never defaults in.
     #[serde(default)]
     pub new_believer: bool,
     #[serde(default)]
@@ -154,7 +141,6 @@ impl Devotional {
     }
 
     /// The booklet's words in `lang`, falling back to the base language.
-    /// A booklet with neither is not one the build step would have written.
     pub fn text(&self, lang: &str) -> Option<&BookletText> {
         self.texts.get(lang).or_else(|| self.texts.get(BASE_LANG))
     }
@@ -168,8 +154,7 @@ impl Devotional {
 
 impl Entry {
     /// This entry's words in `lang`, falling back to the base language, so a
-    /// reader whose language is half-translated reads English rather than a
-    /// blank page.
+    /// half-translated language reads English rather than a blank page.
     pub fn text(&self, lang: &str) -> Option<&EntryText> {
         self.texts.get(lang).or_else(|| self.texts.get(BASE_LANG))
     }
@@ -181,10 +166,10 @@ struct CatalogueDoc {
     devotionals: Vec<Devotional>,
 }
 
-/// Load `data/devotional.json`. A missing file is an EMPTY catalogue, not an
-/// error — an old pack or a trimmed home simply offers no devotionals — but a
-/// file that exists and does not parse, or carries the wrong format tag, is a
-/// real error: data is present and unusable. The `hymnal::load` stance.
+/// Load `data/devotional.json`. A missing file is an EMPTY catalogue, not an error
+/// (a trimmed home simply offers no devotionals), but one that exists and will not
+/// parse — or carries the wrong format tag — is a real error. The `hymnal::load`
+/// stance.
 pub fn load(path: impl AsRef<Path>) -> Result<Vec<Devotional>, Error> {
     let path = path.as_ref();
     match std::fs::read_to_string(path) {
@@ -220,9 +205,9 @@ pub struct Run {
     pub lang: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub done: Vec<u32>,
-    /// The reader's LOCAL date (`YYYY-MM-DD`) on which a day was last banked —
-    /// the whole of the calendar this model keeps. It is what holds tomorrow's
-    /// entry until tomorrow; a run that has never had a Done has none.
+    /// The reader's LOCAL date (`YYYY-MM-DD`) a day was last banked — the whole of
+    /// the calendar this model keeps, and what holds tomorrow's entry until
+    /// tomorrow. `None` until the first Done.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_done: Option<String>,
     /// Set aside, kept whole: holds its place and its days, asks nothing — no
@@ -278,11 +263,10 @@ pub fn next_day(run: &Run, days_total: u32, today: &str) -> Option<Today> {
         day,
         days_done,
         days_total,
-        // One entry a day: having banked one today, the next waits for
-        // midnight. A clock that moved BACKWARDS (a flight, a corrected device)
-        // reads as "not today" and so unlocks — permissive on purpose, because
-        // the failure that matters is locking a reader out of their own
-        // booklet, not letting them read one entry early.
+        // One entry a day: having banked one today, the next waits for midnight. A
+        // clock that moved BACKWARDS reads as "not today" and unlocks — permissive
+        // on purpose, since locking a reader out of their booklet is the failure
+        // that matters.
         available: run.last_done.as_deref() != Some(today),
     })
 }
@@ -311,9 +295,8 @@ fn run_path(home: impl AsRef<Path>, id: &str) -> PathBuf {
     runs_dir(home).join(format!("{}.json", store::slug(id, "devotional")))
 }
 
-/// Every running booklet, plus one message per file that would not load. A
-/// damaged file is reported and left where it lies — never overwritten (the
-/// `reading` stance): the reader's own record is theirs, not ours.
+/// Every running booklet, plus one message per file that would not load. A damaged
+/// file is reported and left where it lies, never overwritten (the `reading` stance).
 pub fn load_runs(home: impl AsRef<Path>) -> (Vec<Run>, Vec<String>) {
     let mut runs = Vec::new();
     let mut errs = Vec::new();
@@ -434,9 +417,8 @@ mod tests {
         assert!(t.available, "nothing has been banked, so today's entry is on offer");
     }
 
-    /// The whole of the pacing rule, in one pass: Done banks the day, the next
-    /// entry is held back for the rest of the CALENDAR day, and it is offered
-    /// again at the next local midnight.
+    /// The pacing rule in one pass: Done banks the day, the next entry is held back
+    /// for the rest of the calendar day, and offered again at the next local midnight.
     #[test]
     fn the_next_entry_waits_for_the_next_local_day() {
         let mut run = Run::new("sample", "2026-08-26T10:00:00Z", Some("en"));
@@ -456,8 +438,8 @@ mod tests {
     fn banking_a_day_twice_cannot_push_tomorrow_further_away() {
         let mut run = Run::new("sample", "2026-08-26T10:00:00Z", Some("en"));
         assert!(mark_done(&mut run, 1, "2026-08-26"));
-        // The same Done arriving again the NEXT day (a stale tab, a double tap
-        // across midnight) must not re-stamp the date and hold day 2 back again.
+        // The same Done arriving the NEXT day (a stale tab, a tap across midnight)
+        // must not re-stamp the date and hold day 2 back again.
         assert!(!mark_done(&mut run, 1, "2026-08-27"));
         assert_eq!(run.last_done.as_deref(), Some("2026-08-26"));
         assert!(next_day(&run, 3, "2026-08-27").unwrap().available);
@@ -525,9 +507,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// The SHIPPED catalogue, not a fixture: the file the build step wrote is
-    /// the one the engine will read, and this is the only test that would
-    /// notice `scripts/build-devotional.mjs` and this loader disagreeing.
+    /// The SHIPPED catalogue, not a fixture — the only test that would notice
+    /// `scripts/build-devotional.mjs` and this loader disagreeing.
     #[test]
     fn the_shipped_catalogue_loads() {
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -538,10 +519,8 @@ mod tests {
         }
         let all = load(&path).unwrap();
         assert!(!all.is_empty());
-        // The new-believer flag must survive the round trip from the data file.
-        // It is `#[serde(default)]`, so a rename mismatch does not error — it
-        // silently reads false, and the welcome then starts nothing. Exactly one
-        // booklet carries it (`scripts/build-devotional.mjs` refuses two).
+        // The new-believer flag is `#[serde(default)]`, so a rename mismatch does
+        // not error — it silently reads false and the welcome starts nothing.
         assert_eq!(
             all.iter().filter(|d| d.new_believer).count(),
             1,

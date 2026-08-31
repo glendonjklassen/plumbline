@@ -1,17 +1,14 @@
 //! Grammatical function words — Strong's codes for articles, conjunctions,
 //! prepositions, pronouns, negations, the be-verbs, and bare deictic adverbs.
 //!
-//! Concept-neighbour surfaces (embedding spokes, collocates) exclude these:
-//! function words co-occur with *everything*, so distributionally they sit
-//! "near" every content word — the concept map for *believe* was offering
-//! *because* as a similar concept. The query
-//! code itself is never filtered — a reader can still open ὅτι or הָיָה
-//! directly and study it; the codes below just stop appearing as neighbours.
+//! Concept-neighbour surfaces (collocates, map spokes) exclude these: function
+//! words co-occur with everything, so distributionally they sit near every
+//! content word. Only neighbour lists are filtered — a reader can still open ὅτι
+//! or הָיָה directly.
 //!
-//! Curated by hand against `data/strongs.json` (each entry eyeballed against
-//! its lemma + KJV definition) rather than derived from morphology: the
-//! morphology sidecar is an optional pack, and neighbour lists must not change
-//! shape depending on which packs happen to be installed.
+//! Curated by hand against `data/strongs.json` rather than derived from
+//! morphology: the morphology sidecar is an optional pack, and neighbour lists
+//! must not change shape with which packs are installed.
 
 /// Sorted for binary search — `cargo test` guards the ordering.
 const FUNCTION_WORDS: &[&str] = &[

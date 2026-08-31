@@ -4,22 +4,20 @@
 //! Ported from overlay `CrossRef.hs`. Hydrated offline into
 //! `data/cross-references.tsv` (~344k references covering ~94% of verses;
 //! openbible.info, substantially the public-domain Treasury of Scripture
-//! Knowledge plus reader votes). This is a *topical* tier — human-curated
-//! pointers shown clearly labelled, never auto-blessed into weaves — and
-//! involves no ML at all, so it ports as a plain parser.
+//! Knowledge plus reader votes). A *topical* tier: human-curated pointers shown
+//! clearly labelled, never auto-blessed into weaves.
 //!
-//! The file is parsed with plain tab-splitting rather than JSON: at 344k rows
-//! the difference is startup time you can feel. Absent the file, the index is
-//! empty and the reader runs fine (the house "graceful absence" pattern).
+//! Parsed by plain tab-splitting rather than JSON — at 344k rows the difference
+//! is startup time you can feel. Absent the file, the index is empty and the
+//! reader runs fine.
 
 use std::collections::HashMap;
 use std::path::Path;
 
 use crate::reference::VRef;
 
-/// One reference out of a verse: the target (with an optional range end when
-/// the pointer spans verses) and its vote count — the community's ranking of
-/// how illuminating the link is.
+/// One reference out of a verse: the target (with an optional range end when the
+/// pointer spans verses) and its vote count.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CrossRef {
     pub to: VRef,
@@ -41,8 +39,8 @@ pub fn parse_xref_line(line: &str) -> Option<(VRef, CrossRef)> {
     if line.starts_with('#') {
         return None;
     }
-    // Exactly four tab-separated columns, split without a per-row Vec (this
-    // runs ~344k times at load).
+    // Exactly four tab-separated columns, split without a per-row Vec — this
+    // runs ~344k times at load.
     let mut it = line.split('\t');
     let (Some(from), Some(to), Some(end), Some(votes), None) = (it.next(), it.next(), it.next(), it.next(), it.next())
     else {
@@ -70,18 +68,14 @@ pub fn parse_cross_refs(text: &str) -> XRefIx {
     ix
 }
 
-/// The same parse, one bite at a time — for the boot warm.
+/// The same parse, one bite at a time, for the boot warm.
 ///
 /// [`parse_cross_refs`] is ~344k rows in one call, and the engine worker is the
-/// only thread that answers layout, taps and word studies, so for however long it
-/// runs the reader's app is unavailable. Measured **89 ms** for the whole file
-/// on a desktop, against a ~300 ms warm-chunk budget —
-/// which on a phone (5–10× slower) is the budget, spent on one phase.
-///
-/// So the warm feeds it instead: [`feed`](Self::feed) parses `n` lines and
-/// returns whether more remain, and [`finish`](Self::finish) does the per-verse
-/// vote sort. Same index, same order, in pieces a tap can get between — there is
-/// a test that the two agree exactly.
+/// only thread answering layout, taps and word studies, so the app is
+/// unavailable for as long as it runs: 89 ms on a desktop, and 5–10× that on a
+/// phone against a ~300 ms warm-chunk budget. [`feed`](Self::feed) parses `n`
+/// lines and reports whether more remain; [`finish`](Self::finish) does the
+/// per-verse vote sort. Same index, same order, in pieces a tap can get between.
 pub struct XRefIxBuilder {
     text: String,
     /// Byte offset of the next unparsed line. A cursor, not a `Lines` iterator,
@@ -92,8 +86,7 @@ pub struct XRefIxBuilder {
 
 impl XRefIxBuilder {
     /// A builder over the file at `path`. A missing or unreadable file yields a
-    /// builder with nothing to do, which finishes as an empty index — the house
-    /// "graceful absence" rule, same as [`load_cross_refs`].
+    /// builder with nothing to do, which finishes as an empty index.
     pub fn from_path(path: impl AsRef<Path>) -> XRefIxBuilder {
         let text = match std::fs::read(path.as_ref()) {
             Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
@@ -102,8 +95,7 @@ impl XRefIxBuilder {
         XRefIxBuilder { text, at: 0, ix: HashMap::new() }
     }
 
-    /// A builder with nothing to parse, for an engine opened without a home —
-    /// it finishes as an empty index, which is what that engine had before.
+    /// A builder with nothing to parse, for an engine opened without a home.
     pub fn empty() -> XRefIxBuilder {
         XRefIxBuilder { text: String::new(), at: 0, ix: HashMap::new() }
     }
@@ -192,18 +184,15 @@ mod tests {
         assert!(ix.is_empty());
     }
 
-    /// The sliced parse and the one-shot parse must produce the SAME index —
-    /// same verses, same references, same vote order. Slicing is a scheduling
-    /// change, and a scheduling change that alters the answer is a bug.
-    ///
-    /// Driven at several slice sizes, including 1 (every line its own bite) and a
-    /// size past the end of the file, because the interesting failures are at the
-    /// boundaries: a cursor that skips the line after a chunk, or one that
-    /// re-parses it and doubles a verse's references.
+    /// Slicing is a scheduling change, so it must produce the same index: same
+    /// verses, same references, same vote order. Driven at several slice sizes
+    /// including 1 and one past the end of the file, because the failures live at
+    /// the boundaries — a cursor that skips the line after a chunk, or re-parses
+    /// it and doubles a verse's references.
     #[test]
     fn the_sliced_parse_agrees_with_the_one_shot_parse() {
         // Deliberately awkward: a comment, a blank line, junk, CRLF, a ranged
-        // target, votes that need sorting, and NO trailing newline.
+        // target, votes that need sorting, and no trailing newline.
         let text = "# TSK\r\nJohn 3:16\tRom 5:8\t\t5\r\n\njunk\nJohn 3:16\tGen 1:1\t\t42\nGen 1:1\tJohn 1:1\tJohn 1:3\t7\nJohn 3:16\t1John 4:9\t\t19";
         let want = parse_cross_refs(text);
         assert_eq!(want.len(), 2, "fixture should hold two source verses");
@@ -229,8 +218,8 @@ mod tests {
         assert!(b.finish().is_empty());
     }
 
-    /// Where the sliced parse's time actually goes, and what the worst single
-    /// slice costs — the number the slicing exists to hold down.
+    /// Where the sliced parse's time goes, and what the worst single slice costs
+    /// — the number the slicing exists to hold down.
     /// `cargo test --release -p plumbline-core -- --ignored --nocapture xref_slice_profile`
     #[test]
     #[ignore]

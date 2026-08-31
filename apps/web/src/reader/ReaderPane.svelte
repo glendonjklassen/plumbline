@@ -1,30 +1,19 @@
 <script module lang="ts">
   /**
-   * What the resize path asks the engine for, counted rather than timed.
-   *
-   * The same device as `__plumblinePaint` in `src/reader/paint.ts`, for the same
-   * reason: a ResizeObserver fires once per frame for as long as a window is being
-   * dragged, so the only honest test of the debounce below compares the layouts it
-   * ASKED FOR against the ticks it was handed. A millisecond ceiling would be
-   * satisfied by the bug — the working rules record two tests that passed against
-   * exactly what they described.
-   *
-   * Module-scoped, so the counts cover every pane on screen. Present in
-   * production builds on purpose (the e2e suite runs the production bundle): the
-   * cost is three integer increments per resize tick, and nothing here sits on the
-   * scroll or paint path.
+   * Debounce probe for the e2e suite: layouts asked for against resize ticks
+   * handed in. Counted, not timed — a millisecond ceiling would be satisfied by
+   * the bug. Module-scoped (covers every pane) and kept in production builds,
+   * which is what the e2e suite runs.
    */
   interface ResizeProbe {
     /** Engine layout requests this shell issued — all panes, all causes. */
     requests: number;
-    /** Observer callbacks that reported a CHANGED width: what the debounce is
-     *  being asked to collapse. */
+    /** Observer callbacks reporting a changed width: what the debounce collapses. */
     ticks: number;
     /** Trailing debounce timers that actually fired. */
     timerFires: number;
-    /** `timerFires` as it stood when the FIRST layout request went out. A cold
-     *  boot must not wait 120 ms for its text, so this must be 0. Deliberately
-     *  NOT cleared by `reset()` — there is only ever one first layout. */
+    /** `timerFires` when the first layout request went out; must be 0, since a cold
+     *  boot must not wait 120 ms for its text. Not cleared by `reset()`. */
     firstRequestTimerFires: number | null;
     reset(): void;
   }
@@ -43,25 +32,23 @@
 </script>
 
 <script lang="ts">
-  // One reading column: nav strip + chapter canvas. Layout comes from the
-  // core (display list over the measure callback); this component owns
-  // scroll/zoom/gesture state and repaints on any reactive change.
+  // One reading column: nav strip + chapter canvas. Layout comes from the core
+  // (display list over the measure callback); this component owns scroll/zoom/
+  // gesture state and repaints on any reactive change.
   //
-  // Scrolling is NATIVE: the canvas sits sticky inside a spacer
-  // sized to the laid-out chapter, and the browser owns the scroll — momentum,
-  // fling, and overscroll come free (the hand-rolled 1:1 pointer tracking made
-  // the whole app feel dead on phones). `pane.scrollY` mirrors scrollTop both
-  // ways: onscroll writes it, and external writers (keyboard, navigation,
-  // verse targeting) push it back via the guarded effect below.
+  // Scrolling is native — the canvas sits sticky inside a spacer sized to the
+  // laid-out chapter, so momentum, fling and overscroll come free. `pane.scrollY`
+  // mirrors scrollTop both ways: onscroll writes it, and external writers
+  // (keyboard, navigation, verse targeting) push it back via the guarded effect
+  // below.
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
   import { hitTest, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
   import { languages, t } from "../lib/i18n.svelte";
 
   const MAX_COLUMN = 720;
-  /** Page-turn mode's guaranteed side gutter: the 44px touch floor. The mode
-   *  exists so a page-turner remote (which taps a fixed spot near an edge)
-   *  can page the text — a 0px margin would leave it nothing to press. */
+  /** Page-turn mode's guaranteed side gutter: the 44px touch floor, so a
+   *  page-turner remote tapping near an edge always has something to press. */
   const PAGE_TURN_MARGIN = 44;
 
   interface Props {
@@ -79,51 +66,30 @@
   let cssW = $state(0);
   let cssH = $state(0);
 
-  // RAW state, not deep state. A display list is REPLACED WHOLESALE — the two
-  // writers below only ever ASSIGN a fresh array (the layout reply, and the
-  // empty list on a chapter change), and no code anywhere edits an item — so
-  // there is nothing for a per-item, per-field proxy to observe.
-  //
-  // Deep `$state` gave every item a proxy of its own — 2,643 of them on Psalm
-  // 119, counted from the page, not estimated — with a lazily-created signal
-  // behind each field those proxies were read for: nine of the twelve on the
-  // frame path (x, y, w, h, kind, text, flags, verse, verseNumber), eleven once
-  // hover and tap are counted. And a scroll frame walks the whole list THREE
-  // times: `trackReached` from onscroll, then `verseExtents` and the text loop
-  // inside the paint. Every one of those reads went through a trap to watch for a
-  // change that cannot happen. Measured in the page on this list, mean of 20
-  // walks reading those nine fields: 2.30 ms proxied against 0.10 ms raw — 23x,
-  // and it was being paid three times per frame.
-  //
-  // `LayoutItem` is `readonly` field by field, so the compiler now holds the
-  // invariant that makes this correct rather than merely cheap; `verseExtents`
-  // memoizes on the same guarantee, which takes the second of those three walks
-  // off the frame entirely.
-  //
-  // Reassignment is still tracked — raw state is a signal on the VARIABLE — so
-  // every `void items` dependency below, and the text mirror, behave exactly as
-  // they did. `e2e/reader-perf.spec.ts` counts both.
+  // Raw state, not deep: a display list is replaced wholesale and no item is ever
+  // edited (`LayoutItem` is readonly field by field), so per-item proxies cost
+  // without buying — 2.30 ms proxied against 0.10 ms raw per walk of Psalm 119,
+  // and a scroll frame walks the list three times. Reassignment is still tracked,
+  // so the `void items` dependencies below still fire.
   let items = $state.raw<readonly LayoutItem[]>([]);
-  // Straight off the display list the engine returned, not derived from the
-  // pane's language: it is the TEXT that decides, and a reader whose Arabic
-  // download has not landed is looking at the KJV in this pane.
+  // Off the returned display list, not the pane's language: the text decides, and
+  // a reader whose Arabic download has not landed is looking at the KJV here.
   let itemsRtl = $state(false);
   let contentH = $state(0);
-  /** Which chapter `items` describes — the guard against painting one
-   *  chapter's text under another's name. */
+  /** Which chapter `items` describes — the guard against painting one chapter's
+   *  text under another's name. */
   let shownKey = "";
 
   const fontPx = $derived(Number(s.config.bodySize ?? 20));
   const sideMargin = $derived.by(() => {
     const m = Number(s.config.sideMargin ?? 28);
-    // Page-turn mode guarantees the tap gutters exist whatever the margin
-    // slider says; off, the slider's value stands untouched.
+    // Page-turn mode guarantees the tap gutters whatever the slider says.
     return s.config.pageTurn ? Math.max(m, PAGE_TURN_MARGIN) : m;
   });
   const lineSpacing = $derived(Number(s.config.lineSpacing ?? 1.35));
   const versePerLine = $derived(!!s.config.versePerLine);
-  // Both default ON: an absent key is a config written before the setting
-  // existed, not a reader who turned it off.
+  // Both default on: an absent key is a config written before the setting existed,
+  // not a reader who turned it off.
   const verseNumbers = $derived(s.config.verseNumbers !== false);
   const addedItalics = $derived(s.config.addedItalics !== false);
   const columnWidth = $derived(Math.max(120, Math.min(cssW - 2 * sideMargin, MAX_COLUMN)));
@@ -146,7 +112,7 @@
   const verseNumOf = (refKey: string) => Number(refKey.slice(refKey.lastIndexOf(":") + 1)) || 0;
 
 
-  // Verses with a personal note — the square gutter mark (Tier-0 #3).
+  // Verses with a personal note — the square gutter mark.
   const noteVerses = $derived.by(() => {
     void s.studyEpoch;
     const prefix = `${pane.book} ${pane.chapter}:`;
@@ -161,24 +127,19 @@
   let layoutSeq = 0;
   $effect(() => {
     if (!pane || cssW <= 0) return;
-    // A pane whose text is not open yet — a restored language pane at boot, or
-    // a failed open — must not ask for a layout the worker can only refuse
-    // ("the de text is not open on this device"). `langLoading` flipping false
-    // re-runs this effect, which is what paints the pane the moment its engine
-    // is ready.
+    // A pane whose text is not open yet must not ask for a layout the worker can
+    // only refuse; `langLoading` flipping false re-runs this effect, which paints
+    // the pane the moment its engine is ready.
     if (pane.lang && (pane.langLoading || pane.langError)) return;
-    // Re-lay when the WORDS change, not just the geometry — the AKJV overlay
-    // swaps them engine-side, so nothing about this pane's own inputs moves.
-    // An epoch rather than the setting itself, so the re-layout happens strictly
-    // after the engine has been told (see Session.setAkjvOverlay).
+    // Re-lay when the words change, not just the geometry: the AKJV overlay swaps
+    // them engine-side. An epoch, not the setting, so the re-layout happens after
+    // the engine has been told (Session.setAkjvOverlay).
     void s.layoutEpoch;
     const seq = ++layoutSeq;
-    // Moving to a DIFFERENT chapter drops the old display list at once. The
-    // nav strip and header change the instant the reader taps, so holding the
-    // previous chapter on the canvas until the layout returns showed John's
-    // text under a header reading Acts — which reads as broken. A re-layout of
-    // the SAME chapter (resize, zoom, spacing)
-    // keeps its text on screen: there is nothing stale about it.
+    // A different chapter drops the old display list at once: the nav strip and
+    // header change the instant the reader taps, so holding the previous chapter
+    // showed John's text under a header reading Acts. A re-layout of the same
+    // chapter (resize, zoom, spacing) keeps its text on screen.
     const key = `${pane.book} ${pane.chapter} ${pane.lang ?? ""}`;
     if (key !== shownKey) {
       untrack(() => {
@@ -218,17 +179,12 @@
   });
 
   // ── the text mirror ──
-  // A canvas holds no text, so to a screen reader, to the browser's own Ctrl+F,
-  // and to a translate feature the chapter simply was not there. This mirrors the
-  // display list into real DOM text — visually hidden, but present in the
-  // accessibility tree and findable — so the words on the page are words the page
-  // actually has. Verse by verse, in reading order, so it can be navigated and
-  // quoted rather than being one undifferentiated blob.
-  //
-  // Derived from `items` ALONE: it is rebuilt once per layout and never touches
-  // pane.scrollY, so nothing about it sits on the scroll or paint path. A
-  // geometry-only re-layout (resize, zoom, spacing) yields the identical strings,
-  // and the keyed each below then writes nothing to the DOM at all.
+  // A canvas holds no text, so a screen reader, the browser's Ctrl+F and any
+  // translate feature see no chapter at all. This mirrors the display list into
+  // real DOM text — visually hidden, present in the accessibility tree — verse by
+  // verse in reading order. Derived from `items` alone, never pane.scrollY, so it
+  // stays off the scroll and paint path; a geometry-only re-layout yields
+  // identical strings and the keyed each below then writes nothing.
   const mirror = $derived.by(() => {
     const verses: { n: number; text: string }[] = [];
     let cur: { n: number; text: string } | null = null;
@@ -246,10 +202,9 @@
     return verses;
   });
 
-  // Lay out the chapters on either side while the reader reads, so ‹ › and a
-  // swipe land on an already-laid-out page. Idle work behind the visible
-  // chapter, cancelled if the pane moves on first — the worker keeps them in
-  // its turn cache, and the shell never receives the display lists.
+  // Lay out the neighbouring chapters while the reader reads, so ‹ › and a swipe
+  // land on an already-laid-out page. The worker keeps them in its turn cache; the
+  // shell never receives the display lists.
   let prefetchTimer: ReturnType<typeof setTimeout> | null = null;
   function prefetchNeighbours(): void {
     if (prefetchTimer) clearTimeout(prefetchTimer);
@@ -262,11 +217,9 @@
     }, 400);
   }
 
-  // Scroll the navigation target into view on each fresh layout, until the
-  // user scrolls this pane themselves (wheel/touch/keys clear pendingScroll)
-  // or it navigates again. Re-applying per layout keeps the verse in place
-  // while pane widths settle (pane splits, panel open/close, zoom); the band
-  // itself (pane.targetVerse) persists until the next navigation regardless.
+  // Scroll the navigation target into view on each fresh layout, until the reader
+  // scrolls this pane themselves or it navigates again. Re-applying per layout
+  // holds the verse while pane widths settle (splits, panel open/close, zoom).
   $effect(() => {
     if (!pane.pendingScroll) return;
     void items;
@@ -283,18 +236,11 @@
     items.reduce((m, it) => (it.kind === "word" && it.y > m ? it.y : m), 0) || contentH,
   );
   function maxScroll(): number {
-    // A PHONE is not the usual bottom-stop (content bottom meets screen
-    // bottom): the reader may keep pushing until the chapter's LAST LINE
-    // reaches the TOP of the pane — and no further. For reading on your back,
-    // where something blocks the bottom of the screen and turning early means
-    // moving your head (maintainer UAT ask, 2026-08-11, phones only
-    // 2026-08-12). The LINE, not the content bottom: stopping there keeps the
-    // line on screen, where the first cap let the text slide off entirely and
-    // left a blank pane. The spacer below carries the same tail, so this is
-    // real scroll room — no rubber-band snap-back.
-    //
-    // On a desktop nobody reads lying down and the tail just looks like a
-    // scrollbar lying about how much text is left, so the classic stop rules.
+    // On a phone the reader may keep pushing until the chapter's last LINE reaches
+    // the top of the pane, for reading lying down where the bottom of the screen is
+    // blocked. The line, not the content bottom, so the text cannot slide off and
+    // leave a blank pane; the spacer below carries the same tail, so it is real
+    // scroll room with no rubber-band snap-back. Desktops keep the classic stop.
     if (s.narrow) return lastLineTop + MARGIN;
     return Math.max(0, contentH + 2 * MARGIN - cssH);
   }
@@ -307,7 +253,6 @@
 
   // ── native scroll ↔ pane.scrollY ──
   // cssH + maxScroll(), so the browser's own clamp agrees with clampScroll.
-  // (Reads `s.narrow` and the layout the same way maxScroll does.)
   const spacerH = $derived(
     contentH > 0
       ? cssH + (s.narrow ? lastLineTop + MARGIN : Math.max(0, contentH + 2 * MARGIN - cssH))
@@ -319,23 +264,22 @@
     if (programmaticScroll) {
       programmaticScroll = false;
     } else if (Math.abs(top - pane.scrollY) > 0.5) {
-      // The reader scrolled this pane themselves — it owns focus, and any
-      // pending scroll-to-verse must not fight them.
+      // The reader scrolled this pane themselves: a pending scroll-to-verse must
+      // not fight them.
       pane.pendingScroll = false;
       s.activePane = paneIdx;
       pane.scrollY = top;
-      // Chained panes follow — from the USER branch only, so a linked move
-      // (which arrives with the programmatic flag up) can never echo back.
+      // Chained panes follow — from the user branch only, so a linked move (which
+      // arrives with the programmatic flag up) can never echo back.
       s.syncLinkedScroll(paneIdx);
     }
     pane.scrollY = top;
     trackReached();
   }
 
-  /** The reading map's high-water mark: the deepest verse whose text has come
-   *  fully into view. Only ever rises within a chapter — reading back up does not
-   *  un-read anything, and reporting a fall would put pointless writes on the
-   *  scroll path. A verse counts once its LAST word is above the fold. */
+  /** The reading map's high-water mark: the deepest verse whose last word has come
+   *  fully into view. Only rises within a chapter — reading back up un-reads
+   *  nothing, and reporting a fall would put writes on the scroll path. */
   function trackReached(): void {
     if (!items.length || cssH <= 0) return;
     const bottom = pane.scrollY + cssH - MARGIN;
@@ -378,14 +322,11 @@
     void cssW;
     void cssH;
     void pane.targetVerse;
-    // The italics switch is a PAINT input, so it has to be named here like the
-    // rest: `draw` runs inside a rAF callback, outside this effect's tracking
-    // scope, so reading it down there registers nothing and the page keeps the
-    // italics until something else happens to repaint. (Verse numbers need no
-    // entry — they change `items`, which is already the first dependency.)
+    // Every paint input must be named here: `draw` runs in a rAF callback, outside
+    // this effect's tracking scope, so a read down there registers nothing.
     void addedItalics;
-    // Clamp before painting (untracked — clamping must never feed back into
-    // layout): covers End-key overshoot, resizes, and content changes alike.
+    // Clamp before painting; untracked, because clamping must never feed back into
+    // layout.
     untrack(clampScroll);
     cancelAnimationFrame(rafId);
     rafId = requestAnimationFrame(draw);
@@ -423,34 +364,19 @@
     );
   }
 
-  // ── resize: measure every tick, RE-LAY OUT ONLY WHEN IT SETTLES ──
-  // A ResizeObserver fires once per frame for as long as a window is being dragged
-  // or a phone is mid-rotation, and `cssW` feeds the layout effect above — so every
-  // one of those frames was an engine round trip for the whole chapter. Where the
-  // column really changed width (a phone, or any pane under 776 px, below
-  // MAX_COLUMN) that was a fresh turn-cache key and a real re-layout, and eight
-  // frames — an eighth of a second of dragging — was enough to push every entry out
-  // of the worker's cache as it then stood, including the two neighbours this pane
-  // had just prefetched, so the page turn after a resize paid full price for
-  // chapters the device already had. Where the column was capped and the key
-  // repeated, the cost was still Psalm 119's 2,643 items structured-cloned back over
-  // postMessage per frame, and the text mirror rebuilt from them.
+  // ── resize: measure every tick, re-lay out only when it settles ──
+  // A ResizeObserver fires once per frame while a window is dragged or a phone
+  // rotates, and `cssW` feeds the layout effect above — so every frame was an
+  // engine round trip for the whole chapter, evicting the worker's turn cache
+  // (prefetched neighbours included) within an eighth of a second of dragging.
+  // Trailing, not leading: the size the reader stopped at is the size the text has
+  // to be correct for, and each tick re-arms the timer so the last size wins.
   //
-  // TRAILING, not leading: the size the reader stopped at is the size the text has
-  // to be correct for, and a leading-edge layout is a layout for a width that has
-  // already gone. Each tick re-arms the timer, so the last size wins.
-  //
-  // THE FIRST MEASUREMENT IS NEVER DELAYED, and the two cases are told apart by
-  // `cssW === 0` — which is precisely "no layout has been on screen yet", the same
-  // condition the layout effect itself waits for. A cold boot therefore lays out
-  // inside the observer's first callback rather than 120 ms after it; only a change
-  // to a width the reader can already see is worth waiting out. (A pane that has
-  // been measured at zero — collapsed, or hidden behind a dialog — is in that same
-  // state, and rightly lays out at once when it comes back.)
-  //
-  // `cssH` is applied on EVERY tick regardless: it drives the paint, the canvas
-  // box and the scroll spacer, not the layout, so holding it back would letterbox
-  // the canvas mid-drag (a blank strip under a growing pane) and save nothing.
+  // `cssW === 0` means no layout has been on screen yet, so the first measurement
+  // is never delayed and a cold boot lays out inside the observer's first callback.
+  // `cssH` is applied on every tick regardless: it drives the paint, the canvas box
+  // and the scroll spacer, not the layout, so holding it back would only letterbox
+  // the canvas mid-drag.
   const RESIZE_SETTLE_MS = 120;
   $effect(() => {
     let settle: ReturnType<typeof setTimeout> | null = null;
@@ -477,23 +403,19 @@
     ro.observe(container);
     return () => {
       ro.disconnect();
-      // A pending settle must not outlive the pane. Svelte has already destroyed
-      // the effects that would react to it, so the write itself wakes nothing —
-      // what is left is a timer holding this closure, and through `container` its
-      // detached DOM, alive until it fires, plus a state write into a component
-      // that no longer exists. Neither is worth keeping (closing a pane while a
-      // drag is in flight is exactly how the reader gets both at once: closing one
-      // resizes the others).
+      // A pending settle must not outlive the pane: the timer holds this closure
+      // and, through `container`, its detached DOM. Closing a pane resizes the
+      // others, so a drag is often in flight at exactly this moment.
       if (settle) clearTimeout(settle);
       settle = null;
     };
   });
 
   // ── input ──
-  // Plain wheel is native (the container scrolls; onScroll mirrors it). This
-  // handler only claims the modified gestures — ctrl+wheel zoom, shift+wheel
-  // scroll-all-panes — so it must be a real non-passive listener (Svelte
-  // attaches onwheel passively, where preventDefault is ignored).
+  // Plain wheel is native. This handler claims only the modified gestures
+  // (ctrl+wheel zoom, shift+wheel scroll-all-panes), so it must be a real
+  // non-passive listener: Svelte attaches `onwheel` passively, where
+  // preventDefault is ignored.
   function onWheelModifiers(e: WheelEvent): void {
     if (e.ctrlKey) {
       e.preventDefault();
@@ -517,14 +439,10 @@
     return hitTest(items, e.clientX - rect.left - marginX, e.clientY - rect.top - MARGIN + pane.scrollY);
   }
 
-  // ── verse under a point: hit word's verse, else the nearest item on (or one
-  //    line from) the tapped line. The old fallback took the nearest verse
-  //    NUMBER anywhere in the chapter, by y alone — a tap mid-way through a
-  //    long verse sat lines from its own number and next to the following
-  //    verse's, so it named a verse the reader never touched; and a tap in the
-  //    dead space after the last line named one too. Words carry their verse,
-  //    so the word beside the tap is both closer and always right; beyond a
-  //    line's height from everything is padding, and padding is not a verse. ──
+  // ── verse under a point: the hit word's verse, else the nearest item on (or
+  //    within one line of) the tapped line. Words carry their verse, so the word
+  //    beside the tap is always right; beyond a line's height from everything is
+  //    padding, and padding is not a verse. ──
   function verseAt(e: MouseEvent | PointerEvent): string | null {
     const hit = hitAt(e);
     if (hit?.verse) return hit.verse;
@@ -567,9 +485,8 @@
   function onPointerDown(e: PointerEvent): void {
     s.activePane = paneIdx;
     moved = false;
-    // A fresh press always clears the swallow: if the tap that set it never
-    // produced a click (it landed elsewhere, or the browser dropped it), the
-    // stale flag must not eat this genuinely new one.
+    // A fresh press clears the swallow: if the tap that set it never produced a
+    // click, the stale flag must not eat this genuinely new one.
     suppressClick = false;
     if (e.pointerType === "touch") {
       touchCancelled = false;
@@ -602,32 +519,26 @@
   }
   function onPointerUp(e: PointerEvent): void {
     if (longPress) clearTimeout(longPress);
-    // Mouse buttons 4/5 → per-pane history (Tier-0 #2).
+    // Mouse buttons 4/5 → per-pane history.
     if (e.button === 3 || e.button === 4) {
       s.historyStep(paneIdx, e.button === 3 ? -1 : 1);
       return;
     }
     if (e.pointerType === "touch") {
       if (touchCancelled) return;
-      // A dominant horizontal fling steps the chapter: a swipe toward the side
-      // the text runs TOWARD goes forward. Left → next in English; in Arabic
-      // the page turns the other way, exactly as its paper does, so a
-      // right-going swipe is the next chapter.
+      // A dominant horizontal fling steps the chapter, toward the side the text
+      // runs: left → next in English, right → next in a right-to-left text.
       if (Math.abs(touchDx) > 72 && Math.abs(touchDx) > Math.abs(e.clientY - touchStartY)) {
         s.stepChapter(paneIdx, touchDx < 0 !== itemsRtl ? 1 : -1);
         touchDx = 0;
         return;
       }
       if (!moved) {
-        // The browser will re-deliver this same tap as a synthesized `click`,
-        // hit-tested against the page AS IT IS THEN. When it still targets the
-        // canvas, `suppressClick` stops the tap running twice; but when the tap
-        // has already opened the concept-study confirm, the page under the
-        // finger IS that dialog, and the ghost click presses whatever control
-        // sits there — measured live: the Cancel button, answering "no" to a
-        // question the reader never saw ("tapping a verse does nothing"); a
-        // finger's width away it would have been "Tag", a silent yes. So the
-        // ghost is swallowed at the document, wherever it lands.
+        // The browser re-delivers this tap as a synthesized `click`, hit-tested
+        // against the page as it is then. `suppressClick` covers the case where it
+        // still targets the canvas; when the tap has opened a dialog, the ghost
+        // presses whatever control now sits under the finger — so it is swallowed
+        // at the document, wherever it lands.
         suppressClick = true;
         swallowGhostClick();
         if (!pageTurnTap(e)) onTapWord(e);
@@ -635,11 +546,9 @@
       return;
     }
   }
-  /** Eat the synthesized `click` this touch tap is about to produce, whatever
-   *  it targets. Capture-phase so it runs before any handler; `once` plus a
-   *  short fuse so a tap whose ghost never arrives cannot cost a later, real
-   *  click (the ghost is dispatched with the tap's own input sequence — if it
-   *  has not come inside 200 ms, it is not coming). */
+  /** Eat the synthesized `click` this touch tap is about to produce, whatever it
+   *  targets. Capture-phase so it runs before any handler; `once` plus a 200 ms
+   *  fuse so a tap whose ghost never arrives cannot cost a later, real click. */
   function swallowGhostClick(): void {
     const swallow = (e: MouseEvent): void => {
       e.preventDefault();
@@ -648,19 +557,17 @@
     document.addEventListener("click", swallow, { capture: true, once: true });
     setTimeout(() => document.removeEventListener("click", swallow, true), 200);
   }
-  /** Page-turn mode: a tap in the side gutters pages the text — the right
-   *  side scrolls ahead, the left back — so a page-turner remote can drive
-   *  the page hands-free. The portion is the keyboard PageDown's own 85% of
-   *  a screen (Shell.svelte), so the two ways of paging agree. Returns true
-   *  when the tap was a page turn and must not fall through to word study. */
+  /** Page-turn mode: a tap in the side gutters pages the text (right ahead, left
+   *  back) so a page-turner remote can drive it hands-free. 85% of a screen, to
+   *  match the keyboard PageDown in Shell.svelte. Returns true when the tap was a
+   *  page turn and must not fall through to word study. */
   function pageTurnTap(e: MouseEvent | PointerEvent): boolean {
     if (!s.config.pageTurn) return false;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     if (x >= marginX && x <= marginX + columnWidth) return false;
-    // The far side of the column advances. For a right-to-left text that is the
-    // LEFT margin — a reader moving forward through Arabic is moving leftward —
-    // and `settings.pageTurnDesc` says so in each language.
+    // The far side of the column advances — the left margin for a right-to-left
+    // text; `settings.pageTurnDesc` says so in each language.
     const forward = x > marginX + columnWidth ? 1 : -1;
     const dir = itemsRtl ? -forward : forward;
     pane.pendingScroll = false;
@@ -668,8 +575,8 @@
     return true;
   }
 
-  // A word tap: in concept-study mode it tags the verse (fast concept sweep); the
-  // rest of the time it opens word study (Compose tap parity).
+  // A word tap: in concept-study mode it tags the verse; otherwise it opens word
+  // study.
   function onTapWord(e: MouseEvent | PointerEvent): void {
     if (s.inConceptStudy) {
       const refKey = verseAt(e);
@@ -699,10 +606,9 @@
   function onMouseMove(e: MouseEvent): void {
     const hit = hitAt(e);
     if (hit?.strongs?.length) {
-      // Cache-warmed on first hover; the tooltip fills on the next move. Asked
-      // of THIS PANE's text (qIn), so a German pane's gloss agrees with the
-      // study card a click opens — `q` alone answered from the app-language
-      // engine whatever the pane was reading.
+      // Cache-warmed on first hover; the tooltip fills on the next move. Asked of
+      // this pane's text (qIn), so the gloss agrees with the study card a click
+      // opens — plain `q` answers from the app-language engine instead.
       const st = s.qIn(pane.lang, "strongs", hit.strongs[0]);
       hoverTitle = st
         ? `${st.code}  ${st.lemma ?? ""}${st.xlit ? `  ${st.xlit}` : ""}\n${(st.kjv || st.def || "").slice(0, 80)}`
@@ -716,10 +622,9 @@
 
   const isActive = $derived(s.activePane === paneIdx && s.panes.length > 1);
 
-  // ── this pane's TEXT language (docs/PER-PANE-LANGUAGE.md) ──
-  // The chip names the BIBLE, not the language — "Luther", not "Deutsch". It is
-  // the text the column is painting, the reader picked a translation, and it is
-  // what the study card says about the same choice.
+  // ── this pane's text language ──
+  // The chip names the Bible the column is painting, not the language — Luther,
+  // not Deutsch — matching what the study card says about the same choice.
   let langMenu = $state(false);
   const langChoices = $derived(languages());
   const paneBible = $derived.by(() => {
@@ -763,8 +668,7 @@
     </button>
     <button onclick={() => s.stepChapter(paneIdx, 1)} title={t("common.nextChapter")}>›</button>
     <span class="spacer"></span>
-    <!-- Only where there is a choice to make: one shipped language is no
-         decision, and a chip that never changes anything is furniture. -->
+    <!-- Only where there is a choice: one shipped language is no decision. -->
     {#if langChoices.length > 1}
       <button
         class="lang"
@@ -776,10 +680,8 @@
         {paneBible} ▾
       </button>
     {/if}
-    <!-- The chain: only where there is a same-chapter pane to chain TO — the
-         one honest moment for it (maintainer UAT, 2026-08-18: the same chapter
-         in two languages should scroll together). One global toggle, not
-         per-pane: a chain with one end is not a chain. -->
+    <!-- The chain: only where there is a same-chapter pane to chain to. One
+         global toggle, not per-pane — a chain with one end is not a chain. -->
     {#if s.panes.some((p, j) => j !== paneIdx && p.book === pane.book && p.chapter === pane.chapter)}
       <button
         class="chain"
@@ -812,7 +714,7 @@
     </div>
   {/if}
   {#if pane.langLoading}
-    <!-- IN THE PANE, not over the app: the column beside this one is still
+    <!-- In the pane, not over the app: the column beside this one is still
          being read, and a full-screen overlay would stop it. -->
     <p class="lang-status" role="status">
       {langFraction === null
@@ -822,8 +724,7 @@
   {:else if pane.langError}
     <p class="lang-status error" role="status">{t("pane.langFailed")}</p>
   {/if}
-  <!-- Named so a screen reader can list this pane and jump to it by passage;
-       two panes are two regions, "Genesis 1" and "John 3". -->
+  <!-- Named so a screen reader can list this pane and jump to it by passage. -->
   <div
     class="scroll"
     bind:this={container}
@@ -833,13 +734,11 @@
     aria-label={`${bookName} ${pane.chapter}`}
   >
     {#if items.length === 0}
-      <!-- WHILE THE FIRST LAYOUT IS PENDING. The engine lives in one thread and
-           a chapter's display list is a round trip, so between mounting and the
-           first paint this pane is an empty rectangle. Usually that is one frame
-           and nobody sees it; after a language switch the German corpus is being
-           decoded at the same time and it is long enough to read as a dead screen.
-           `aria-hidden`: the region already announces its chapter, and the mirror
-           below carries the words for a screen reader. -->
+      <!-- While the first layout is pending: the engine is one thread and a
+           chapter's display list is a round trip — usually one frame, but long
+           enough to read as a dead screen when a language switch is decoding a
+           corpus at the same time. `aria-hidden` because the region already
+           announces its chapter and the mirror below carries the words. -->
       <p class="settling" aria-hidden="true">{t("pane.settling")}</p>
     {/if}
     <div class="spacer" style:height={`${spacerH}px`}>
@@ -856,8 +755,8 @@
         onmousemove={onMouseMove}
       ></canvas>
     </div>
-    <!-- The chapter as text. The canvas above is a picture of these words, which
-         is why it is aria-hidden: one pane must report its chapter once. -->
+    <!-- The chapter as text; the canvas above is a picture of these same words,
+         hence aria-hidden — one pane must report its chapter once. -->
     <div class="mirror">
       {#each mirror as v (v.n)}
         <p data-verse={v.n}>{v.n} {v.text}</p>
@@ -878,11 +777,9 @@
   .pane.active {
     border-top-color: var(--gold, #9e7d38);
   }
-  /* Sized for a thumb, not for a mouse. The passage button is the single
-     most-tapped control in the app — it is how a reader gets anywhere — and the
-     chapter arrows either side of
-     it were 2px of padding away from being un-hittable on a phone. Android's 48dp
-     is the standard both shells now meet. */
+  /* Sized for a thumb, not a mouse: the passage button is the most-tapped control
+     in the app, and the chapter arrows either side of it were 2px of padding away
+     from being un-hittable on a phone. */
   .nav {
     display: flex;
     align-items: center;
@@ -983,10 +880,8 @@
     overflow-x: hidden;
     /* No scroll chaining into the page; pull-to-refresh stays off the text. */
     overscroll-behavior: contain;
-    /* Scroll natively but WITHOUT the classic scrollbar: the page is a canvas
-       of typeset scripture, and a grey gutter down the middle of a two-pane
-       spread is not what this should look like. The
-       canon strip and the verse band carry position instead. */
+    /* Native scroll without the classic scrollbar; the canon strip and the verse
+       band carry position instead. */
     scrollbar-width: none; /* Firefox */
   }
   .scroll::-webkit-scrollbar {
@@ -995,21 +890,14 @@
   .spacer {
     position: relative;
   }
-  /* Hidden to the eye, present to everything else. NOT display:none, NOT
-     visibility:hidden, NOT aria-hidden — each of those takes the chapter back out
-     of the accessibility tree and out of find-in-page, which is the whole bug.
-     So: a 1px box that clips its content.
-
-     `position: fixed` rather than absolute so the box is always already in the
-     viewport: a Ctrl+F match inside it has nothing to scroll into view, and the
-     reader is not thrown to the top of the chapter by finding a phrase in it.
-     Fixed also keeps it out of the scroll container's overflow entirely.
-
-     `white-space: nowrap` matters for cost: inside a 1px-wide box, wrapping would
-     ask the browser to break a chapter into a couple of thousand line boxes. One
-     unwrapped line per verse is a handful of text runs and no line-breaking. */
-  /* Quiet and centred — a note that something is coming, not a spinner that
-     implies something is wrong. Absolute so it does not move the canvas. */
+  /* The mirror: hidden to the eye, present to everything else — so not
+     display:none, visibility:hidden or aria-hidden, each of which drops the
+     chapter out of the accessibility tree and find-in-page. A 1px clipping box
+     instead. `position: fixed` keeps it in the viewport, so a Ctrl+F match has
+     nothing to scroll into view and cannot throw the reader to the top of the
+     chapter; `white-space: nowrap` stops a 1px-wide box breaking the chapter into
+     a couple of thousand line boxes. */
+  /* Absolute so it does not move the canvas. */
   .settling {
     position: absolute;
     inset: 0;
@@ -1039,13 +927,12 @@
     top: 0;
     display: block;
     width: 100%;
-    /* Vertical panning belongs to the browser (momentum for free); we keep
-       taps, long-press, and the horizontal chapter swipe. */
+    /* Vertical panning belongs to the browser (momentum for free); we keep taps,
+       long-press, and the horizontal chapter swipe. */
     touch-action: pan-y;
-    /* A canvas has no selectable text, but a tap-drag on one can still start a
-       selection of the surrounding document — which on a phone shows up as the
-       page tinting under your thumb mid-scroll. The tap highlight itself is
-       killed globally in app.css. */
+    /* A canvas has no selectable text, but a tap-drag can still start a selection
+       of the surrounding document — on a phone the page tints under your thumb
+       mid-scroll. The tap highlight is killed globally in app.css. */
     user-select: none;
     -webkit-user-select: none;
   }

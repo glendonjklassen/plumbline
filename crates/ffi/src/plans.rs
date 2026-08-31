@@ -1,14 +1,11 @@
-//! Reading plans + the concept study — the C ABI. A sibling of `reading_map.rs` for
-//! the same reason: `lib.rs` is past the no-3k-line rule, and cbindgen walks the
-//! whole crate, so the header is unchanged by the split.
+//! Reading plans + the concept study — the C ABI.
 //!
-//! Plans load FRESH from `home/plans/` on every call (the small-set stance the
-//! memory endpoints take): a plan file is tens of bytes, a reader has a handful,
-//! and reading through is simpler than an in-engine cache to invalidate. All of
+//! Plans load fresh from `home/plans/` on every call (a plan file is tens of
+//! bytes and a reader has a handful, so there is no cache to invalidate). All of
 //! these tolerate an engine opened from bytes (no home) — the list reads empty,
 //! authoring returns the standard "no home" error.
 //!
-//! Schedule completion is **derived**: a day is done when every chapter it names
+//! Schedule completion is derived: a day is done when every chapter it names
 //! reads back as a completed pass from the reading store ([`chapter_read`]). The
 //! plan file's `done` cache is consulted first, so a day honoured once stays
 //! honoured even after its reading record is cleared.
@@ -41,16 +38,15 @@ struct WireRunning {
     kind: plan::Kind,
     #[serde(skip_serializing_if = "Option::is_none")]
     class: Option<String>,
-    /// When the plan was started — with the name, how a set-aside plan is
-    /// introduced ("NT in 90 · started 3 Aug").
+    /// When the plan was started; shown with the name for a set-aside plan.
     started: String,
-    /// Set aside, kept whole: holds its place, asks nothing (no chip, no
-    /// today card — shells filter on this).
+    /// Set aside: holds its place, asks nothing (no chip, no today card —
+    /// shells filter on this).
     paused: bool,
     /// Concept study only: the preset tag a tap files under.
     #[serde(skip_serializing_if = "Option::is_none")]
     tag: Option<String>,
-    /// Schedule only: a full plan-day was finished TODAY (`plan::done_today`),
+    /// Schedule only: a full plan-day was finished today (`plan::done_today`),
     /// which retires the nav-strip chip for the rest of the calendar day.
     #[serde(skip_serializing_if = "Option::is_none")]
     done_today: Option<bool>,
@@ -63,10 +59,10 @@ struct WireRunning {
     /// Concept study only: chapters swept over the scope total.
     #[serde(skip_serializing_if = "Option::is_none")]
     sweep_progress: Option<[u32; 2]>,
-    /// Concept study only: the swept chapters themselves, `book id → sorted
-    /// chapter numbers` — what a navigator paints coverage from. Present (even
-    /// when empty) whenever `sweep_progress` is, so a shell can tell "nothing
-    /// swept" from "not a concept study".
+    /// Concept study only: the swept chapters, `book id → sorted chapter
+    /// numbers`, for painting coverage. Present (even when empty) whenever
+    /// `sweep_progress` is, so a shell can tell "nothing swept" from "not a
+    /// concept study".
     #[serde(skip_serializing_if = "Option::is_none")]
     swept: Option<std::collections::BTreeMap<String, Vec<u16>>>,
 }
@@ -118,9 +114,7 @@ fn schedule_of(plan: &Plan, words: &ChapterWords, home: Option<&std::path::Path>
         (Some(g), _) => plan::schedule(&plan::scope_chapters(&g.scope, words), words, g.days),
         (None, Some(id)) => {
             let Some(t) = home.and_then(|h| plan::load_table(h, id)) else { return Vec::new() };
-            // Chapters the corpus does not carry are skipped, `scope_chapters`'
-            // stance — the German corpus shares addresses, so nothing skips in
-            // practice.
+            // Chapters the corpus does not carry are skipped, `scope_chapters`' stance.
             let order: Vec<_> = t.order.into_iter().filter(|(b, c)| *c <= words.chapters(b)).collect();
             plan::schedule(&order, words, t.days)
         }
@@ -165,14 +159,10 @@ fn running_state(
                     .map(|(b, c)| WireDayChapter {
                         book: b.clone(),
                         chapter: *c,
-                        // LOCALIZED, and it was not. `canon::display_name` is
-                        // the FROZEN ENGLISH table — the one `refKey` is built
-                        // from — so a Hindi reader's plan card read "John 3"
-                        // while every other reference on the same screen read
-                        // "यूहन्ना 3". `ref.chapter` is the catalogue template
-                        // the rest of the app names a chapter with, and it is a
-                        // template rather than a separator because the next
-                        // language may not put the book first at all.
+                        // Never `canon::display_name` here: that is the frozen English
+                        // table `refKey` is built from. `ref.chapter` is the catalogue
+                        // template the rest of the app names a chapter with — a template,
+                        // not a separator, because a language may not put the book first.
                         display: i18n::t(
                             i18n::active(),
                             "ref.chapter",
@@ -219,10 +209,9 @@ pub unsafe extern "C" fn plumbline_engine_plans_json(
         let running = plans.iter().map(|p| running_state(p, words, &store, home, &today)).collect();
         let builtins = plan::builtins()
             .into_iter()
-            // A table plan is offered only where its table actually loads —
-            // every offered row must be startable into a non-empty schedule
-            // today (plan::builtins' contract), and a home without the file
-            // would start one that reads instantly "finished".
+            // A table plan is offered only where its table loads: every offered row must
+            // start into a non-empty schedule, and a home without the file would start
+            // one that reads instantly "finished".
             .filter(|b| b.table.is_none_or(|id| home.is_some_and(|h| plan::load_table(h, id).is_some())))
             .map(|b| WireBuiltin {
                 id: b.id.to_string(),
@@ -236,8 +225,8 @@ pub unsafe extern "C" fn plumbline_engine_plans_json(
 }
 
 /// Start a built-in schedule plan by its `id` (see `plumbline_engine_plans_json`
-/// `builtins`). Starting a plan whose class is already occupied REPLACES the
-/// running one — the shell confirms first, and passing an already-running id
+/// `builtins`). Starting a plan whose class is already occupied replaces the
+/// running one — the shell confirms first — and passing an already-running id
 /// re-seeds it from scratch. Null on success, else an owned error string.
 ///
 /// # Safety
@@ -259,9 +248,8 @@ pub unsafe extern "C" fn plumbline_engine_plan_start(
         let Some(b) = plan::builtins().into_iter().find(|b| b.id == id) else {
             return out_string(format!("unknown plan: {id}"));
         };
-        // A table plan without its table must refuse to start, not start
-        // "finished" — the picker hides it for the same reason, but a stale
-        // shell could still ask.
+        // A table plan without its table must refuse to start, not start "finished".
+        // The picker hides it for the same reason, but a stale shell could still ask.
         if let Some(table) = b.table {
             if plan::load_table(&home, table).is_none() {
                 return out_string(format!("plan table missing: {table}"));
@@ -297,13 +285,13 @@ pub unsafe extern "C" fn plumbline_engine_plan_start(
     })
 }
 
-/// Start (or RESUME) a concept study for `tag`, returning the run's plan id —
-/// the id the shell writes into `config.conceptStudy` to enter the mode. The id is derived
-/// from the tag (`run-<slug>`), so re-starting a concept the reader is already
-/// sweeping resumes it, coverage intact, rather than forking a second run. The
+/// Start (or resume) a concept study for `tag`, returning the run's plan id —
+/// what the shell writes into `config.conceptStudy` to enter the mode. The id is
+/// derived from the tag (`run-<slug>`), so re-starting a concept already being
+/// swept resumes it with coverage intact rather than forking a second run. The
 /// tag itself need not exist yet; the first tap-to-tag creates it.
 ///
-/// Returns the id on success, or an error string PREFIXED with `!` (which no
+/// Returns the id on success, or an error string prefixed with `!` (which no
 /// plan id can start with) so the one out-parameter carries both.
 ///
 /// # Safety
@@ -411,13 +399,11 @@ pub unsafe extern "C" fn plumbline_engine_plan_stop(engine: *mut PlumblineEngine
     })
 }
 
-/// Pause or resume a plan — set aside, kept whole: its file, its progress and
-/// its class stay put; shells stop asking for its today (no chip, no card)
-/// while `paused`. A concept study can pause too (it simply stops being
-/// offered as resumable-in-one-tap surfaces choose). An absent id is an
-/// error — pausing a plan that is not running means the shell's list is
-/// stale, and saying so beats a silent no-op. Null on success, else an owned
-/// error string.
+/// Pause or resume a plan: its file, progress and class stay put, and shells
+/// stop asking for its today (no chip, no card) while `paused`. A concept study
+/// can pause too. An absent id is an error — pausing a plan that is not running
+/// means the shell's list is stale, and saying so beats a silent no-op. Null on
+/// success, else an owned error string.
 ///
 /// # Safety
 /// `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
@@ -447,11 +433,10 @@ pub unsafe extern "C" fn plumbline_engine_plan_set_paused(
     })
 }
 
-/// The provenance stamp for a new plan file (I18N.md): the process's active
-/// language, the same `i18n::stamp` source every other authored file records
-/// at create. `None` when the reader is on the source language's default —
-/// absent means "unknown", which is exactly the migration signal the field is
-/// for, and re-saves never overwrite it because plans store `lang` explicitly.
+/// The provenance stamp for a new plan file: the process's active language, the
+/// same `i18n::stamp` source every other authored file records at create. `None`
+/// on the source language's default — absent means "unknown", the migration
+/// signal the field exists for.
 fn lang_stamp() -> Option<String> {
     let code = i18n::stamp();
     (!code.is_empty()).then_some(code)

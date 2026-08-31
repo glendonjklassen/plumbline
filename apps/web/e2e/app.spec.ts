@@ -1,19 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// Boot the app and wait for the reader. On a fresh profile the first-run
-// chooser OWNS the screen straight off the loader (the reader mounts after a
-// path is chosen — 2026-07-26); take the established path. The title check
-// also pins the product branding — index.html, the manifest and the shell
-// header must agree.
-//
-// The tier checkboxes are TICKED here (2026-07-28). The analysis tiers became
-// opt-in that day — they used to be on unless switched off — so an untouched
-// first run now lands a reader with the text and nothing else, and every test
-// below that is about the analysis pack (it arrives without approval, a relaunch
-// is already warm, no chunk monopolises the worker, updates sweep old versions)
-// would otherwise sit waiting for a download that is correctly never requested.
-// Ticking them keeps those tests measuring what they were written to measure: a
-// reader who HAS the analysis on. `optOutOfAnalysis` is the other side of it.
+// Boot to the reader. On a fresh profile the first-run chooser owns the screen
+// until a path is chosen, so take the established one. The tier checkboxes are
+// ticked because the analysis tiers are opt-in: every test below that is about
+// the analysis pack needs a reader who has it on.
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page).toHaveTitle("Plumbline Bible");
@@ -30,14 +20,11 @@ async function boot(page: Page): Promise<void> {
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
-/// Wait out the WHOLE background pipeline: the analysis tier ready, then the boot
-/// trace stops growing (every warm/analysis chunk appends one timed entry, and
-/// the trace goes quiet only when the last one has run).
+/// Wait out the whole background pipeline: the analysis tier ready, then the boot
+/// trace quiet (every warm/analysis chunk appends one timed entry).
 ///
-/// Where this is called is the entire point. On the FIRST visit it is legitimate
-/// setup — get the device into the state a returning reader is in. Called after a
-/// RELAUNCH it destroys the measurement, because the interval it waits out is the
-/// interval every relaunch complaint has been about.
+/// Only ever call this on a FIRST visit. After a relaunch it waits out exactly the
+/// interval a relaunch measurement is about, and destroys it.
 async function settleBackground(page: Page): Promise<void> {
   await page.waitForFunction(() => (window as any).__plumbline?.rndState === "ready", null, {
     timeout: 120_000,
@@ -54,18 +41,11 @@ async function settleBackground(page: Page): Promise<void> {
   );
 }
 
-/// Wait until the device actually HOLDS every file its pin names.
-///
-/// `settleBackground` waits for the work the boot trace narrates; this waits for
-/// the depot to match the claim. They are not the same barrier, and the gap
-/// between them is where a test reads "prune deleted a pinned file" for a file
-/// that had simply not arrived yet.
-///
-/// It grew a second occupant when every language's Bible started shipping: the
-/// other corpora are ~9 MB fetched after the reader is served, and any test that
-/// treats the pin as a description of the disk has to wait for them. Expressed
-/// against the PIN rather than against filenames, so the next language is
-/// covered by having been added.
+/// Wait until the device actually holds every file its pin names — a different
+/// barrier from `settleBackground`, which waits only for what the boot trace
+/// narrates. The gap between them is where a test reads "prune deleted a pinned
+/// file" for a file that had simply not arrived yet. Expressed against the pin
+/// rather than filenames, so each language's ~9 MB corpus is covered by being added.
 async function settleDepot(page: Page): Promise<void> {
   await expect
     .poll(
@@ -107,20 +87,17 @@ test("boots to the reader with the stock set seeded", async ({ page }) => {
   });
   expect(counts.weaves).toBeGreaterThan(20);
   expect(counts.threads).toBeGreaterThanOrEqual(1);
-  // ONE stock tag ships (95ff71b): "False teaching", two verses, no notes — the
-  // only example a reader ever sees of what a tag is for. It was zero until then,
-  // and the exact count is asserted rather than a floor, because the thing this
-  // line has always guarded is stray AUTHORING LEFTOVERS in the stock set: a
-  // shipped amber highlight once painted John 3:7 on every fresh install. A
-  // second stock tag arriving unnoticed is the failure worth catching.
+  // One stock tag ships. An exact count rather than a floor, because what this
+  // guards is stray authoring leftovers in the stock set — a shipped highlight once
+  // painted John 3:7 on every fresh install — so a second tag must fail here.
   expect(counts.tags).toBe(1);
 });
 
 test("first-run: the welcome owns the boot screen, with no reader behind it", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: "New believer" })).toBeVisible({ timeout: 90_000 });
-  // John 3 used to paint underneath and then get asked a question — the
-  // reader must not mount until a path is chosen (feedback 2026-07-26).
+  // The reader must not mount until a path is chosen — John 3 used to paint
+  // underneath the welcome.
   await expect(page.locator(".pane canvas")).toHaveCount(0);
   await expect(page.locator("header .search")).toHaveCount(0);
 });
@@ -129,10 +106,9 @@ test("first-run: a new believer's welcome reference opens beside John", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
   await expect(page.getByText("I'm so glad you've put your faith in Jesus")).toBeVisible();
-  // "Psalms", not "Psalm": the chip's label is DERIVED now — the book's name
-  // from the canon plus the catalogue's `ref.range` template — so that it
-  // localizes and so that it cannot disagree with what the app calls the book
-  // everywhere else. It was hand-typed as "Psalm 12:6–7" before (2026-08-03).
+  // "Psalms", not "Psalm": the chip's label is derived from the canon's book name
+  // plus the catalogue's `ref.range` template, so it localizes and cannot disagree
+  // with what the app calls the book elsewhere.
   await page.getByRole("button", { name: "Psalms 12:6–7" }).click();
   const panes = await page.evaluate(() => {
     const s = (window as any).__plumbline;
@@ -146,13 +122,12 @@ test("first-run: a new believer's welcome reference opens beside John", async ({
 test("first-run: sharing the gospel asks for your church, then opens the Romans Road", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Sharing the gospel" }).click({ timeout: 90_000 });
-  // The reader about to hand this to someone is asked for their church, and
-  // told why (2026-07-27) — it is optional, and skipping goes straight on.
+  // The reader is asked for their church and told why; it is optional.
   await expect(page.getByText("Before you share it")).toBeVisible();
   await expect(page.getByText(/links and QR codes you share contain your church/)).toBeVisible();
   await page.getByPlaceholder("Church name").fill("Grace Bible Church");
-  // The service time, which replaced a free "when and where" line — the same
-  // `config.sundayService` Settings edits, so it is given once.
+  // The service time is the same `config.sundayService` Settings edits — one
+  // stored value, given once.
   await page.evaluate(() => {
     const s = (window as any).__plumbline;
     s.config.sundayService = 10 * 60;
@@ -162,33 +137,29 @@ test("first-run: sharing the gospel asks for your church, then opens the Romans 
   await expect(page.locator(".present .title")).toContainText("Romans Road");
   await expect(page.getByText("For all have sinned")).toBeVisible();
 
-  // What they typed is now theirs, and rides along in what they share.
   const church = await page.evaluate(() => (window as any).__plumbline.church);
   expect(church.name).toBe("Grace Bible Church");
   expect(church.service, "the meeting time rides along as minutes").toBe(10 * 60);
 });
 
 test("a shared link carries the church, and the welcome names them", async ({ page }) => {
-  // The whole point of the query string: one QR hands over the Bible AND the
-  // people who sent it (2026-07-27).
+  // One QR hands over the Bible and the people who sent it.
   await page.goto("/?church=Grace+Bible+Church&churchService=600&churchUrl=https%3A%2F%2Fexample.org");
   await expect(page.getByText("Shared with you by")).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText("Grace Bible Church")).toBeVisible();
   await expect(page.getByText("Meets Sundays at 10:00 AM")).toBeVisible();
 
-  // The address bar is left clean — a bookmark of this is the app, not a
-  // link about somebody's church.
+  // The address bar is left clean: a bookmark of this is the app, not a link
+  // about somebody's church.
   expect(await page.evaluate(() => location.search)).toBe("");
 
-  // Saved as this reader's own, so THEIR shares carry it onward.
   const church = await page.evaluate(() => (window as any).__plumbline.church);
-  // `service` comes back off `config.sundayService`, which the link just set —
-  // there is one stored number, not a second copy on the church.
+  // `service` reads off `config.sundayService`, which the link just set — one
+  // stored number, not a second copy on the church.
   expect(church).toEqual({ name: "Grace Bible Church", service: 600, url: "https://example.org" });
 
-  // And it survives a relaunch. (Finish first-run first — the welcome owns
-  // the screen until a path is chosen, so a reload before that just shows it
-  // again.)
+  // And it survives a relaunch — first-run has to be finished first, or a reload
+  // just shows the welcome again.
   await page.getByRole("button", { name: "Established believer" }).click();
   await page.getByRole("button", { name: "Start reading" }).click();
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
@@ -200,15 +171,12 @@ test("a shared link carries the church, and the welcome names them", async ({ pa
 
 test("the deferred machine-tier pack loads after boot", async ({ page }) => {
   await boot(page);
-  // Boot ships the core pack only (TODO #28); ensureRnd pulls the analysis pack
-  // in and re-warms. Force it (instead of waiting out the idle timer) and check
-  // a machine-tier lookup lights up.
+  // Boot ships the core pack only; ensureRnd pulls the analysis pack in. Forced
+  // here rather than waiting out the idle timer.
   //
-  // The probe is MORPHOLOGY. It used to be `conceptNeighbours`, which read the
-  // concept embedding — dropped from the pack 2026-07-30 — so it now answers
-  // null whether or not the pack loaded, which is the one thing a probe may
-  // never do. `morph` reads `morphology.morphb`, the pack's largest remaining
-  // file, and John 3:16 token 3 is the token the FFI tests use for it.
+  // The probe must be `morph`, which reads morphology.morphb, the pack's largest
+  // file. `conceptNeighbours` answers null whether or not the pack loaded — the one
+  // thing a probe may never do.
   const gloss = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     await s.ensureRnd();
@@ -217,18 +185,14 @@ test("the deferred machine-tier pack loads after boot", async ({ page }) => {
   expect(gloss, "a machine-tier lookup should answer once the pack is in").not.toBe("");
 });
 
-// A PHONE must never be asked to approve the analysis pack. Deferring it keeps
-// it off the boot path; it was also keeping it out of the session entirely, so
-// every launch put a "one-time download / Load analysis" button in front of a
-// reader who had already taken that download — and, on the same screen, a
-// second notice underneath about a slow first read (feedback 2026-07-27, with a
-// screenshot). It loads itself now.
+// Deferring the analysis pack kept it off the boot path but also out of the
+// session, so every launch put a "one-time download / Load analysis" button in
+// front of a reader who had already taken it. It loads itself now.
 test("a phone is never asked to approve the analysis pack", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 }); // before goto: deferRnd is read at boot
   await boot(page);
   expect(await page.evaluate(() => (window as any).__plumbline.rndDeferred)).toBe(false);
 
-  // It arrives without anyone tapping anything.
   await page.waitForFunction(() => (window as any).__plumbline.rndState === "ready", null, {
     timeout: 90_000,
   });
@@ -238,33 +202,18 @@ test("a phone is never asked to approve the analysis pack", async ({ page }) => 
   );
   expect(gloss, "the pack really arrived, unasked").not.toBe("");
 
-  // And the offer never appeared.
   await expect(page.getByRole("button", { name: "Load analysis" })).toHaveCount(0);
   await expect(page.getByText(/one-time .* download/)).toHaveCount(0);
 });
 
-// This test used to be "a loading study explains itself once, not twice", and it
-// balanced two notices against each other: the analysis pack's progress line, and
-// underneath it a "the first one takes a few seconds… every look after this is
-// instant" note.
-//
-// That second note is gone (2026-07-28) and its half of this test with it. It was
-// an apology for a bug, and an inaccurate one: "every look after this" lasted
-// until the tab closed, and the next launch rebuilt the same indexes and said it
-// again — so a reader who had used the app for days kept being told it was their
-// first time. The wait itself is gone too, now that nothing builds an index
-// inside a reader's request.
-//
-// What is still worth pinning is the half that was never about the apology: a
-// study that genuinely cannot be answered yet must not look frozen, and while the
-// analysis pack is coming in it must say so. A null refKey leaves the read
-// unanswered for real, which is the only way this means anything — an earlier
-// version asserted straight away and passed with the guard removed.
+// A study that genuinely cannot be answered yet must not look frozen: while the
+// analysis pack is coming in it has to say so. The null refKey is load-bearing —
+// it leaves the read unanswered for real, and an earlier version that asserted
+// straight away passed with the guard removed.
 test("a study that cannot answer yet says so, and never looks frozen", async ({ page }) => {
   await boot(page);
-  // Let the background load settle FIRST — otherwise it lands mid-test and
-  // flips rndState back to "ready" under us, which is what made an earlier
-  // version of this test fail for the wrong reason.
+  // Settle the background load first, or it lands mid-test and flips rndState
+  // back to "ready" under us.
   await page.waitForFunction(() => (window as any).__plumbline.rndState === "ready", null, {
     timeout: 90_000,
   });
@@ -277,86 +226,43 @@ test("a study that cannot answer yet says so, and never looks frozen", async ({ 
   await page.waitForTimeout(1200);
   await expect(page.locator(".loading")).toBeVisible();
 
-  // A load ALREADY UNDER WAY narrates nothing: no note, no bar, no percentage.
-  // Those existed to account for a wait the reader was made to sit through, back
-  // when the analysis load blocked the one thread that answers taps. It does not
-  // block anything now — sections appear as their data arrives — and a progress
-  // bar over a study that is already usable invents a problem (2026-07-28).
+  // A load already under way narrates nothing: no note, no bar, no percentage.
+  // Sections appear as their data arrives, so the study stays usable throughout.
   await expect(page.locator(".rnd-note")).toHaveCount(0);
   await expect(page.locator(".rnd-bar")).toHaveCount(0);
   await expect(page.getByText(/Downloading the analysis pack/i)).toHaveCount(0);
 
-  // What survives is the one case that is a genuine ASK rather than a status:
-  // nothing is coming, and spending the download is the reader's decision.
+  // The one surviving notice is a genuine ask rather than a status: nothing is
+  // coming, and spending the download is the reader's decision.
   await page.evaluate(() => ((window as any).__plumbline.rndState = "off"));
   await expect(page.locator(".rnd-note")).toBeVisible();
   await expect(page.getByRole("button", { name: "Load analysis" })).toBeVisible();
 
-  // And nothing promises the reader anything about how long it will take, or
-  // that it will not happen again. Both were untrue for a year.
+  // And nothing promises how long it takes, or that it will not happen again.
   await expect(page.getByText(/takes a few seconds/i)).toHaveCount(0);
   await expect(page.getByText(/every look after this/i)).toHaveCount(0);
 });
 
-// THE relaunch complaint: wipe data, open, click a word — it thinks for a
-// second, fine. Close the tab, reopen, click a word — it thinks all over again.
-// Every launch, forever. Reported 2026-07-27, and AGAIN on 2026-07-28 with a boot
-// trace off the device, because the fix worked and this test did not.
-//
-// WHAT THIS TEST USED TO DO, and why it is worth spelling out. It reloaded, then
-// waited for `rndState === "ready"` and for the boot trace to stop growing —
-// up to 180 s of waiting — and only then timed a click, against a budget of
-// 250 ms. `rndReady` is posted at engine.worker.ts:227, after `await
-// warmChunked()`; so that first wait alone guaranteed a fully settled engine.
-// There is no engine state in which that measurement is slow. It waited out
-// precisely the interval the reader was complaining about and then reported that
-// the far side of it was fast. It passed, green, against the live bug.
-//
-// That is the third test in this suite to pass against the bug it was written
-// for (see CLAUDE.md: page.route() bypassing service workers; a fixed ms ceiling
-// a whole un-chunked warm fit inside). The pattern in all three is the same —
-// the instrument was chosen after the mechanism, so it could only agree.
-//
-// The settle wait now happens on the FIRST visit, where it is honest setup:
-// visit one pays for everything, visit two clicks a word the moment there is
-// text. Two assertions, because either alone is cheatable:
-//   - FAST, against a budget derived from this machine's own settled click
-//     rather than a constant;
-//   - and the SAME ANSWER as the settled engine gave, because an engine that
-//     replies before Strong's / the occurrence index / the concept model are in
-//     returns a thinner study, and "instant but hollow" must not read as warm.
+// The relaunch complaint: close the tab, reopen, click a word, and the engine
+// thinks all over again. The settle wait belongs on the FIRST visit only — after
+// the reload it would wait out precisely the interval this test measures, which is
+// how an earlier version passed green against the live bug. Two assertions, because
+// either alone is cheatable:
+//   - FAST, against a budget derived from this machine's own settled click rather
+//     than a constant;
+//   - and the SAME ANSWER as the settled engine gave, because an engine that replies
+//     before Strong's and the occurrence index are in returns a thinner study, and
+//     "instant but hollow" must not read as warm.
 test("after a relaunch, the first word study is already warm", { tag: "@perf" }, async ({ page }) => {
-  // KNOWN FAILING, DELIBERATELY, as of 2026-07-28. Read this before "fixing" it.
+  // KNOWN FAILING, DELIBERATELY. `test.fail()` means "this MUST fail": Playwright
+  // errors the run if it ever passes, so the open bug stays visible and the marker
+  // clears itself the moment the work lands.
   //
-  // `test.fail()` means "this MUST fail" — Playwright reports it as an expected
-  // failure, and errors the run if it ever PASSES. So the open bug stays visible
-  // in every run and this marker clears itself the moment the work lands, which
-  // is the opposite of skipping it.
-  //
-  // WHAT IS STILL BROKEN, and it is no longer the same thing it was this morning.
-  // The tap is FAST now; the answer is THIN. Measured on this machine:
-  //
-  //     settled                        11 ms · 64 blocks
-  //     relaunch, tapped immediately   10 ms · 12 blocks   <- fails here
-  //     relaunch, after warm finishes    9 ms · 64 blocks
-  //
-  // The engine no longer builds an index inside a reader's tap (it froze a phone
-  // for 21,966 ms doing exactly that), so a study opened mid-warm returns only
-  // the sections whose indexes exist, and fills in when `warmReady` lands. Better
-  // than a frozen app by any measure, and still not "already warm": a relaunch
-  // rebuilds every one of those indexes from scratch because nothing an engine
-  // builds survives the tab.
-  //
-  // The fix is to stop rebuilding them — build once, keep the result, load it
-  // back — the way `kjv.jsonl.idxcache` already spares the corpus. Until that
-  // lands this test fails on the BLOCK COUNT, not the clock.
-  //
-  // One thing already fixed that this test does NOT measure, with its own guard:
-  // the tap-builds-nothing rule, covered by
-  // `a_tap_never_builds_indexes_under_a_sliced_warm` in plumbline-ffi. (There
-  // were two. The other was warm phase 7, the "verses like this" SIF model — a
-  // single unsliced 54,859 ms block on a phone — and both that phase and its
-  // Rust slicing guard went with the feature on 2026-07-30.)
+  // The tap is fast now; the answer is thin. A relaunch rebuilds every index from
+  // scratch because nothing an engine builds survives the tab, so a study opened
+  // mid-warm returns only the sections whose indexes exist and fills in at
+  // `warmReady`. The fix is to persist them the way `kjv.jsonl.idxcache` already
+  // spares the corpus. Until then this fails on the BLOCK COUNT, not the clock.
   test.fail();
   await boot(page);
   await settleBackground(page);
@@ -373,7 +279,7 @@ test("after a relaunch, the first word study is already warm", { tag: "@perf" },
   await page.reload();
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
 
-  // NOTHING between text appearing and the click. This is the reader.
+  // Nothing between text appearing and the click. This is the reader.
   const relaunch = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     const t = performance.now();
@@ -381,9 +287,9 @@ test("after a relaunch, the first word study is already warm", { tag: "@perf" },
     return { ms: performance.now() - t, blocks: b?.blocks?.length ?? 0 };
   });
 
-  // Derived from the settled click on this same machine, so a loaded CI box
-  // moves both sides together. A constant is the wrong instrument here and was
-  // part of how the old version stayed green.
+  // Derived from the settled click on this same machine, so a loaded CI box moves
+  // both sides together; a constant ceiling is part of how the old version stayed
+  // green against the live bug.
   const budget = Math.max(250, settled.ms * 5);
   expect(
     relaunch.ms,
@@ -398,22 +304,21 @@ test("after a relaunch, the first word study is already warm", { tag: "@perf" },
   ).toBe(settled.blocks);
 });
 
-// The plain-English overlay (2026-07-27): the AKJV's wording laid over the KJV's
-// own tokens, off until asked. The text stays the KJV — this is a reading aid,
-// and the rest of the app must not notice it exists.
+// The AKJV overlay: modern wording laid over the KJV's own tokens, off until
+// asked. It is a reading aid — the text stays the KJV, and nothing outside the
+// reader may notice it exists.
 test("the AKJV overlay re-words the reader, and only the reader", async ({ page }) => {
   await boot(page);
   await page.waitForFunction(() => (window as any).__plumbline.akjvAvailable === true, null, {
     timeout: 90_000,
   });
 
-  // Off by default: the reader is looking at the KJV.
   expect(await page.evaluate(() => (window as any).__plumbline.config.akjvOverlay)).toBeFalsy();
 
   await page.evaluate(() => (window as any).__plumbline.setAkjvOverlay(true));
 
-  // A multi-token run answers from ANY word inside it — "Verily, verily" is one
-  // re-rendering, and tapping either half must explain the same thing.
+  // A multi-token run answers from any word inside it: "Verily, verily" is one
+  // re-rendering, so tapping either half must explain the same thing.
   const spans = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     const out: any[] = [];
@@ -423,13 +328,11 @@ test("the AKJV overlay re-words the reader, and only the reader", async ({ page 
   expect(spans[0]).toEqual({ akjv: "to", kjv: "unto" });
   expect(spans[1]).toEqual({ akjv: "Truly, truly", kjv: "Verily, verily," });
   expect(spans[2]).toEqual(spans[1]);
-  // A word the AKJV left alone has no answer at all.
   expect(await page.evaluate(() => (window as any).__plumbline.engine.akjvToken("John 3:3", 0))).toBeNull();
 
-  // INTEGRITY. The overlay is applied on the way into the layout and nowhere
-  // else, so everything that leaves the reader is still the KJV. A modernised
-  // word on a memory card or in a hand-off would make this a second
-  // translation, whatever the About page says.
+  // The overlay is applied on the way into layout and nowhere else, so everything
+  // that leaves the reader is still the KJV. A modernised word on a memory card or
+  // in a hand-off would make this a second translation.
   const kept = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     return {
@@ -444,15 +347,13 @@ test("the AKJV overlay re-words the reader, and only the reader", async ({ page 
   expect(kept.copied).not.toContain("Truly");
   expect(kept.drill).toContain("Verily, verily");
 
-  // And it turns back off.
   await page.evaluate(() => (window as any).__plumbline.setAkjvOverlay(false));
   expect(await page.evaluate(() => (window as any).__plumbline.config.akjvOverlay)).toBe(false);
 });
 
-// The toggle must change the PAGE, not just the setting. The reader's layout
-// has its own trigger and does not track the config, so the first version
-// flipped the flag and left the old words on screen until something else
-// happened to re-lay the chapter (feedback 2026-07-27, "isn't live").
+// The toggle must change the page, not just the setting: the pane's layout effect
+// has its own trigger and does not track the config, so without the layout epoch
+// the old words stay on screen until a resize or chapter turn re-lays the chapter.
 test("flipping the overlay re-lays the page immediately", async ({ page }) => {
   await boot(page);
   await page.waitForFunction(() => (window as any).__plumbline.akjvAvailable === true, null, {
@@ -477,10 +378,7 @@ test("flipping the overlay re-lays the page immediately", async ({ page }) => {
   await page.evaluate(() => (window as any).__plumbline.setAkjvOverlay(false));
   expect(await wordsOnScreen()).toContain("Verily");
 
-  // The above proves the ENGINE re-lays. This proves the READER asks it to:
-  // the pane's layout effect has its own trigger and does not track the
-  // setting, so without the layout epoch the toggle changes nothing on screen
-  // until a resize or a chapter turn happens to re-lay it.
+  // The above proves the engine re-lays; this proves the reader asks it to.
   const layouts = await page.evaluate(() => {
     const s = (window as any).__plumbline;
     (window as any).__layoutCalls = 0;
@@ -515,8 +413,7 @@ test("destinations are exclusive (memorize does not linger)", async ({ page }) =
   await expect(page.getByText("Review due")).toBeVisible();
   await page.getByRole("button", { name: "Study", exact: true }).click();
   await expect(page.getByText("Review due")).toBeHidden();
-  // The maps are sub-items of the Visualizations card now (UAT 2026-08-12) —
-  // the card itself is the hub's "we're back on Study" landmark.
+  // The Visualizations card is the hub's "we're back on Study" landmark.
   await expect(page.getByText("Visualizations")).toBeVisible();
 });
 
@@ -524,15 +421,14 @@ test("word study opens from a single click and respects the gates", async ({ pag
   await boot(page);
   const canvas = page.locator("canvas").first();
   const box = (await canvas.boundingBox())!;
-  // Walk the first text line until a word hit opens the panel (single click —
-  // Compose tap parity, 2026-07-25; the pin/＋link flow is gone).
+  // Walk the first text line until a word hit opens the panel: a single click
+  // opens the word study, with no pin/＋link step.
   for (const x of [0.3, 0.35, 0.4, 0.45, 0.5]) {
     await canvas.click({ position: { x: box.width * x, y: 46 } });
     if (await page.locator("aside.panel").isVisible().catch(() => false)) break;
   }
   await expect(page.locator("aside.panel")).toBeVisible();
-  // The reader's own-note slot on the usage card: a "Notes" header with a ＋
-  // to add or edit (the pencil-glyph row it replaced is gone — 2026-08-30).
+  // The reader's own-note slot on the usage card: a "Notes" header with a ＋.
   await expect(page.locator("aside.panel").getByText("Notes", { exact: true }).first()).toBeVisible();
   await expect(page.locator("aside.panel").getByText("＋", { exact: true }).first()).toBeVisible();
 });
@@ -543,8 +439,7 @@ test("live search shows results, and Escape steps back out", async ({ page }) =>
   await page.getByRole("searchbox").fill("in the beginning");
   await expect(page.locator('[data-surface="search results"]')).toContainText("result");
   // Escape on a field with a query in it empties the field; a second press
-  // leaves the screen. Two stages, because a reader mid-search means "clear
-  // this", and a reader looking at an empty box means "let me out".
+  // leaves the screen.
   await page.keyboard.press("Escape");
   await expect(page.getByRole("searchbox")).toHaveValue("");
   await page.keyboard.press("Escape");
@@ -567,8 +462,7 @@ test("phones keep ONE pane (no split; weaves navigate instead)", async ({ page }
   await page.setViewportSize({ width: 390, height: 844 });
   await boot(page);
   await expect(page.locator(".nav button[title='Split pane']")).toHaveCount(0);
-  // A weave open must navigate the single pane, not split it. Study is a
-  // bottom-bar destination since the menu rationalization.
+  // A weave open must navigate the single pane, not split it.
   await page.locator(".bottom-nav").getByRole("button", { name: "Study", exact: true }).click();
   await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
   await page.locator(".ex-card", { hasText: /^Browse weaves/ }).click();
@@ -579,9 +473,8 @@ test("phones keep ONE pane (no split; weaves navigate instead)", async ({ page }
 });
 
 test("the first-run choice survives a relaunch", async ({ page }) => {
-  // Config must persist WITHOUT an authoring write — it used to reach
-  // IndexedDB only as a side effect of authoring, so a pure reader saw the
-  // intro every single launch (2026-07-26).
+  // Config must persist without an authoring write. It once reached IndexedDB only
+  // as a side effect of authoring, so a pure reader saw the intro every launch.
   await boot(page); // dismisses first-run via the established path
   await page.reload();
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
@@ -589,9 +482,9 @@ test("the first-run choice survives a relaunch", async ({ page }) => {
 });
 
 test("phones clamp a restored multi-pane session to one pane", async ({ page }) => {
-  // A wide session saves a split; reopening on a phone must restore ONE pane.
-  // The narrow rule guards addPane, but the restore path must clamp too —
-  // 2026-07-26, a phone booting into two panes of John 3.
+  // A wide session saves a split; reopening on a phone must restore one pane. The
+  // narrow rule guards addPane, but the restore path has to clamp too — a phone
+  // once booted into two panes of John 3.
   await boot(page);
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
@@ -608,9 +501,9 @@ test("phones clamp a restored multi-pane session to one pane", async ({ page }) 
 });
 
 test("passage navigator is two taps, book then chapter, with no waiting", async ({ page }) => {
-  // Every grid comes from the boot-prefetched TOC, so the chapter list for
-  // any book is on screen immediately. There is no verse step: it used to
-  // lay out the whole chapter just to count verses (2026-07-26).
+  // Every grid comes from the boot-prefetched TOC, so a book's chapter list is on
+  // screen immediately. There is no verse step — it laid out a whole chapter just
+  // to count verses.
   await boot(page);
   await page.locator(".nav .passage").first().click();
   // The navigator lists one testament and opens on the one the reader is in (a
@@ -627,8 +520,8 @@ test("opening a weave splits to its passages; verse clicks stay responsive (free
   page,
 }) => {
   await boot(page);
-  // Weaves is a door inside Explore now: hub card → Weaves page → Browse
-  // raises the library panel (Android parity — no header browse row).
+  // Weaves is a door inside the hub: card → Weaves page → Browse raises the
+  // library panel. There is no header browse row.
   await page.getByRole("button", { name: "Study", exact: true }).click();
   await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
   await page.locator(".ex-card", { hasText: /^Browse weaves/ }).click();
@@ -648,9 +541,8 @@ test("opening a weave splits to its passages; verse clicks stay responsive (free
   expect(targets[1].verse).not.toBeNull();
   expect(`${targets[0].book} ${targets[0].chapter}`).not.toBe(`${targets[1].book} ${targets[1].chapter}`);
 
-  // Clicking the card's verse links used to spiral the layout effect into an
-  // effect_update_depth_exceeded freeze (~10s) that killed reactivity. Each
-  // click must settle fast and leave both panes scrollable.
+  // Clicking a card's verse links used to spiral the layout effect into an
+  // effect_update_depth_exceeded freeze (~10s) that killed reactivity.
   const verseLink = page.locator("aside.panel button.link", { hasText: /\d+:\d+/ });
   for (const i of [0, 1]) {
     const t0 = Date.now();
@@ -681,7 +573,7 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
   });
   await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Settings" }).click();
-  // Backup sits with the everyday settings (out of Advanced, 2026-08-24).
+  // Backup sits with the everyday settings, not under Advanced.
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Back up (.zip)" }).click(),
@@ -689,7 +581,6 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
   const zipPath = testInfo.outputPath("backup.zip");
   await download.saveAs(zipPath);
 
-  // Damage the note, then restore the backup over it.
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     await s.engine.userNoteSet("John 3:16", "damaged", "2026-07-25T01:00:00Z");
@@ -699,8 +590,8 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
   await page.evaluate(() => ((window as any).__preRestore = true));
   await page.locator('input[type="file"]').setInputFiles(zipPath);
   await expect
-    // A poll tick that lands inside the reload throws "context destroyed" and
-    // fails the poll rather than retrying it — same guard as legacy-restore.
+    // A poll tick landing inside the reload throws "context destroyed" and fails
+    // the poll rather than retrying it.
     .poll(
       async () => page.evaluate(() => (window as any).__preRestore ?? null).catch(() => "navigating"),
       {
@@ -715,39 +606,22 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
   expect(text).toBe("backup probe");
 });
 
-// ── boot resilience (2026-07-26) ──────────────────────────────────────────────
-// The bugs these cover all shipped: two panes of John 3 on a phone, the intro
-// on every launch, a reload that hung on "preparing your study tools", an
-// 8.4 s cold parse, and an app that could not actually run offline.
-//
-// "boots offline after ONE visit" used to live here. It moved to
-// network.spec.ts (2026-07-30) because its offline had to become a DEAD ORIGIN:
-// context.setOffline(true) makes WebKit stop consulting the service worker
-// altogether, so the one engine where the offline promise is hardest to keep was
-// the one engine that could not check it. The stallable origin it now needs is
-// that file's machinery.
+// ── boot resilience ───────────────────────────────────────────────────────────
 
 test("a warm boot never asks the network for the pack or the engine", async ({ page }) => {
-  // The offline test (network.spec.ts) cannot tell depot-served from service-
-  // worker-served: with both in play it passes either way, so it would go green
-  // against a boot that secretly still depends on the SW being in its path. That
-  // dependency is what the depot exists to remove — on a first visit the SW is
-  // not controlling the page while the shell loads, and it claims the engine
-  // worker mid-boot, so whether the pack reached the cache was a race.
+  // An offline test cannot tell depot-served from service-worker-served: it passes
+  // either way, so it goes green against a boot that still depends on the SW being
+  // in its path. The sharp observable is the REQUEST, not the response — a bare
+  // fetch the SW answers from its cache still issues a request, while bytes the
+  // depot holds are read from storage and no request is made at all. So counting
+  // requests on a warm boot separates the two, with the SW left registered.
   //
-  // The sharp observable is the REQUEST, not the response. A bare fetch that the
-  // SW happens to answer from its cache still issues a request; bytes the depot
-  // already holds are read from storage and no request is made at all. So
-  // counting requests on a warm boot separates the two, with the SW left
-  // registered and doing its real job (serving the document).
-  //
-  // page.on("request") is the mechanism deliberately: it reports requests made
-  // inside the ENGINE WORKER, which is where all of this happens. CDP does not —
-  // a dedicated worker is a separate target.
+  // page.on("request") is deliberate: it reports requests made inside the engine
+  // worker, where this happens. CDP does not — a dedicated worker is another target.
   await boot(page);
-  // Let the background stages finish on the FIRST visit, so their bytes are in
-  // the depot before the warm boot we actually measure. `stage2 load` appearing
-  // in the trace is the signal that stage 2 landed, rather than a guessed sleep.
+  // Let the background stages finish on the first visit, so their bytes are in the
+  // depot before the warm boot being measured. `stage2 load` in the trace is the
+  // signal that stage 2 landed, rather than a guessed sleep.
   await expect
     .poll(
       async () =>
@@ -764,14 +638,11 @@ test("a warm boot never asks the network for the pack or the engine", async ({ p
   const asked: string[] = [];
   const listener = (r: { url: () => string }) => {
     const u = new URL(r.url());
-    // NOTHING is exempt any more. The manifest used to be — it is the one pack
-    // file with no version in its URL, so boot had to ask the network for it, and
-    // on a stalled radio that cost up to the service worker's 3.5 s timebox before
-    // a device holding all of scripture would open. The PIN replaced it: a
-    // manifest stored on the device, written only after every file it names was
-    // verified present. The live manifest is still fetched once per session by the
-    // reconciler, but off the boot path, which is why this test measures only up
-    // to the point the reader has text.
+    // Nothing is exempt, the manifest included: it is the one pack file with no
+    // version in its URL, so boot had to ask the network for it and a stalled radio
+    // cost the SW's 3.5 s timebox before the app opened. The pin replaced it. The
+    // live manifest is still fetched once per session by the reconciler, but off the
+    // boot path — which is why this measures only up to the point there is text.
     if (u.pathname.includes("/pack/") || u.pathname.endsWith(".wasm")) asked.push(u.pathname);
   };
   page.on("request", listener);
@@ -780,12 +651,11 @@ test("a warm boot never asks the network for the pack or the engine", async ({ p
     await page.reload();
     await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 60_000 });
     await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/);
-    // Snapshot HERE: text is on screen, and everything up to this point had to
-    // come from storage. What the reconciler fetches afterwards is deliberate and
-    // off the critical path.
+    // Snapshot here: text is on screen, so everything to this point came from
+    // storage. What the reconciler fetches afterwards is off the critical path.
     untilText = [...asked];
     // The background stages must be depot hits too, or the reader pays for
-    // Strong's and the cross-references again on every single launch.
+    // Strong's and the cross-references again on every launch.
     await expect
       .poll(
         async () =>
@@ -815,18 +685,15 @@ test("a warm boot never asks the network for the pack or the engine", async ({ p
 });
 
 test("read pack files are freed, and the reader can still author afterwards", async ({ page }) => {
-  // The engine parses each pack file into wasm memory, but the WASI shim's File
-  // constructor COPIES what it is handed, so the in-memory home kept a second
-  // copy of every byte forever — ~37 MB for the corpus cache alone, on a phone.
+  // The WASI shim's File constructor copies what it is handed, so the in-memory
+  // home kept a second copy of every pack byte (~37 MB for the corpus cache alone).
   // Files whose single reader has finished are dropped.
   //
-  // The safety half of this test is the important half. Eviction is restricted to
-  // data/ because `persistUserData` computes deletions by diffing the home
-  // against IndexedDB: anything evicted from a USER directory would be deleted
-  // from the reader's own storage on their next authoring write, permanently. And
-  // data/kjv-notes.jsonl must survive because `load_study` re-reads it on every
-  // one of those writes. So: author something, then check the margin notes and
-  // the stock set are still there.
+  // Eviction is restricted to data/ because `persistUserData` derives deletions by
+  // diffing the home against IndexedDB: anything evicted from a user directory is
+  // permanently deleted from the reader's storage on their next authoring write.
+  // data/kjv-notes.jsonl must survive too, since `load_study` re-reads it on every
+  // one of those writes.
   await boot(page);
   await expect
     .poll(
@@ -849,19 +716,17 @@ test("read pack files are freed, and the reader can still author afterwards", as
     30_000,
   );
 
-  // Now author, which makes the engine reload ALL study data from the home, and
-  // confirm nothing the reader depends on was evicted out from under it.
   const after = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    // Authoring makes load_study rebuild ALL study data from the home, which is
-    // the moment an over-eager eviction would show up.
+    // Authoring makes load_study rebuild all study data from the home — the moment
+    // an over-eager eviction shows up.
     await s.engine.userNoteSet("Gen 1:1", "eviction probe", "2026-07-28T00:00:00Z");
     const [weaves, threads, mine, margin] = await Promise.all([
       s.engine.weaves(),
       s.engine.threads(),
       s.engine.userNote("Gen 1:1"),
-      // The 1769 translators' margin notes come from data/kjv-notes.jsonl via
-      // load_study — the file eviction must never touch. Gen 1:4 has one.
+      // The margin notes come from data/kjv-notes.jsonl, which eviction must never
+      // touch. Gen 1:4 has one.
       s.engine.verseNotes("Gen 1:4"),
     ]);
     return {
@@ -876,23 +741,19 @@ test("read pack files are freed, and the reader can still author afterwards", as
   expect(after.mine, "the reader's own note did not survive the study reload").toContain("eviction probe");
   expect(after.margin, "the 1769 margin notes are gone — data/kjv-notes.jsonl was evicted").toContain("Heb.");
 
-  // And the text still pages: the corpus decodes out of wasm memory, not the
-  // node that was dropped.
+  // And the text still pages: the corpus decodes out of wasm memory, not the node
+  // that was dropped.
   await page.evaluate(() => (window as any).__plumbline.navigate(0, "Rev", 22));
   await expect(page.locator(".subtitle")).toHaveText(/Revelation 22/, { timeout: 30_000 });
 });
 
 test("checking for an update cannot poison the cached shell", async ({ page }) => {
-  // The live bug this pins: the update check fetched index.html as DATA, and the
-  // service worker's network-first branch caches every ok response. So a session
-  // that merely ASKED whether an update existed wrote a newer shell into the
-  // cache while that build's /assets/* were absent — and the next offline launch
-  // was served a document asking for a bundle nobody had. A white screen on a
-  // device holding all of scripture.
-  //
-  // Two rules now hold: no-store responses are never cached, and index.html is
-  // only cached for an actual navigation — recognised by PATHNAME, because for a
-  // while it was recognised by full URL and `?as-data-probe` sailed past it.
+  // The bug: the update check fetched index.html as data and the SW's network-first
+  // branch cached every ok response, so merely asking whether an update existed
+  // wrote a newer shell whose /assets/* were absent, and the next offline launch
+  // white-screened. Two rules now hold — no-store responses are never cached, and
+  // index.html is cached only for a real navigation, recognised by PATHNAME (keyed
+  // on the full URL, `?as-data-probe` sailed past).
   await boot(page);
   // The refusals only mean anything if the worker is in the request path at all.
   await expect
@@ -912,15 +773,12 @@ test("checking for an update cannot poison the cached shell", async ({ page }) =
       }
     };
 
-    // DO NOT read the cache straight after the fetch. The service worker's
-    // cache.put is fire-and-forget (not awaited, not in waitUntil), so an
-    // immediate cache.match measures the race and not the rule: this test passed
-    // on chromium against the LIVE bug because the read got there first, while on
-    // WebKit the same read landed after the put and reported the truth.
-    //
-    // So the window is DERIVED from this machine, not a constant: a response the
-    // worker IS supposed to cache goes first and is timed on its way in, then a
-    // refused one gets an order of magnitude longer than that to show up anyway.
+    // Do not read the cache straight after the fetch: the SW's cache.put is
+    // fire-and-forget, so an immediate cache.match measures the race and not the
+    // rule — that is how this passed on chromium against the live bug. The window is
+    // derived from this machine, not a constant: a response the worker IS supposed
+    // to cache is timed on its way in, then a refused one gets ten times that long
+    // to show up anyway.
     const control = new URL("icon.svg?control-probe", location.href).href;
     await fetch(control).catch(() => {});
     const controlMs = await settle(control, 20_000);
@@ -950,16 +808,14 @@ test("checking for an update cannot poison the cached shell", async ({ page }) =
 });
 
 test("a shared deep link does not strand its own copy of the shell", async ({ page }) => {
-  // Navigations were cached under the URL REQUESTED, so every distinct deep link
-  // (`/?at=Ps 23:1`, `/?church=…`) accumulated its own index.html that the sweep
-  // never touched — un-versioned entries are exempt. Offline, one of those stale
-  // copies would be served for that exact link, naming a bundle since pruned:
-  // a white screen for shared links only, while the plain app worked fine.
-  // The deep-link navigation has to be one the SERVICE WORKER actually sees, or
-  // this proves nothing: on a first visit the SW is not controlling the page yet,
-  // so the navigation never reaches its fetch handler and no entry is written
-  // whatever the key logic says. Boot once to get the worker installed and in
-  // control, THEN follow the shared link.
+  // Navigations were cached under the URL requested, so every distinct deep link
+  // accumulated its own index.html that the sweep never touched (un-versioned
+  // entries are exempt). Offline, that stale copy named a bundle since pruned: a
+  // white screen for shared links only, while the plain app worked.
+  //
+  // Boot first. On a first visit the SW is not controlling the page, so the
+  // navigation never reaches its fetch handler and no entry is written whatever the
+  // key logic does — the test would prove nothing.
   await boot(page);
   await expect
     .poll(async () => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 30_000 })
@@ -977,11 +833,10 @@ test("a shared deep link does not strand its own copy of the shell", async ({ pa
 });
 
 test("the whole shell is stored after one visit, not just what this page loaded", async ({ page }) => {
-  // The precache used to be driven by this page's resource timeline, so it stored
-  // whatever happened to load. A chunk imported lazily — for a screen the reader
-  // had not opened — never appeared, and was simply missing offline. The build
-  // now emits the shell's exact file list, and this asserts the depot holds ALL
-  // of it, which the scrape could never guarantee.
+  // A precache driven by this page's resource timeline stored whatever happened to
+  // load, so a chunk imported lazily for a screen the reader had not opened was
+  // simply missing offline. The build emits the shell's exact file list instead,
+  // and this asserts the depot holds all of it.
   await boot(page);
   await page.waitForTimeout(1_500); // the precache runs at the first idle
 
@@ -1001,15 +856,11 @@ test("the whole shell is stored after one visit, not just what this page loaded"
 });
 
 test("the engine worker measures with the real reader font, not a fallback", async ({ page }) => {
-  // Layout is measured in the WORKER over an OffscreenCanvas; the shell paints
-  // the resulting display list here. So the worker needs the real EB Garamond in
-  // its own FontFaceSet — with a fallback face it measures different advance
-  // widths than the main thread paints, and lines wrap where they are not drawn.
-  //
-  // The failure is silent by design (a dead worker is worse than serif metrics),
-  // which is exactly why it needs a test. This also pins down that the worker's
-  // FontFace path accepts woff2 at all, which is what the faces became when they
-  // were subsetted from 1.6 MB of TTF to 219 KB.
+  // Layout is measured in the worker over an OffscreenCanvas, so it needs the real
+  // EB Garamond in its own FontFaceSet: with a fallback face it measures different
+  // advance widths than the main thread paints, and lines wrap where they are not
+  // drawn. That failure is silent by design, which is why it needs a test. Also
+  // pins that the worker's FontFace path accepts woff2 at all.
   await boot(page);
   const faces = await page.evaluate(async () => {
     const trace: [string, number][] = await (window as any).__plumbline.rpc.bootTrace();
@@ -1019,11 +870,10 @@ test("the engine worker measures with the real reader font, not a fallback", asy
 });
 
 test("a first visit never parses the corpus — the pack ships the cache", async ({ page }) => {
-  // Every test starts on empty storage, so this IS a first visit. The engine
-  // used to parse ~19 MB of JSONL here: 8.4 s on a real phone. The pack now
-  // carries a prebuilt idxcache (hydrate `web-cache`, stamped mtime 0 like
-  // the browser WASI shim reports) — if that stops shipping or stops
-  // validating, the label flips and this fails.
+  // Every test starts on empty storage, so this is a first visit. Parsing ~19 MB of
+  // JSONL here cost 8.4 s on a real phone; the pack ships a prebuilt idxcache
+  // instead (hydrate `web-cache`, stamped mtime 0 as the browser WASI shim reports).
+  // If it stops shipping or stops validating, the label flips and this fails.
   await boot(page);
   const label = await page.evaluate(async () => {
     const trace: [string, number][] = await (window as any).__plumbline.rpc.bootTrace();
@@ -1033,10 +883,9 @@ test("a first visit never parses the corpus — the pack ships the cache", async
 });
 
 test("background loading never starves the reader (worker-thread scheduling)", { tag: "@perf" }, async ({ page }) => {
-  // Stage-2 data and the analytics warm-up run on the ONE thread that also
-  // answers layout, so they must stay chunked with yields. When they didn't, a
-  // pane re-layout queued behind seconds of work and the reader was left
-  // half-width after closing a split.
+  // Stage-2 data and the analytics warm-up run on the one thread that also answers
+  // layout, so they must stay chunked with yields. Unchunked, a pane re-layout
+  // queued behind seconds of work and left the reader half-width after a split.
   await boot(page);
   const { worst, chunk } = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
@@ -1052,44 +901,28 @@ test("background loading never starves the reader (worker-thread scheduling)", {
     const steps = trace.filter(([label]) => label.startsWith("warm step")).map(([, ms]) => ms);
     return { worst, chunk: Math.max(0, ...steps) };
   });
-  // Self-calibrating: a queued layout may wait out ONE background chunk, never
-  // the whole sequence — so the budget follows this machine's own chunk cost
-  // and a slow CI box moves both sides together. A fixed millisecond ceiling
-  // does NOT work here: 1500 ms passed against a deliberately un-chunked warm
-  // (mutation-tested 2026-07-26 — worst was 311 ms chunked vs 917 ms as one
-  // block, with the driver chunk at 357 ms and 223 ms respectively).
+  // Self-calibrating: a queued layout may wait out one background chunk, never the
+  // whole sequence, so the budget follows this machine's own chunk cost and a slow
+  // CI box moves both sides together. A fixed millisecond ceiling does NOT work
+  // here — 1500 ms sat comfortably above a deliberately un-chunked warm.
   expect(worst).toBeLessThan(Math.max(400, chunk * 2.5));
 });
 
-// The companion to the test above, and the reason it needed one: that test's
-// budget is `Math.max(400, chunk * 2.5)` where `chunk` is
-// `Math.max(...warm steps)`. The budget is derived from the WORST chunk — so a
-// phase that isn't sliced at all raises its own ceiling and the test can never
-// fail on it. On the maintainer's phone (2026-07-28) the worst chunk was
-// 54,859 ms, which set that budget to 137,147 ms.
-//
-// So: derive from the MEDIAN chunk instead. A slice is meant to be a budgeted
-// slice; one chunk many times the typical one is not a slice, it is a block, and
-// while it runs this thread answers no layout, no tap and no word study.
-//
-// HONEST ABOUT ITS REACH. The offender was warm phase 7, the "verses like this"
-// SIF model — 54,859 ms on that phone against a ~300 ms median, and only ~226 ms
-// against a ~6 ms median on a desktop, because its cost was allocation churn
-// rather than arithmetic and a desktop absorbs that. The floor below keeps this
-// test from flaking on a GC spike, and a desktop's 226 ms sat under it, which is
-// why that phase also had a deterministic slicing guard in Rust.
-//
-// That feature was removed 2026-07-30 and its Rust guard with it, so THIS test is
-// now the only thing watching for an unsliced background phase — which is the
-// case it was written for: it catches the next one on whatever hardware runs it,
-// without needing a slow device to notice.
+// The companion to the test above, and the reason it needed one: that test derives
+// its budget from the WORST chunk, so a phase that is not sliced at all raises its
+// own ceiling and can never fail it (a 54,859 ms chunk on a phone set that budget
+// to 137 s). This one derives from the MEDIAN instead — one chunk many times the
+// typical one is not a slice but a block, and while it runs the thread answers no
+// layout, no tap and no word study. The floor keeps it from flaking on a GC spike.
+// It is the only guard left against an unsliced background phase, and catches the
+// next one on whatever hardware runs it, without needing a slow device.
 test("no single background chunk may monopolise the engine worker", { tag: "@perf" }, async ({ page }) => {
   await boot(page);
   await settleBackground(page);
 
   const { worst, worstLabel, median, count } = await page.evaluate(async () => {
     const trace: [string, number][] = await (window as any).__plumbline.rpc.bootTrace();
-    // Only the stages that CLAIM to be sliced. The stage-2 Strong's parse is one
+    // Only the stages that claim to be sliced. The stage-2 Strong's parse is one
     // synchronous block by construction and is a separate question.
     const chunks = trace.filter(
       ([l]) => l.startsWith("warm step") || l.startsWith("rnd load step"),
@@ -1117,10 +950,9 @@ test("no single background chunk may monopolise the engine worker", { tag: "@per
 });
 
 test("the reader scrolls natively, and the pane follows both ways", async ({ page }) => {
-  // Scrolling is the browser's (a spacer sized to the chapter, canvas sticky
-  // on top) — that is where momentum and fling come from on a phone. The
-  // hand-rolled 1:1 pointer version felt dead, so guard the wiring: the
-  // scroller must have real range, and scrollTop <-> pane.scrollY must track.
+  // Scrolling is the browser's (a spacer sized to the chapter, canvas sticky on
+  // top), which is where momentum and fling come from on a phone. Guard the wiring:
+  // real scroll range, and scrollTop <-> pane.scrollY tracking both ways.
   await boot(page);
   const scroller = page.locator(".pane .scroll").first();
   await expect
@@ -1139,15 +971,13 @@ test("the reader scrolls natively, and the pane follows both ways", async ({ pag
 });
 
 test("a chapter turn never shows the old text under the new name", async ({ page }) => {
-  // The nav strip and header change the instant the reader taps, but the
-  // display list arrives from the worker. Holding the previous chapter on the
-  // canvas meanwhile put John's text under a header reading Acts, which reads
-  // as broken (feedback 2026-07-26). Slowing the layout makes that in-between
-  // state observable; the published verse geometry is what the canvas paints.
+  // The nav strip and header change the instant the reader taps, but the display
+  // list arrives from the worker — holding the previous chapter on the canvas
+  // meanwhile put John's text under a header reading Acts. Slowing the layout makes
+  // that in-between state observable; the verse geometry is what the canvas paints.
   await boot(page);
-  // The first chapter must actually be ON SCREEN before we navigate away —
-  // without this the assertion below passes vacuously against the bug, which
-  // is exactly how the first version of this test fooled me.
+  // The first chapter must be on screen before navigating away, or the assertion
+  // below passes vacuously against the bug.
   await expect
     .poll(() => page.evaluate(() => (window as any).__plumbline.paneVerseGeom[0]?.size ?? 0), {
       timeout: 30_000,
@@ -1167,34 +997,27 @@ test("a chapter turn never shows the old text under the new name", async ({ page
   });
   expect(during.pane).toBe("Rev 7");
   expect(during.staleVerses).toBe(0); // nothing of the previous chapter left
-  // …and the header shows the book's NAME, never its OSIS id ("Rev 7").
+  // …and the header shows the book's name, never its OSIS id ("Rev 7").
   await expect(page.locator(".subtitle")).toHaveText("Revelation 7", { timeout: 30_000 });
 });
 
 test("Settings can make the app completely offline, and says when it is", async ({ page }) => {
-  // The reader's answer to "will this work with no signal?". Most of the app
-  // is local after a first visit; this verifies every pack file is really in
-  // the offline cache and fetches whatever isn't (a failed download or an
-  // eviction otherwise goes unnoticed until the reader has no connection).
+  // Verifies every pack file is really in the offline cache and fetches whatever is
+  // not: a failed download or an eviction otherwise goes unnoticed until the reader
+  // has no connection.
   await boot(page);
   await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Settings" }).click();
-  // Offline lives behind the Advanced disclosure now.
+  // Offline lives behind the Advanced disclosure.
   await page.locator('[data-surface="settings"] details.advanced > summary').click();
   const download = page.getByRole("button", { name: "Download everything" });
   if (await download.isVisible().catch(() => false)) await download.click();
   await expect(page.getByText("Everything is on this device")).toBeVisible({ timeout: 120_000 });
 
-  // Not just a label: every file the app actually READS must be on the device.
-  //
-  // `data/kjv.jsonl` is excluded, and its absence is asserted below rather than
-  // ignored. The pack ships it, but with a parsed-corpus cache present no stage
-  // ever fetches it — so counting it made the device permanently "incomplete"
-  // and made this very button spend 2.4 MB on a file nothing opens.
-  // Checked against the URLs the app itself uses — read from the manifest and
-  // keyed the same way the loader keys them (per-file content hash), rather than
-  // hand-rolled here. A test that rebuilds the URL scheme independently just
-  // asserts that two copies of the scheme agree.
+  // Not just a label: every file the app actually reads must be on the device.
+  // Checked against the URLs the app itself uses — read from the manifest and keyed
+  // the way the loader keys them (per-file content hash). A test that rebuilds the
+  // URL scheme independently only asserts that two copies of the scheme agree.
   const { missing, rawJsonlShipped } = await page.evaluate(async () => {
     const manifest = await (await fetch("pack/manifest.json")).json();
     const cache = await caches.open("plumbline-v1");
@@ -1217,10 +1040,9 @@ test("Settings can make the app completely offline, and says when it is", async 
 });
 
 test("the welcome's verses are the corpus text, verbatim and instant", async ({ page }) => {
-  // The welcome quotes scripture from literals rather than asking the engine
-  // for ten verses one at a time — they used to pop in a beat after the page
-  // (feedback 2026-07-27). A copy can drift, so this compares every quote on
-  // screen against the corpus itself.
+  // The welcome quotes scripture from literals rather than asking the engine for ten
+  // verses one at a time, which made them pop in a beat after the page. A copy can
+  // drift, so every quote on screen is compared against the corpus itself.
   await page.goto("/");
   await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
   await expect(page.getByText("I'm so glad you've put your faith in Jesus")).toBeVisible();
@@ -1236,9 +1058,6 @@ test("the welcome's verses are the corpus text, verbatim and instant", async ({ 
     const groups = [
       ["Ps 12:6", "Ps 12:7"],
       ["Heb 10:24", "Heb 10:25"],
-      // Ps 119:11 went with the "Memorize" beat, which the 30-day devotional
-      // replaced on this page (maintainer, 2026-08-26). The verse is still in
-      // the corpus and still on Android's welcome — it is just not quoted here.
       ["Rom 5:8", "John 3:16"],
       ["John 10:28", "1John 5:13"],
       ["Phil 1:6", "1John 1:9"],
@@ -1257,10 +1076,8 @@ test("the welcome's verses are the corpus text, verbatim and instant", async ({ 
 });
 
 test("the share QR encodes the church, not just the app", async ({ page }) => {
-  // One scan should hand over both (2026-07-27). The QR lives on the Share
-  // screen since the menu rationalization — generated at render time, so
-  // setting a church must change what it encodes: a longer payload needs a
-  // bigger symbol.
+  // One scan hands over both. The QR is generated at render time, so setting a
+  // church must change what it encodes — a longer payload needs a bigger symbol.
   await boot(page);
   // Desktop puts the roles bar in the header, phones at the bottom — the
   // navigation landmark covers both.
@@ -1270,8 +1087,8 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
   const modulesFor = async () =>
     card.locator("svg").getAttribute("viewBox").then((v) => Number(v!.split(" ")[2]));
   const plain = await modulesFor();
-  // The card shows the HOST, never the full link: with a church attached the
-  // URL runs off a phone screen (feedback 2026-07-27).
+  // The card shows the host, never the full link — with a church attached the URL
+  // runs off a phone screen.
   await expect(card).toContainText("plumblinebible.org");
 
   await page.evaluate(() =>
@@ -1281,14 +1098,12 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
       url: "https://example.org",
     }),
   );
-  // The named church is on the card, and the symbol grew to carry it.
   await expect(card).toContainText("Grace Bible Church");
   expect(await modulesFor()).toBeGreaterThan(plain);
 });
 
-// Sharing a PASSAGE is a QR carrying the passage, not the phone's share sheet
-// carrying a wall of text (feedback 2026-07-27). Present is held up to someone
-// in front of you, so what they scan must land them in the reader at the verse.
+// Sharing a passage is a QR carrying the passage, not a share sheet carrying a wall
+// of text: what the person in front of you scans must land in the reader at the verse.
 test("Present shares the passage as a QR whose link opens at the first verse", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Sharing the gospel" }).click({ timeout: 90_000 });
@@ -1303,12 +1118,11 @@ test("Present shares the passage as a QR whose link opens at the first verse", a
 
   // Present's own Share, not the header's.
   await page.locator(".present .sharebtn").click();
-  // A QR, and no share-sheet text dump.
   await expect(page.locator(".sharesheet svg")).toBeVisible();
   await page.getByRole("button", { name: "Copy the passages" }).click();
 
   const copied: string = await page.evaluate(() => (window as any).__copied[0]);
-  // The link carries the thread's FIRST verse, url-encoded ("Rom 3:23").
+  // The link carries the thread's first verse, url-encoded ("Rom 3:23").
   expect(copied).toMatch(/[?&]at=Rom\+3%3A23/);
   expect(copied).toContain("For all have sinned");
 });
@@ -1330,27 +1144,17 @@ test("a shared passage link opens the reader at its verse", async ({ page }) => 
   expect(await page.evaluate(() => location.search)).toBe("");
 });
 
-// Every versioned URL is content-addressed, so an update ADDS an entry beside
-// the old one — and nothing used to remove the old. Three data updates meant
-// three whole ~12 MB packs stranded on the device (2026-07-27).
+// Every versioned URL is content-addressed, so an update adds an entry beside the
+// old one; with nothing removing the old, three data updates stranded three whole
+// ~12 MB packs on the device.
 test("updating sweeps the versions this build no longer uses", async ({ page }) => {
   await boot(page);
-  // The pin names EVERY file in the manifest and is written the moment the
-  // engine opens — long before stage 2 and the analysis pack have finished
-  // downloading. The last assertion here ("every file the pin names survived the
-  // sweep") is therefore meaningless until they are actually on the device: a
-  // file that never arrived is missing from the depot for reasons that have
-  // nothing to do with prune, and the failure reads as "prune deleted a pinned
-  // pack file", which is a lie.
-  //
-  // This test has always depended on the downloads happening to win that race,
-  // and it lost the moment anything slowed them slightly (2026-07-28). Waiting is
-  // the fix; the race was never part of what it means to test.
+  // The pin names every file in the manifest and is written the moment the engine
+  // opens, long before stage 2, the analysis pack and the other languages' corpora
+  // have finished downloading. Without both settles the last assertion here ("every
+  // file the pin names survived the sweep") reports prune for a file that had simply
+  // not arrived yet.
   await settleBackground(page);
-  // And the downloads the trace does not narrate: every language's Bible now
-  // ships, ~9 MB fetched after the reader is served, and the pin names them the
-  // moment the engine opens. Without this the final assertion reports prune for
-  // a file that had not arrived — the exact lie the paragraph above is about.
   await settleDepot(page);
   // Let the real boot-time sweep finish first, so this test's seeding isn't
   // racing it and the counts below are its own doing.
@@ -1384,30 +1188,26 @@ test("updating sweeps the versions this build no longer uses", async ({ page }) 
   expect(after).not.toContain("/pack/manifest.json?v=OLDPACK");
   expect(after).not.toContain("/plumbline_ffi.wasm?v=OLDBUILD");
   expect(after).not.toContain("/assets/index-DEADBEEF.js");
-  // ...and nothing else was collateral. The shell and every file the PIN names
-  // must survive, or the next launch is broken or offline-dead.
-  //
-  // The keep-set is now the pin plus the shell manifest, not "entries whose ?v=
-  // matches the current pack". That is what lets per-file hashes work at all, and
-  // it also reclaims a file dropped from the pack entirely — which the old rule
-  // could never do, because nothing referenced its version any more.
+  // ...and nothing else was collateral: the shell and every file the pin names must
+  // survive, or the next launch is broken or offline-dead. The keep-set is the pin
+  // plus the shell manifest, which is what lets per-file hashes work and reclaims a
+  // file dropped from the pack entirely.
   expect(after).toContain("/index.html");
   const pinned = await page.evaluate(async () => {
     const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
       ignoreVary: true,
     });
     const pin = hit ? await hit.json() : null;
-    // Only the files the pin NAMES. An `optional` file the reader never asked
-    // for is listed without a url — that is the pin saying "the pack offers
-    // this, this device does not have it" — and prune is right not to keep it.
+    // Only the files the pin names. An `optional` file the reader never asked for
+    // is listed without a url — the pin saying the device does not have it — and
+    // prune is right not to keep it.
     return (pin?.files ?? [])
       .filter((f: { url?: string }) => f.url)
       .map((f: { url: string }) => "/" + f.url);
   });
-  // A floor, not a count: what is asserted is that a pin exists and names the
-  // whole pack, and the loop below is the real check. Kept well under the true
-  // file count so that dropping an artifact (three of them went on 2026-07-30
-  // with the concept map) fails here for no reason at all.
+  // A floor, not a count: this only asserts a pin exists and names the whole pack —
+  // the loop below is the real check. Kept well under the true file count so that
+  // dropping an artifact does not fail here for no reason.
   expect(pinned.length, "there should be a pin naming the pack after a boot").toBeGreaterThan(30);
   for (const u of pinned) expect(after, `prune deleted a pinned pack file: ${u}`).toContain(u);
   // The bundle this page is actually running must still be cached.
@@ -1417,9 +1217,8 @@ test("updating sweeps the versions this build no longer uses", async ({ page }) 
   expect(after).toContain(new URL(running).pathname);
 });
 
-// The update toast: a deploy landed while this session stayed open. Driven
-// through the real checker with a stubbed index.html, so it exercises the
-// bundle comparison rather than just the flag.
+// A deploy landed while this session stayed open. Driven through the real checker
+// with a stubbed manifest, so it exercises the build comparison, not just the flag.
 test("a new deploy offers an update, and only when the build really changed", async ({ page }) => {
   await boot(page);
   const realFetch = "__realFetch";
@@ -1427,12 +1226,10 @@ test("a new deploy offers an update, and only when the build really changed", as
     (window as any)[k] = window.fetch.bind(window);
   }, realFetch);
 
-  // Same build deployed → no toast. This is the guard that matters: a checker
-  // that always fires would nag every reader on every resume.
-  //
-  // The signal is the shell manifest's `buildId`, not a regex over index.html.
-  // Scraping the document meant the SW cached a newer shell whose bundles did not
-  // exist yet — a white screen on a device holding all of scripture.
+  // Same build deployed → no toast; a checker that always fires nags every reader on
+  // every resume. The signal is the shell manifest's `buildId`, not a regex over
+  // index.html — scraping the document made the SW cache a newer shell whose bundles
+  // did not exist yet.
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     const live = await (await (window as any).__realFetch("shell-manifest.json")).json();
@@ -1465,10 +1262,9 @@ test("a new deploy offers an update, and only when the build really changed", as
 });
 
 // A stranger's query string is untrusted input: a nonsense `at` must be rejected
-// OUTRIGHT, never handed to navigation. The reader staying on John proves little
-// on its own — the link dispatcher discards an unparseable ref anyway — so the
-// signal is the address bar: the shell only strips the query once it has
-// consumed something from it, so junk left in place means junk never counted.
+// outright. Staying on John proves little on its own, since the link dispatcher
+// discards an unparseable ref anyway — the signal is the address bar, because the
+// shell strips the query only once it has consumed something from it.
 test("a bogus at= parameter is rejected, not merely survived", async ({ page }) => {
   await page.goto("/?at=javascript%3Aalert(1)");
   await page.getByRole("button", { name: "Established believer" }).click({ timeout: 90_000 });
@@ -1481,9 +1277,8 @@ test("a bogus at= parameter is rejected, not merely survived", async ({ page }) 
 });
 
 test("a Present link names the church and drops the setup paths", async ({ page }) => {
-  // Present is the screen you show someone face to face: its link says who it
-  // was meant for, so the welcome offers only the two paths that fit and
-  // still names whoever handed it over.
+  // A Present link says who it was meant for: the welcome offers only the two paths
+  // that fit, and still names whoever handed it over.
   await page.goto("/?church=Grace+Bible+Church&start=new");
   await expect(page.getByText("Shared with you by")).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole("button", { name: "New believer" })).toBeVisible();
@@ -1493,9 +1288,8 @@ test("a Present link names the church and drops the setup paths", async ({ page 
 });
 
 test("first-run: curious about the Bible is its own path, and stays re-readable", async ({ page }) => {
-  // A third way in, for someone who hasn't decided what they believe
-  // (2026-07-27) — and the welcome a reader was given must be readable again
-  // afterwards, from the chrome rather than by reinstalling.
+  // A third way in, and the welcome a reader was given must stay readable from the
+  // chrome afterwards rather than by reinstalling.
   await page.goto("/");
   await page.getByRole("button", { name: "Curious about the Bible" }).click({ timeout: 90_000 });
   await expect(page.getByText("I'm glad you're curious about the Bible")).toBeVisible();
@@ -1519,8 +1313,7 @@ test("first-run: curious about the Bible is its own path, and stays re-readable"
 });
 
 test("a Present link offers only the two paths it was meant for", async ({ page }) => {
-  // Handed to someone in person: new believer or curious. Setting up study
-  // tiers is not what that moment is for.
+  // Handed to someone in person: new believer or curious, not tier setup.
   await page.goto("/?start=new");
   await expect(page.getByRole("button", { name: "New believer" })).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole("button", { name: "Curious about the Bible" })).toBeVisible();
@@ -1529,20 +1322,18 @@ test("a Present link offers only the two paths it was meant for", async ({ page 
 });
 
 test("the phone top bar stays on one row, search behind a glass", async ({ page }) => {
-  // Welcome + Church + Share + Search + ≡ wrapped onto a second row on a
-  // phone (feedback 2026-07-27). Search is an icon — and now a door to its own
-  // screen — so it never takes the row at all.
+  // Welcome + Church + Share + Search + ≡ wrapped onto a second row on a phone.
+  // Search is an icon and a door to its own screen, so it never takes the row.
   await page.setViewportSize({ width: 390, height: 844 });
   await boot(page);
   await page.evaluate(() =>
     (window as any).__plumbline.setChurch({ name: "Grace Bible Church", info: "", url: "https://example.org" }),
   );
-  // "One row" means the visible children share a row AS EACH OTHER — compared
-  // among themselves, not against the header's own top. The original form used the
-  // container's top with a 24px tolerance, which quietly also asserted a bar height
-  // and so went red the moment the bar was made bigger on purpose (2026-07-29).
-  // Children with display:none are skipped: their rects are all zeros and would
-  // drag the spread to the full bar height whatever the layout did.
+  // "One row" means the visible children share a row as each other, compared among
+  // themselves: measuring against the header's own top also asserts a bar height,
+  // and goes red the moment the bar is deliberately made taller. display:none
+  // children are skipped — their all-zero rects would drag the spread to the full
+  // bar height whatever the layout did.
   const oneRow = () =>
     page.locator("header").evaluate((h) => {
       const tops = [...h.children]
@@ -1552,10 +1343,8 @@ test("the phone top bar stays on one row, search behind a glass", async ({ page 
     });
   await expect.poll(oneRow).toBe(true);
 
-  // The bar carries no field at all now — the glass is a door to the search
-  // SCREEN (search.spec.ts), so the row it used to fight for is never
-  // contested. What still matters here is that the glass is reachable on a
-  // phone and that pressing it leaves the bar's one-row promise intact.
+  // The bar carries no field: the glass is a door to the search screen. What matters
+  // here is that it is reachable on a phone and leaves the one-row promise intact.
   await expect(page.locator("header").getByRole("searchbox")).toHaveCount(0);
   await page.getByLabel("Open search").click();
   await expect(page.getByRole("searchbox")).toBeFocused();
@@ -1564,8 +1353,8 @@ test("the phone top bar stays on one row, search behind a glass", async ({ page 
 });
 
 test("the welcome points a new believer at the church that shared it", async ({ page }) => {
-  // "Find a church" used to say "consider reaching out to them" in the
-  // abstract, even when the link named the church (feedback 2026-07-27).
+  // "Find a church" must name the church the link carried, not speak in the
+  // abstract.
   await page.goto(
     "/?church=Grace+Bible+Church&churchService=600&churchUrl=https%3A%2F%2Fexample.org&start=new",
   );
@@ -1573,9 +1362,8 @@ test("the welcome points a new believer at the church that shared it", async ({ 
   const findChurch = page.locator(".welcome p", { hasText: "Find a church" });
   await expect(findChurch).toContainText("shared with you by");
   await expect(findChurch).toContainText("Grace Bible Church");
-  // The meeting time, written out by the app rather than echoed from the link:
-  // the link carried `churchService=600` and this reader is English, so 600
-  // minutes reads as 10:00 AM (a German reader would see 10:00).
+  // The meeting time is formatted by the app, not echoed from the link: it carried
+  // `churchService=600`, and an English reader sees 10:00 AM (a German one, 10:00).
   await expect(findChurch).toContainText("Meets Sundays at 10:00 AM");
   await expect(findChurch.getByRole("link", { name: /Visit Grace Bible Church/ })).toHaveAttribute(
     "href",
@@ -1591,14 +1379,12 @@ test("with no church shared, the welcome keeps its general advice", async ({ pag
   await expect(findChurch).not.toContainText("shared with you by");
 });
 
-// The Check button used to read the engine through `session.engine`, the
-// console/e2e proxy, which returns a PROMISE — so `score.accuracy` was
-// undefined and every check reported "0% recalled", even a verbatim
-// copy/paste (feedback 2026-07-27). Drives the real UI, so a regression in
-// either the wiring or the scoring fails here.
+// The Check button once read the engine through `session.engine`, the console/e2e
+// proxy, which returns a promise — so `score.accuracy` was undefined and every
+// check reported "0% recalled", even a verbatim copy. Drives the real UI, so a
+// regression in either the wiring or the scoring fails here.
 test("checking a typed recall scores it (a perfect copy is 100%)", async ({ page }) => {
   await boot(page);
-  // Seed a card for a known verse and drill it straight away.
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     await s.engine.memoryAdd("John 3:16", new Date().toISOString());
@@ -1608,7 +1394,6 @@ test("checking a typed recall scores it (a perfect copy is 100%)", async ({ page
   await page.getByRole("button", { name: "Review due", exact: false }).click();
   await page.getByRole("button", { name: "Type it" }).click();
 
-  // Reveal the verse and type back exactly what the drill asks for.
   const drilled = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     return (await s.engine.memoryDrill("John 3:16", 0))?.text as string;
@@ -1618,23 +1403,21 @@ test("checking a typed recall scores it (a perfect copy is 100%)", async ({ page
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.locator(".accuracy")).toHaveText("100% recalled");
 
-  // A SECOND check must rescore rather than leave the first score on screen.
-  // Pinned to the exact figure on purpose: `not.toHaveText("100% recalled")`
-  // also passes when `.accuracy` has gone MISSING, so it would greet a check
-  // that silently cleared the score as a success. Of the 25 words of John
-  // 3:16 this wrong answer shares only "the" — 1/25 = 4%.
+  // A second check must rescore, not leave the first score on screen. Pinned to the
+  // exact figure because `not.toHaveText("100% recalled")` also passes when
+  // `.accuracy` is missing, greeting a silently cleared score as a success. This
+  // answer shares one of John 3:16's 25 words: 4%.
   await page.locator("textarea").fill("nothing like the verse at all");
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.locator(".accuracy")).toHaveText("4% recalled");
 });
 
 // A reader who pauses to think must not lose their work. `nowStamp()` is
-// second-granularity and lands in the read-through cache KEY, so the due-list
-// read minted a fresh key every second, fell back to [], and re-ran the reset
-// effect — clearing the textarea and dropping the mode back to "First letters"
-// about once a second, which made typed recall unusable (feedback 2026-07-27).
-// The dwell is a fixed 2.5s on purpose: it is not a performance budget but a
-// span that must straddle the one-second boundary the churn ran on.
+// second-granularity and lands in the read-through cache key, so the due-list read
+// minted a fresh key every second, fell back to [], and re-ran the reset effect —
+// clearing the textarea and dropping the mode back to "First letters" about once a
+// second. The 2.5 s dwell is not a performance budget but a span that must straddle
+// the one-second boundary that churn ran on.
 test("a typed recall survives a pause and a background study refresh", async ({ page }) => {
   await boot(page);
   await page.evaluate(async () => {
@@ -1671,11 +1454,10 @@ test("a typed recall survives a pause and a background study refresh", async ({ 
   await expect(page.locator(".accuracy")).toHaveText("100% recalled");
 });
 
-// Through the PICKER, not the engine. The test below seeds its card by calling
-// memoryAddPassage directly, which sailed straight past a dead commit button:
-// commit() read `start`/`throughRef` AFTER close() had nulled the state they
-// derive from, so the engine got null for both and every attempt toasted "null
-// or invalid argument" with no card written (feedback 2026-07-27).
+// Through the picker, not the engine: commit() read `start`/`throughRef` after
+// close() had nulled the state they derive from, so every attempt toasted "null or
+// invalid argument" with no card written. The test below, which seeds via
+// memoryAddPassage directly, sails straight past that.
 test("the passage picker actually files the card it names", async ({ page }) => {
   await boot(page);
   await page.evaluate(() => {
@@ -1696,8 +1478,8 @@ test("the passage picker actually files the card it names", async ({ page }) => 
   expect(cards).toEqual(["Ps 23:1–3"]);
 });
 
-// A whole section as ONE card (2026-07-27): the hub lists one row labelled with
-// the range, and the drill covers every verse in it.
+// A whole section as one card: the hub lists one row labelled with the range, and
+// the drill covers every verse in it.
 test("a passage is memorized as one card, drilled whole", async ({ page }) => {
   await boot(page);
   await page.evaluate(async () => {
@@ -1706,7 +1488,7 @@ test("a passage is memorized as one card, drilled whole", async ({ page }) => {
   });
   await page.getByRole("button", { name: "Study", exact: true }).click();
   await page.locator(".ex-card", { hasText: /^Memorize/ }).click();
-  // ONE row, named as a range — not three verse rows.
+  // One row, named as a range — not three verse rows.
   await expect(page.locator(".card .ref", { hasText: "Ps 23:1–3" })).toHaveCount(1);
   const drill = await page.evaluate(async () => {
     const s = (window as any).__plumbline;

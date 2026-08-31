@@ -1,33 +1,18 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The suggested-weave bundle is the pack's first `optional` file: 194
-// machine-proposed links that ship inside the APK but are a DOWNLOAD here, and
-// one nobody gets unless they ask in Settings.
+// The suggested-weave bundle is the pack's first `optional` file: 194 machine-proposed
+// links nobody gets unless they ask in Settings. That stage only means something if
+// nothing fetches the file on its own, which is what most of this file pins.
 //
-// The stage only means something if nothing fetches it on its own, so that is
-// what most of this file pins. Requests are observed with `page.on("request")`
-// rather than intercepted: interception via `page.route()` bypasses service
-// workers (the trap recorded in network.spec.ts), and here it would also change
-// the very behaviour under test. Passive observation sees worker requests too,
-// which matters because every pack fetch is made by the engine worker.
+// Requests are OBSERVED with `page.on("request")`, never intercepted: `page.route()`
+// bypasses service workers, and interception would change the very behaviour under
+// test. Passive observation also sees worker requests, which matters because every pack
+// fetch is made by the engine worker.
 //
-// Mutation-tested 2026-08-02:
-//   * `stage: "optional"` → `"study"` in build-web-pack.mjs makes "a first visit
-//     never fetches" go red — stage 2 pulls it on every first visit. Note the
-//     pack CHECKER refuses that build first, so proving it meant disabling both
-//     guards; the two layers agree.
-//   * dropping the `if (readFile(root, path)) continue` guard in home.ts makes
-//     "the reader's own copy survives" go red.
-//
-// The UPDATE path is not tested here — a reload alone never reaches
-// `reconcilePack`, which runs only on a pack-version change. That case needs
-// the rewriting origin, so it lives in network.spec.ts ("a deploy does not push
-// the optional bundle onto a device that declined it"), mutation-tested there.
-//
-// This file found a real bug on first run: `installSuggestedWeaves` wrote all
-// 194 files and the marker, but `suggestedInstalled` was a boolean captured at
-// buildHome, so Settings went on offering a download the reader had already
-// finished until the next reload. It is a getter over mutable state now.
+// The UPDATE path is not tested here — a reload never reaches `reconcilePack`, which
+// runs only on a pack-version change; that case needs the rewriting origin and lives in
+// network.spec.ts. And `suggestedInstalled` must stay a getter over live state: as a
+// value captured at buildHome, Settings kept offering a download already finished.
 
 test.setTimeout(240_000);
 
@@ -57,9 +42,8 @@ async function boot(page: Page): Promise<void> {
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
-/** Wait until the worker has finished its background stages, so "nothing
- *  fetched the bundle" is a statement about a settled boot rather than a race
- *  the test won by being early. Stage 2 landing is what unlocks Strong's. */
+/** Wait until the worker has finished its background stages, so "nothing fetched the
+ *  bundle" describes a settled boot rather than a race the test won by being early. */
 async function settle(page: Page): Promise<void> {
   await page.waitForFunction(
     async () => {
@@ -76,7 +60,7 @@ async function settle(page: Page): Promise<void> {
 
 async function openSettings(page: Page): Promise<void> {
   await page.evaluate(() => ((window as any).__plumbline.showSettings = true));
-  // The pack rows live behind the Advanced disclosure now.
+  // The pack rows live behind the Advanced disclosure.
   await page.locator('[data-surface="settings"] details.advanced > summary').click();
   await expect(page.getByText("Suggested weaves")).toBeVisible({ timeout: 30_000 });
 }
@@ -135,9 +119,8 @@ test("a reload after installing neither forgets nor re-downloads", async ({ page
     return (await w.rpc.call("suggestedWeaves"))?.suggested?.length ?? 0;
   });
 
-  // Second visit: the bundle is a download the reader has already made, so it
-  // must not be made again — this is the case a naive "fetch what the manifest
-  // lists" reconcile gets wrong.
+  // Second visit: the reader has already made this download, so it must not be made
+  // again — the case a naive "fetch what the manifest lists" reconcile gets wrong.
   const packed = watchPack(page);
   await page.reload();
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
@@ -153,10 +136,9 @@ test("a reload after installing neither forgets nor re-downloads", async ({ page
   expect(still).toBe(installed);
 });
 
-/** One home file, straight into the user store — the same place `persistUserData`
- *  writes, so the next boot lays it into the home like any file of the reader's.
- *  There is no RPC for this on purpose: nothing in the product writes an
- *  arbitrary path, and a test-only endpoint would be a hole in the ABI. */
+/** One home file, straight into the user store where `persistUserData` writes, so the
+ *  next boot lays it into the home like any file of the reader's. No RPC for this on
+ *  purpose: a test-only endpoint that wrote an arbitrary path would be a hole in the ABI. */
 async function seedUserFile(page: Page, path: string, text: string): Promise<void> {
   await page.evaluate(
     async ({ path, text }) => {
@@ -198,11 +180,10 @@ test("the reader's own copy of a suggestion survives the install", async ({ page
   await boot(page);
   await settle(page);
 
-  // Put a file where one of the bundle's files would land, with bytes that are
-  // unmistakably not the bundle's. THE READER'S COPY WINS is the rule the
-  // seeded stock already follows, and an install is exactly when it is tested.
-  // Seeded through IndexedDB and a reload, because the guard reads the LIVE
-  // home and only a boot lays saved user files into it.
+  // A file where one of the bundle's would land, with bytes that are unmistakably not
+  // the bundle's: the reader's copy wins, the same rule the seeded stock follows.
+  // Seeded through IndexedDB and a reload, because the guard reads the live home and
+  // only a boot lays saved user files into it.
   const path = "weaves/suggested/accounted-as-sheep-for-the-slaughter.json";
   const mine = JSON.stringify({
     format: "overlay-weave-v2",

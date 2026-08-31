@@ -1,29 +1,16 @@
 name: CI
 
-# WHEN A VERSION IS CUT, AND ON EVERY PR TO `main` (Glendon, 2026-08-04;
-# PR gating added 2026-08-06).
+# When a version is cut, and on every PR to `main`.
 #
-# It used to run on a push to any branch, which meant that cutting a release —
-# where the feature branch and `main` are pushed at the same commit — ran the
-# whole suite TWICE over identical code. The concurrency group is keyed by ref,
-# so two refs at one commit are two groups and neither cancels the other; it
-# happened at v0.39.2 (batch-7 + main), v0.40.0 and v0.40.4. So branch pushes
-# no longer trigger it — only the tag does.
+# NOT on branch pushes: cutting a release pushes the feature branch and `main`
+# at one commit, and the concurrency group is keyed by ref, so two refs at one
+# commit are two groups and neither cancels the other — the whole suite ran
+# twice over identical code. A tag fires no `pull_request` and there is no
+# branch-push trigger, so each PR and each release runs once.
 #
-# `pull_request` gates work BEFORE it reaches `main`: a PR runs the whole suite
-# against its merge commit. This does NOT bring back the release double-run —
-# that was two `push` events at one commit, and a tag push fires no
-# `pull_request`. A PR fires no branch-push trigger either (there is none), so
-# each PR runs once.
-#
-# `workflow_dispatch` stays so the suite can still be run by hand against any
-# ref without cutting a tag for it.
-#
-# THE TRADE-OFF, said out loud: this workflow does not gate the Release one —
-# both fire on the tag and run alongside each other, so a red CI does not stop
-# a deploy going out. The maintainer runs the suite locally before tagging,
-# and the PR gate above is what catches a regression before it lands; that is
-# the actual gate.
+# This workflow does NOT gate the Release one: both fire on the tag and run
+# alongside each other, so a red CI does not stop a deploy. The PR gate is what
+# catches a regression before it lands.
 on:
   push:
     tags: ["v*"]
@@ -53,29 +40,24 @@ jobs:
         run: cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate
       - name: Test the R&D features
         run: cargo test --locked -p plumbline-rnd --features "bridge morphology concept"
-      # EVERY SHIPPED CORPUS against the file that actually ships. `#[ignore]`d
+      # Every shipped corpus against the file that actually ships. `#[ignore]`d
       # in the default run because they read tens of MB and need a hydrated
       # checkout; here they are the only thing proving each corpus sits at the
       # KJV's verse addresses, comes back in its own language, and is not handed
       # evidence keyed to another text's tokens.
       #
-      # NO NAME FILTER, deliberately. This ran `--ignored german_corpus`, which
-      # is a list of languages by another name: the Spanish test was written,
-      # passed locally, and would never have run here — and neither, it turns
-      # out, had `the_deferred_load_still_brings_the_morphology_to_an_english_reader`,
-      # the half that keeps the German morphology assertion from passing because
-      # the loader is broken for everybody. The whole ignored set is ~20 s.
+      # NO NAME FILTER: a filter is a list of languages by another name, and a
+      # newly-written test would never run here. The whole ignored set is ~20 s.
       #
       # --test-threads=1: these tests flip the process-global language and would
       # race each other's resets in parallel.
       - name: Test every shipped corpus
         run: cargo test --locked -p plumbline-ffi --lib -- --ignored --test-threads=1
-      # The corpus idxcache must be REPRODUCIBLE. It is the biggest file in the
-      # web pack and the pack manifest hashes it, so a cache that differs run to
-      # run re-mints every `?v=` URL and makes every reader re-download the whole
-      # pack on a release that changed no data. The unit tests assert the
-      # invariant on a fixture; this asserts it on the real 19 MB corpus, which
-      # is the artifact that actually ships.
+      # The corpus idxcache must be REPRODUCIBLE: it is the biggest file in the
+      # web pack and the manifest hashes it, so a cache that differs run to run
+      # re-mints every URL and makes every reader re-download the whole pack on a
+      # release that changed no data. The unit tests assert this on a fixture;
+      # here it is the real 19 MB corpus that ships.
       - name: The idxcache builds byte-identically
         run: |
           cargo run --release --locked -q -p plumbline-hydrate -- \
@@ -102,20 +84,15 @@ jobs:
       - name: Lint plumbline-rnd with default (no) features
         run: cargo clippy --locked -p plumbline-rnd --all-targets -- -D warnings
 
-  # Formatting + clippy, both HARD gates since 2026-07-30. They were advisory
-  # (continue-on-error) for as long as the tree was unclean, which is the state
-  # in which an advisory step buys nothing: nobody reads a green run's warnings.
-  # The tree was brought to zero and `rustfmt.toml` writes the house line budget
-  # down, so a warning is now a failure.
+  # Formatting + clippy, both HARD gates: an advisory lint buys nothing, because
+  # nobody reads a green run's warnings.
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # 224 stock files sat tracked against .gitignore's stated intent until
-      # 2026-07-29 — a second source of truth for the study set, and the kind of
-      # thing nobody notices because git keeps honouring an `add` that predates
-      # the rule. `git add -f` still works on purpose; this only refuses the
-      # accident.
+      # A file tracked against .gitignore's stated intent is a second source of
+      # truth nobody notices, because git keeps honouring an `add` that predates
+      # the rule. `git add -f` still works; this only refuses the accident.
       - name: Nothing is tracked against .gitignore
         run: |
           tracked="$(git ls-files -i -c --exclude-standard)"
@@ -133,18 +110,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: rustfmt
         run: cargo fmt --all --check
-      # `--all-targets`, which the advisory version did not have: the old command
-      # linted the libs and nothing else, so every test module in the tree was
-      # unlinted. `--all-features` reaches plumbline-rnd's analytics and the
-      # bindgen bin.
+      # `--all-targets` so every test module is linted too, not just the libs;
+      # `--all-features` reaches plumbline-rnd's analytics and the bindgen bin.
       - name: clippy
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       # The R&D crate's shipped feature set, linted the way it is tested.
       - name: clippy (the R&D features)
         run: cargo clippy --locked -p plumbline-rnd --all-targets --features "bridge morphology concept" -- -D warnings
-      # And the web engine's own target. `crates/ffi` carries `cfg(target_arch =
+      # The web engine's own target: `crates/ffi` carries `cfg(target_arch =
       # "wasm32")` code — the whole `wasm.rs` shim, plus the sliced-warm cluster
-      # that only it and the tests call — which a host-target clippy never sees.
+      # only it and the tests call — that a host-target clippy never sees.
       - name: clippy (wasm32-wasip1, the web engine's target)
         run: cargo clippy --locked -p plumbline-ffi --target wasm32-wasip1 --all-targets -- -D warnings
 
@@ -159,12 +134,9 @@ jobs:
       - name: Check portable crates on the MSRV toolchain
         run: cargo check --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate
 
-  # Guard against the header drifting from the Rust source: regenerate the C
-  # header, then fail if anything changed. This is the doc-vs-wire drift class
-  # the ABI review flagged — a changed #[no_mangle] surface that wasn't
-  # regenerated shows up here as a diff. (The C# P/Invoke shim was retired with
-  # the desktop shells, 2026-07-25; the Kotlin JNA binding with the Android
-  # shell, 2026-08-30.)
+  # Guard against the C header drifting from the Rust source: regenerate it,
+  # then fail if anything changed. A changed #[no_mangle] surface that was not
+  # regenerated shows up here as a diff.
   bindings:
     runs-on: ubuntu-latest
     steps:
@@ -203,20 +175,17 @@ jobs:
   web:
     runs-on: ubuntu-latest
     # Playwright's own container rather than a bare runner: `npx playwright
-    # install --with-deps` was 9m20s of every run — a minute of browser
-    # download and eight minutes of apt-get walking WebKit's dependency
-    # closure (GStreamer, flite, libwoff…) package by package. The image
-    # ships chromium + webkit AND those system libraries preinstalled at
-    # /ms-playwright, so the step is simply gone. Everything inside is FOSS
-    # (Ubuntu, Node, Playwright under Apache-2.0, the browsers under their
-    # own licenses); the Dockerfile lives in the playwright repo.
+    # install --with-deps` was 9m20s of every run, mostly apt-get walking
+    # WebKit's dependency closure. The image ships chromium + webkit and those
+    # system libraries at /ms-playwright.
     #
-    # THE TAG MUST MATCH the @playwright/test version package-lock.json pins.
-    # A newer npm package looks for browser builds the image does not have and
-    # the config's executablePath() check fails at load — loudly, which is the
-    # point — so a Playwright bump is a two-file change: the lock and this tag.
-    # `--ipc=host` is Playwright's own guidance for chromium in containers;
-    # the Actions default /dev/shm is 64 MB and chromium crashes into it.
+    # THE TAG MUST MATCH the @playwright/test version package-lock.json pins: a
+    # newer npm package looks for browser builds the image does not have, and the
+    # config's executablePath() check fails at load. A Playwright bump is a
+    # two-file change — the lock and this tag.
+    #
+    # `--ipc=host` is Playwright's guidance for chromium in containers; the
+    # Actions default /dev/shm is 64 MB and chromium crashes into it.
     container:
       image: mcr.microsoft.com/playwright:v1.62.0-noble
       options: --ipc=host
@@ -233,10 +202,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          # `npm ci` was re-downloading the whole tree every run. The lockfile is
-          # the key, so a run that changes no dependency restores instead of
-          # resolving — and this is the ONE npm job, so nothing else pays for the
-          # cache to exist.
+          # Keyed by the lockfile, so a run that changes no dependency restores
+          # instead of re-downloading the whole tree.
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - name: Install web dependencies
@@ -244,12 +211,10 @@ jobs:
         working-directory: apps/web
       - name: Build the data pack
         run: node scripts/build-web-pack.mjs
-      # The manifest IS the load spec, and the producer lives outside apps/web's
-      # tsconfig — so `npm run check` validates the loader's view of the shape
-      # without ever seeing the code that writes it. This closes that gap: entry
-      # shape, closed stage set, the invariants the loader depends on, and every
-      # hash re-derived from the shipped bytes. Without it a producer/consumer
-      # mismatch surfaces only as an e2e boot timeout with no diagnostic.
+      # The producer lives outside apps/web's tsconfig, so `npm run check`
+      # validates the loader's view of the manifest without seeing the code that
+      # writes it. Without this a producer/consumer mismatch surfaces only as an
+      # e2e boot timeout with no diagnostic.
       - name: Check the data pack against the loader's contract
         run: node scripts/check-web-pack.mjs
       - name: Build the engine (wasm32-wasip1)
@@ -260,17 +225,15 @@ jobs:
           npm run check
           npm run build
         working-directory: apps/web
-      # No browser-install step: the container already carries chromium AND the
-      # webkit the offline project needs (playwright.config.ts proves the
-      # offline promise on the engine where the Cache API and eviction actually
-      # differ, and WebKit is the only engine on iOS). The config still fails
-      # loudly at load if webkit is missing, so that coverage cannot vanish
-      # quietly into a chromium-only run.
-      # Two invocations on purpose (see playwright.config.ts): the bulk of the
-      # suite runs on 3 workers, then the @perf-tagged tests — the ones that
-      # assert wall-clock budgets — rerun serialised so CPU contention from a
-      # neighbouring engine boot cannot fail a timing they were written to
-      # measure alone.
+      # No browser-install step: the container carries chromium and the webkit
+      # the offline project needs (WebKit is the only engine on iOS, and where
+      # the Cache API and eviction differ). playwright.config.ts fails loudly at
+      # load if webkit is missing, so that coverage cannot vanish into a
+      # chromium-only run.
+      #
+      # Two invocations (see playwright.config.ts): the bulk on 3 workers, then
+      # the @perf-tagged wall-clock budgets serialised, so contention from a
+      # neighbouring engine boot cannot fail a timing measured alone.
       - name: Playwright e2e
         run: npm run test:e2e
         working-directory: apps/web

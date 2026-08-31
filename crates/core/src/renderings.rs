@@ -2,20 +2,18 @@
 //! and which codes a given English word translates — both derived from the
 //! tagged corpus in a single fold.
 //!
-//! A lens for readers who don't read Greek/Hebrew on *where the translators
-//! made a choice*: selecting "charity" shows that G26 (agape) is elsewhere
-//! rendered "love"; selecting "love" reveals it can stand for either G25
-//! (agape) or G5368 (phileo). New in Plumbline — there is no overlay
-//! antecedent to port from.
+//! For readers who don't read Greek/Hebrew, it shows where the translators made
+//! a choice: selecting "charity" shows that G26 (agape) is elsewhere rendered
+//! "love"; selecting "love" shows it can stand for either G25 (agape) or G5368
+//! (phileo).
 //!
 //! A **rendering** is a contiguous run of same-code tokens within one verse, so
 //! a one-to-many translation like "suffereth long" (← G3114) stays a single
 //! unit. An intervening untagged or translator-supplied ([`FLAG_ADDED`]) word
 //! breaks the run; a multi-code token extends one run per code independently.
 //!
-//! [`Renderings::build`] is corpus-parametric — the same index serves any
-//! tagged corpus, so the future Luther 1912 pack gets cross-translation
-//! rendering comparison for free.
+//! [`Renderings::build`] is corpus-parametric — the same index serves any tagged
+//! corpus.
 
 use crate::corpus::{Corpus, FLAG_ADDED};
 use crate::reference::VRef;
@@ -49,15 +47,11 @@ pub struct RenderingView<'a> {
     pub occs: &'a [RenderingOcc],
 }
 
-/// The rendering-lens indexes, both filled in one corpus fold.
-///
-/// `by_code` is the forward direction (code → normalized rendering → the
-/// rendering), `by_word` the reverse (normalized surface word → code → how many
-/// tagged tokens of that word carry the code). Immutable after [`build`] — the
-/// corpus never changes at runtime — so it lives beside the other
-/// corpus-derived indexes, not behind an authoring lock.
-///
-/// [`build`]: Renderings::build
+/// The rendering-lens indexes, both filled in one corpus fold: `by_code` is
+/// code → normalized rendering → the rendering, `by_word` the reverse
+/// (normalized surface word → code → how many tagged tokens of that word carry
+/// it). Immutable after [`Renderings::build`], since the corpus never changes at
+/// runtime.
 #[derive(Debug, Clone, Default)]
 pub struct Renderings {
     by_code: HashMap<String, HashMap<String, Rendering>>,
@@ -73,9 +67,8 @@ struct Bucket {
 }
 
 impl Renderings {
-    /// Fold the corpus once, filling both directions. Modeled on
-    /// [`OccurrenceIx::build`](crate::strongs::OccurrenceIx::build): one pass
-    /// over `corpus.verses_iter()`, postings kept in canonical order.
+    /// Fold the corpus once, filling both directions; postings stay in canonical
+    /// order.
     pub fn build(corpus: &Corpus) -> Renderings {
         // One code path with the sliced builder, so the two cannot drift.
         let mut b = RenderingsBuilder::default();
@@ -84,10 +77,11 @@ impl Renderings {
     }
 }
 
-/// [`Renderings::build`] sliced. The heaviest of the lazily-built indexes
-/// (~196ms native, multiples of that in wasm on a phone) and it ran on the
-/// reader's FIRST word click, every session — the built lens cannot outlive the
-/// tab. Mirrors [`crate::search::SearchIxBuilder`].
+/// [`Renderings::build`] sliced, so boot can warm it between yields. The
+/// heaviest of the lazily-built indexes (~196ms native, multiples of that in
+/// wasm on a phone) and it cannot outlive the tab, so unsliced it lands on the
+/// reader's first word click every session. Mirrors
+/// [`crate::search::SearchIxBuilder`].
 #[derive(Default)]
 pub struct RenderingsBuilder {
     by_code: HashMap<String, HashMap<String, Bucket>>,
@@ -108,17 +102,17 @@ impl RenderingsBuilder {
             let by_word = &mut self.by_word;
             let vr = v.vref();
             let last = v.tokens.len().saturating_sub(1) as u16;
-            // Runs open on the current token, keyed by code → (start index,
-            // surface built so far). Owned keys keep the borrow checker out of
-            // the way; only a handful are ever open per verse.
+            // Runs open on the current token: code → (start index, surface so
+            // far). Owned keys keep the borrow checker out of the way; only a
+            // handful are ever open per verse.
             let mut open: HashMap<String, (u16, String)> = HashMap::new();
 
             for (i, t) in v.tokens.iter().enumerate() {
                 let idx = i as u16;
                 let added = t.has_flag(FLAG_ADDED);
 
-                // Reverse index: each distinct code on a tagged, non-added
-                // token counts once for the token's normalized surface word.
+                // Reverse index: each distinct code on a tagged, non-added token
+                // counts once for the token's normalized surface word.
                 if !added && !t.strongs.is_empty() {
                     let nword = normalize(&t.word);
                     if !nword.is_empty() {
@@ -134,8 +128,8 @@ impl RenderingsBuilder {
                     }
                 }
 
-                // Codes that keep a run alive on this token: none for an added
-                // or untagged word (which therefore breaks every open run).
+                // Codes that keep a run alive on this token: none for an added or
+                // untagged word, which therefore breaks every open run.
                 let active: Vec<&str> = if added {
                     Vec::new()
                 } else {
@@ -148,9 +142,9 @@ impl RenderingsBuilder {
                     s
                 };
 
-                // Close every open run whose code is absent here; its last
-                // token was the previous one (idx - 1, always ≥ 0 since a run
-                // can only be open once at least one token has passed).
+                // Close every open run whose code is absent here; its last token
+                // was idx - 1, always ≥ 0 since a run can only be open once at
+                // least one token has passed.
                 let to_close: Vec<String> = open.keys().filter(|k| !active.contains(&k.as_str())).cloned().collect();
                 for code in to_close {
                     let (start, surface) = open.remove(&code).unwrap();
@@ -182,8 +176,7 @@ impl RenderingsBuilder {
 
     /// Everything the fold has seen, finished into a usable lens.
     pub fn finish(self) -> Renderings {
-        // Pick each rendering's display label (most common surface, ties broken
-        // lexicographically for determinism) and drop the tallies.
+        // Pick each rendering's display label and drop the tallies.
         let by_code = self
             .by_code
             .into_iter()
@@ -262,10 +255,9 @@ fn pick_label(surfaces: &HashMap<String, usize>) -> String {
 
 /// Normalize a surface for grouping: lowercase, letters only, per whitespace
 /// word, rejoined with single spaces. So `"Charity,"` and `"charity"` group
-/// together, while a multi-word rendering (`"suffereth long"`) keeps its shape.
-/// Uses Unicode-aware case folding and `is_alphabetic`, so it carries over to
-/// non-English corpora (the future German pack). This is the single source of
-/// the rule — every build-time and query-time comparison goes through it.
+/// together while `"suffereth long"` keeps its shape. Unicode-aware case folding
+/// and `is_alphabetic`, so it carries over to non-English corpora. The single
+/// source of the rule — every build-time and query-time comparison goes through it.
 pub fn normalize(s: &str) -> String {
     s.split_whitespace()
         .map(|w| w.chars().filter(|c| c.is_alphabetic()).flat_map(|c| c.to_lowercase()).collect::<String>())
@@ -303,10 +295,10 @@ mod tests {
         Renderings::build(&corpus::from_str(SAMPLE).unwrap())
     }
 
-    /// Slicing must not change the answer. Boot feeds this a few hundred verses
-    /// at a time; a slice boundary landing mid-verse (or a run left open across
-    /// one) would silently produce different renderings from the one-shot build.
-    /// Every slice size from 1 upward is checked against the whole-corpus fold.
+    /// Slicing must not change the answer: boot feeds a few hundred verses at a
+    /// time, and a run left open across a slice boundary would silently produce
+    /// different renderings. Every slice size from 1 upward is checked against
+    /// the whole-corpus fold.
     #[test]
     fn sliced_build_matches_the_one_shot_build() {
         let corpus = corpus::from_str(SAMPLE).unwrap();

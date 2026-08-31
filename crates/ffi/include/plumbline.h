@@ -20,25 +20,19 @@
 // A paragraph mark (¶) precedes this word.
 #define PLUMBLINE_FLAG_PARA 8
 
-// Display only: this word is an AKJV re-rendering, set by the overlay on the
-// display list as it passes. NEVER present in `kjv.jsonl`, whose bitfield is a
-// frozen contract — so a shell reads this bit off a display-list item or a
-// panel token, not off stored data.
+// Display only: an AKJV re-rendering, set by the overlay on the display list. Never present
+// in `kjv.jsonl` (a frozen bitfield), so read it off a display-list item or a panel token
+// rather than off stored data.
 #define PLUMBLINE_FLAG_RERENDERED 16
 
 // How many verse references an occurrence list returns before it is capped
 // (`total` in the JSON stays honest above this).
 #define OCCURRENCE_CAP 500
 
-// The wire-JSON contract version. Bump on any **non-additive** change to the
-// payload shapes in `wire.rs` (renames/removals/retypes) so typed decoders
-// can fail loudly instead of silently reading nulls; purely additive fields
-// do not bump it. Exported to the C header; golden samples are pinned in
-// `tests.rs`.
-// Currently 2: the last bump was `rename_all_fields` on the tagged unions in
-// `wire.rs` (a rename, so it bumped by the rule above). Nothing compares this
-// constant yet (TODO §H tracks making it a live handshake), so the value is a
-// record rather than a gate.
+// The wire-JSON contract version. Bump on any **non-additive** change to the payload shapes
+// in `wire.rs` (renames/removals/retypes) so typed decoders fail loudly instead of reading
+// nulls; purely additive fields do not bump it. Exported to the C header; golden samples are
+// pinned in `tests.rs`. Nothing compares it yet — it is a record, not a gate.
 #define PLUMBLINE_WIRE_VERSION 2
 
 // One laid-out chapter: the positioned display list a shell paints and
@@ -63,10 +57,9 @@ typedef struct PlumblineLayoutConfig {
   float para_spacing;
   // Nonzero: start every verse on a fresh line (verse-per-line mode).
   uint32_t verse_break;
-  // Nonzero: paint the leading verse numbers (the default). Zero lays the
-  // chapter out as prose — and it is a LAYOUT input rather than something a
-  // shell can skip at paint time, because the number's width and its gap
-  // belong to the line whether or not anything is drawn in them.
+  // Nonzero: paint the leading verse numbers (the default). Zero lays the chapter out as
+  // prose — a layout input rather than something a shell can skip at paint time, because
+  // the number's width and its gap belong to the line whether or not anything is drawn.
   uint32_t verse_numbers;
 } PlumblineLayoutConfig;
 
@@ -78,24 +71,20 @@ typedef struct PlumblineLayoutConfig {
 // Nullable (`Option<fn>`): a null callback makes layout return null.
 //
 // # Contract — the callback MUST be total
-// It must **not** throw or panic across the boundary and should return a
-// **finite, non-negative** width. This crate's [`catch_unwind`] firewall only
-// catches *Rust* panics; a foreign exception unwinding out of this callback is
-// undefined behaviour — on .NET it fast-fails the process, on JNA it is
-// swallowed and reported as `0.0`. A returned `NaN`/negative is clamped to
-// `0.0` here (a degraded but safe layout) rather than corrupting line-breaking.
+// It must **not** throw or panic across the boundary and should return a **finite,
+// non-negative** width. This crate's [`catch_unwind`] firewall only catches *Rust* panics; a
+// foreign exception unwinding out of this callback is undefined behaviour. A returned
+// `NaN`/negative is clamped to `0.0` here (a degraded but safe layout) rather than corrupting
+// line-breaking.
 //
 // # Contract — the config must describe the font the callback measures with
-// Widths are **memoized on this side of the ABI** (see [`font_identity`]), and
-// nothing in this ABI names a typeface. So a shell that changes the font the
-// callback measures with must also move `line_height` or `space_width` in the
-// [`PlumblineLayoutConfig`] it passes with it. Both shipped shells do so by
-// construction, because they derive those two BY MEASURING in the current font
-// — the web's `space_width` is `measure(" ")` through this very callback, and
-// Android's is `Paint.measureText("n n") − measureText("nn")` off the same Paint,
-// with `line_height` coming from that font's own metrics. A shell that switched
-// typeface while holding both bit-identical would be handed the previous
-// typeface's widths: a mis-laid-out chapter.
+// Widths are memoized on this side of the ABI (see [`font_identity`]) and nothing in this ABI
+// names a typeface, so a shell that changes the font the callback measures with must also
+// move `line_height` or `space_width` in the [`PlumblineLayoutConfig`] it passes. A shell
+// that derives both by measuring in the current font satisfies this by construction (the
+// web's `space_width` is `measure(" ")` through this very callback). A shell that switched
+// typeface while holding both bit-identical would be handed the previous typeface's widths: a
+// mis-laid-out chapter.
 typedef float (*PlumblineMeasureFn)(void *ctx, const char *text);
 
 #ifdef __cplusplus
@@ -123,27 +112,24 @@ void plumbline_string_free(char *ptr);
 // slot for one `*mut c_char`.
 struct PlumblineEngine *plumbline_engine_open(const char *home, char **out_err);
 
-// Open a SECOND engine on a named language's text — what a per-pane language
-// rides on: German beside English, without the UI language moving.
+// Open a SECOND engine on a named language's text — what a per-pane language rides on: one
+// text beside another, without the UI language moving.
 //
-// The same home, so the reader's own data (threads, tags, weaves, notes) is
-// the SAME data — every text sits at the KJV's verse addresses, so a refKey
-// means one verse in all of them and nothing needs mapping. After an authoring
-// write, call [`plumbline_engine_load_core_data`] on this handle too, or its
-// study view stays as it was when it opened.
+// The same home, so the reader's own data (threads, tags, weaves, notes) is the same data:
+// every text sits at the KJV's verse addresses, so a refKey means one verse in all of them
+// and nothing needs mapping. After an authoring write, call
+// [`plumbline_engine_load_core_data`] on this handle too, or its study view stays as it was
+// when it opened.
 //
-// TWO DIFFERENCES from [`plumbline_engine_open`], both deliberate:
+// Two deliberate differences from [`plumbline_engine_open`]: the language is a parameter, not
+// the global the UI language lives in; and there is NO English fallback, because the caller
+// asked for one specific text to put beside another and handing back the one already on
+// screen would paint English under a pane labelled otherwise. A missing text is an error the
+// shell can act on — it is the shell that offers the download.
 //
-// 1. The language is a PARAMETER, not the global the UI language lives in.
-// 2. There is NO English fallback. `plumbline_engine_open` falls back because
-//    a reader is owed a Bible; here the caller asked for one specific text to
-//    put beside another, and quietly handing back the one already on screen
-//    would paint English under a pane labelled Deutsch. A missing text is an
-//    error the shell can act on — it is the shell that offers the download.
-//
-// Returns null on failure (unknown language code, or the text is not on the
-// device); `out_err` behaves as in [`plumbline_engine_open`]. Free it with
-// [`plumbline_engine_free`] like any other engine.
+// Returns null on failure (unknown language code, or the text is not on the device);
+// `out_err` behaves as in [`plumbline_engine_open`]. Free it with [`plumbline_engine_free`]
+// like any other engine.
 //
 // # Safety
 // `home` and `lang` are valid NUL-terminated UTF-8; `out_err` is null or a
@@ -152,9 +138,9 @@ struct PlumblineEngine *plumbline_engine_open_lang(const char *home,
                                                    const char *lang,
                                                    char **out_err);
 
-// Open an engine from in-memory bytes — for shells that bundle the data as
-// assets/resources (decision #3): the `kjv.jsonl` text and the `strongs.json`
-// object, each as a length-delimited byte buffer (need not be NUL-terminated).
+// Open an engine from in-memory bytes — for shells that bundle the data as assets: the
+// `kjv.jsonl` text and the `strongs.json` object, each as a length-delimited byte buffer
+// (need not be NUL-terminated).
 //
 // Returns null on failure; `out_err` behaves as in [`plumbline_engine_open`].
 //
@@ -219,13 +205,11 @@ char *plumbline_engine_token_json(const struct PlumblineEngine *engine,
                                   const char *ref_key,
                                   uint32_t token_index);
 
-// Switch the AKJV overlay on or off for this engine. Off by default: the text
-// is the KJV, and the overlay is a reading aid the reader opts into.
+// Switch the AKJV overlay on or off for this engine. Off by default: the text is the KJV, and
+// the overlay is a reading aid the reader opts into.
 //
-// Affects the READER only. Memory cards, Present, copied text and shared links
-// are the KJV whatever this says — a modernised word must never end up on
-// someone's memory card or in a hand-off, or the overlay has quietly become a
-// second translation.
+// Affects the READER only — memory cards, Present, copied text and shared links stay the KJV
+// whatever this says, or the overlay has quietly become a second translation.
 //
 // # Safety
 // `engine` is a live engine or null.
@@ -239,10 +223,9 @@ void plumbline_engine_set_akjv_overlay(const struct PlumblineEngine *engine, boo
 // `engine` is a live engine or null.
 bool plumbline_engine_akjv_available(const struct PlumblineEngine *engine);
 
-// What the AKJV does to one token, as `{"akjv":"you shall","kjv":"thou shalt"}`
-// — the line a word study shows under the headword. Null when the token is not
-// re-rendered, or on a bad ref. `kjv` is the run's ORIGINAL words, which is the
-// whole point: the reader can always see what was replaced.
+// What the AKJV does to one token, as `{"akjv":"you shall","kjv":"thou shalt"}` — the line a
+// word study shows under the headword. Null when the token is not re-rendered, or on a bad
+// ref. `kjv` is the run's original words, so the reader can always see what was replaced.
 //
 // # Safety
 // `engine` is valid; `ref_key` is null or a valid NUL-terminated UTF-8 string.
@@ -356,12 +339,11 @@ char *plumbline_engine_word_codes_json(const struct PlumblineEngine *engine, con
 // `engine` is valid; `query` is a valid NUL-terminated UTF-8 string.
 char *plumbline_engine_search_json(const struct PlumblineEngine *engine, const char *query);
 
-// [`plumbline_engine_search_json`] narrowed to a scope — the search screen's
-// chips. `scope` is `all` | `ot` | `nt` | `book:<osis>` |
-// `chapter:<osis>:<ch>`; anything else (or null) searches everything.
+// [`plumbline_engine_search_json`] narrowed to a scope. `scope` is `all` | `ot` | `nt` |
+// `book:<osis>` | `chapter:<osis>:<ch>`; anything else (or null) searches everything.
 //
-// A REFERENCE query still answers `goto` whatever the scope: the reader typed
-// an address, and a chip must not refuse to take them there.
+// A reference query still answers `goto` whatever the scope — the reader typed an address,
+// and a scope chip must not refuse to take them there.
 //
 // # Safety
 // `engine` is valid; `query` is a valid NUL-terminated UTF-8 string; `scope`
@@ -402,10 +384,9 @@ char *plumbline_engine_verse_xrefs_json(const struct PlumblineEngine *engine, co
 char *plumbline_engine_suggested_weaves_json(const struct PlumblineEngine *engine);
 
 // The fused OT↔NT bridge partners of a Strong's code as JSON:
-// `{"code","partners":[{code,sources,prior}]}`, ranked by trust prior. The
-// etymology layer works from the dictionary alone, so this is available even
-// for a bytes-opened engine (external witnesses need a home). Null on a null
-// engine / invalid code.
+// `{"code","partners":[{code,sources,prior}]}`, ranked by trust prior. The etymology layer
+// works from the dictionary alone, so this is available even for a bytes-opened engine
+// (external witnesses need a home). Null on a null engine / invalid code.
 //
 // # Safety
 // `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
@@ -433,9 +414,8 @@ char *plumbline_engine_thread_add(struct PlumblineEngine *engine,
                                   const char *added);
 
 // Delete the thread named `name` — its file and every entry on it. Matched
-// case-insensitively, like `plumbline_engine_thread_add`. A name with no thread
-// is a success (the caller wanted it gone; it is gone). Null on success, else an
-// owned error string.
+// case-insensitively, like `plumbline_engine_thread_add`. A name with no thread is a success.
+// Null on success, else an owned error string.
 //
 // # Safety
 // `engine` is valid; `name` is null or valid NUL-terminated UTF-8.
@@ -465,23 +445,19 @@ char *plumbline_engine_tag_remove(struct PlumblineEngine *engine,
                                   const char *value);
 
 // Delete the whole tag named `name` — its file and every member on it. Matched
-// case-insensitively, like `plumbline_engine_tag_add`. A name with no tag is a
-// success (the caller wanted it gone; it is gone). The members' verses are the
-// canon's, not the tag's — nothing else is touched. Null on success, else an
-// owned error string.
+// case-insensitively, like `plumbline_engine_tag_add`. A name with no tag is a success. Null
+// on success, else an owned error string.
 //
 // # Safety
 // `engine` is valid; `name` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_tag_delete(struct PlumblineEngine *engine, const char *name);
 
-// Rename the tag `from` to `to`, KEEPING ITS IDENTITY. Matched
-// case-insensitively, like the other tag calls. A change of case only is a
-// legal rename onto itself.
+// Rename the tag `from` to `to`, keeping its identity. Matched case-insensitively, like the
+// other tag calls; a change of case only is a legal rename onto itself.
 //
-// Refuses a blank new name, and refuses a name another tag already answers to —
-// that is a MERGE, which is destructive and has to be asked for by name
-// (`plumbline_engine_tag_merge`) rather than fallen into because two names
-// collided. A `from` that names no tag is a success with nothing done.
+// Refuses a blank new name, and refuses a name another tag already answers to — that is a
+// merge, which is destructive and must be asked for by name (`plumbline_engine_tag_merge`)
+// rather than fallen into. A `from` that names no tag is a success with nothing done.
 //
 // Null on success, else an owned error string.
 //
@@ -489,11 +465,9 @@ char *plumbline_engine_tag_delete(struct PlumblineEngine *engine, const char *na
 // `engine` is valid; `from`/`to` are null or valid NUL-terminated UTF-8.
 char *plumbline_engine_tag_rename(struct PlumblineEngine *engine, const char *from, const char *to);
 
-// Set or clear the tag's CATEGORY — the grouping heading the tag lists file it
-// under. An empty (or blank) `category` clears it. The management screen's
-// verb: nothing on the reading path calls this. A `name` that answers to no
-// tag is a success with nothing done, and setting the category a tag already
-// carries writes nothing.
+// Set or clear the tag's category — the grouping heading the tag lists file it under. An
+// empty (or blank) `category` clears it. A `name` that answers to no tag is a success with
+// nothing done, and setting the category a tag already carries writes nothing.
 //
 // Null on success, else an owned error string.
 //
@@ -503,14 +477,12 @@ char *plumbline_engine_tag_set_category(struct PlumblineEngine *engine,
                                         const char *name,
                                         const char *category);
 
-// Fold the tag `from` into the tag `into`, then delete `from`. Members already
-// in `into` are not duplicated, and the SURVIVOR's copy of a shared member wins
-// — letting the source overwrite would discard a note the reader wrote on the
-// tag they chose to keep.
+// Fold the tag `from` into the tag `into`, then delete `from`. Members already in `into` are
+// not duplicated, and the survivor's copy of a shared member wins — letting the source
+// overwrite would discard a note the reader wrote on the tag they chose to keep.
 //
-// DESTRUCTIVE: the source tag's file is removed. Refuses a merge of a tag into
-// itself (source and destination would be one file, written and then deleted)
-// and refuses a name that no tag answers to.
+// Destructive: the source tag's file is removed. Refuses a merge of a tag into itself (source
+// and destination would be one file, written and then deleted) and refuses an unknown name.
 //
 // Null on success, else an owned error string.
 //
@@ -531,16 +503,14 @@ char *plumbline_engine_weave_add_link(struct PlumblineEngine *engine,
                                       const char *b_ref,
                                       const char *added);
 
-// Weave a tag's passages into a canon-ordered **chain** of links — the
-// accumulate-then-organize flow: the reader tags a topic over time (e.g.
-// "Rapture"), then turns the tag — or a chosen subset of its members — into a
-// weave to read as one thread through the canon. Re-running after the tag
-// grows just adds the new edges (find-or-create + link dedup).
+// Weave a tag's passages into a canon-ordered **chain** of links: the reader tags a topic
+// over time, then turns the tag — or a chosen subset of its members — into a weave to read as
+// one thread through the canon. Re-running after the tag grows adds only the new edges
+// (find-or-create + link dedup).
 //
-// `refs_json` is null to take every verse member, else a JSON array of
-// refKeys selecting a subset (non-members are ignored). `weave_name` is null
-// to reuse the tag's name. Returns null on success, else a caller-freed
-// error string.
+// `refs_json` is null to take every verse member, else a JSON array of refKeys selecting a
+// subset (non-members are ignored). `weave_name` is null to reuse the tag's name. Returns
+// null on success, else a caller-freed error string.
 //
 // # Safety
 // `engine` is a valid engine from `plumbline_engine_open*`; string params are null
@@ -551,28 +521,26 @@ char *plumbline_engine_weave_from_tag(struct PlumblineEngine *engine,
                                       const char *weave_name,
                                       const char *added);
 
-// **Approve** the `index`-th suggested weave: promote it into `home/weaves`
-// with all links approved (merging into a same-named weave there if present)
-// and remove the suggestion. `index` is the ordinal from
-// `plumbline_engine_suggested_weaves_json`. Null on success, else an owned error.
+// Approve the `index`-th suggested weave: promote it into `home/weaves` with all links
+// approved (merging into a same-named weave there if present) and remove the suggestion.
+// `index` is the ordinal from `plumbline_engine_suggested_weaves_json`. Null on success, else
+// an owned error.
 //
 // # Safety
 // `engine` is a valid engine pointer.
 char *plumbline_engine_weave_approve(struct PlumblineEngine *engine, uint32_t index);
 
-// **Reject** the `index`-th suggested weave: delete its file. `index` is the
-// ordinal from `plumbline_engine_suggested_weaves_json`. Null on success, else an
-// owned error.
+// Reject the `index`-th suggested weave: delete its file. `index` is the ordinal from
+// `plumbline_engine_suggested_weaves_json`. Null on success, else an owned error.
 //
 // # Safety
 // `engine` is a valid engine pointer.
 char *plumbline_engine_weave_reject(struct PlumblineEngine *engine, uint32_t index);
 
-// **Delete** the `index`-th weave in the library — its file and every link on
-// it. `index` is the flat-library ordinal (`plumbline_engine_weaves_json`, the
-// `weave:i` link verb) — NOT the suggested ordinal `plumbline_engine_weave_reject`
-// takes. It reaches a suggestion too: deleting one is the same act as
-// rejecting it. Null on success, else an owned error.
+// Delete the `index`-th weave in the library — its file and every link on it. `index` is the
+// flat-library ordinal (`plumbline_engine_weaves_json`, the `weave:i` link verb), NOT the
+// suggested ordinal `plumbline_engine_weave_reject` takes. It reaches a suggestion too:
+// deleting one is the same act as rejecting it. Null on success, else an owned error.
 //
 // # Safety
 // `engine` is a valid engine pointer.
@@ -597,9 +565,9 @@ char *plumbline_engine_thread_entry_set_note(struct PlumblineEngine *engine,
                                              uint32_t index,
                                              const char *note);
 
-// Drop entry `index` from the thread named `name`. Null on success, else an
-// owned error. The thread SURVIVES its last entry — deleting the thread itself
-// is [`plumbline_engine_thread_remove`], asked for deliberately.
+// Drop entry `index` from the thread named `name`. Null on success, else an owned error. The
+// thread survives its last entry — deleting the thread itself is
+// [`plumbline_engine_thread_remove`].
 //
 // # Safety
 // `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -607,13 +575,10 @@ char *plumbline_engine_thread_entry_remove(struct PlumblineEngine *engine,
                                            const char *name,
                                            uint32_t index);
 
-// Move entry `from` to position `to` in the thread named `name`. Null on
-// success, else an owned error.
-//
-// A thread's ORDER is the argument it makes, so this is a reorder rather than
-// a sort. `to` past the end clamps to the last position, so "move the last one
-// down" is a no-op instead of an error the shell has to special-case — and a
-// no-op does not rewrite the file.
+// Move entry `from` to position `to` in the thread named `name`. Null on success, else an
+// owned error. `to` past the end clamps to the last position, so "move the last one down" is
+// a no-op rather than an error the shell must special-case — and a no-op does not rewrite the
+// file.
 //
 // # Safety
 // `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -653,24 +618,22 @@ char *plumbline_engine_study_xrefs_json(const struct PlumblineEngine *engine, co
 // `engine` is a live engine (or null → null).
 char *plumbline_engine_weaves_json(const struct PlumblineEngine *engine);
 
-// Every weave link as a deduped canonical verse pair, each endpoint located
-// (ref key + book/chapter/verse) and flagged `resolved` when both ends are in
-// the corpus. The one derivation behind the ambient connector lines and the
-// chord map, so a shell neither dedupes nor parses ref keys itself. Never null
-// on a live engine (empty library → empty list).
+// Every weave link as a deduped canonical verse pair, each endpoint located (ref key +
+// book/chapter/verse) and flagged `resolved` when both ends are in the corpus — the one
+// derivation behind the connector lines and the chord map, so a shell neither dedupes nor
+// parses ref keys itself. Never null on a live engine (empty library → empty list).
 //
 // # Safety
 // `engine` is a live engine (or null → null).
 char *plumbline_engine_link_pairs_json(const struct PlumblineEngine *engine);
 
-// The canon overview segmentation: the 8 sections as `(label, first, last)`
-// book indices over the 66 books, plus the OT/NT divide (39). Static data
-// frozen in `core::reference` — served here so a non-Rust shell consumes the
-// one source instead of re-hardcoding the bands. Never null on a live engine.
+// The canon overview segmentation: the 8 sections as `(label, first, last)` book indices over
+// the 66 books, plus the OT/NT divide (39). Static data frozen in `core::reference`, served
+// here so no shell re-hardcodes the bands. Never null on a live engine.
 //
 // # Safety
-// `engine` is a live engine (or null → null); the payload does not depend on
-// engine state, but the arg keeps the call shape uniform.
+// `engine` is a live engine (or null → null); the payload does not depend on engine state,
+// but the arg keeps the call shape uniform.
 char *plumbline_engine_canon_segments_json(const struct PlumblineEngine *engine);
 
 // The hymnal's table of contents, in book-number order:
@@ -695,24 +658,21 @@ char *plumbline_engine_hymn_json(const struct PlumblineEngine *engine,
                                  const char *id,
                                  int32_t transpose);
 
-// The book-to-book weave chord map: canon-ordered book-pair counts over the
-// deduped link pairs (`{pairs:[{a,b,count}], max, otNtDivide, bookCount}`),
-// where `a`/`b` are book indices (`a <= b`). The one fold behind the "Weave
-// map" popup, so a shell lays out ribbons without folding pairs or deriving the
-// max. Never null on a live engine (empty library → empty pairs, max 1).
+// The book-to-book weave chord map: canon-ordered book-pair counts over the deduped link
+// pairs (`{pairs:[{a,b,count}], max, otNtDivide, bookCount}`), where `a`/`b` are book indices
+// (`a <= b`), so a shell lays out ribbons without folding pairs or deriving the max. Never
+// null on a live engine (empty library → empty pairs, max 1).
 //
 // # Safety
 // `engine` is a live engine (or null → null).
 char *plumbline_engine_chord_map_json(const struct PlumblineEngine *engine);
 
-// One laid-out page of the constellation (the weave-library overview popup):
-// lanes with nodes + edges as **fractions**, plus the pin/paging state already
-// resolved into a caption. The shell holds the transient `page` and `pins`
-// (weave indices, the same handles the lanes carry) and passes them in;
-// everything derived — usable filter, largest-first order, per-verse degree,
-// jitter, lane assignment, paging — lives here. `pins_json` is a JSON array of
-// weave indices (e.g. `"[3,7]"`); null / empty / malformed means no pins.
-// Never null on a live engine.
+// One laid-out page of the constellation (the weave-library overview popup): lanes with nodes
+// + edges as fractions, plus the pin/paging state resolved into a caption. The shell holds
+// the transient `page` and `pins` (weave indices, the handles the lanes carry) and passes
+// them in; everything derived — usable filter, largest-first order, per-verse degree, jitter,
+// lane assignment, paging — lives here. `pins_json` is a JSON array of weave indices (e.g.
+// `"[3,7]"`); null / empty / malformed means no pins. Never null on a live engine.
 //
 // # Safety
 // `engine` is a live engine (or null → null); `pins_json` is null or valid
@@ -750,10 +710,9 @@ char *plumbline_engine_word_study_blocks_json(const struct PlumblineEngine *engi
                                               uint32_t token_index,
                                               bool full);
 
-// [`plumbline_engine_word_study_blocks_json`] with per-tier gates instead of the
-// legacy Simple/Full flag: `gates` bit 0 = curated-scholarship (human)
-// analysis, bit 1 = learned/statistical (machine) analysis. The text and the
-// reader's own data are always on.
+// [`plumbline_engine_word_study_blocks_json`] with per-tier gates instead of the Simple/Full
+// flag: `gates` bit 0 = curated-scholarship (human) analysis, bit 1 = learned/statistical
+// (machine) analysis. The text and the reader's own data are always on.
 //
 // # Safety
 // `engine` is a live engine; `ref_key` is a valid NUL-terminated UTF-8 string.
@@ -863,9 +822,8 @@ char *plumbline_engine_search_blocks_scoped_json(const struct PlumblineEngine *e
                                                  const char *query,
                                                  const char *scope);
 
-// Author a weave link carrying word spans — the Full-study "pin a word in
-// each pane, widen, ＋ link" flow. Span bounds are token indices; pass a
-// negative bound for a span-less side. Null on success, else an owned error.
+// Author a weave link carrying word spans. Span bounds are token indices; pass a negative
+// bound for a span-less side. Null on success, else an owned error.
 //
 // # Safety
 // `engine` is a live engine; string params are null or valid NUL-terminated
@@ -880,19 +838,16 @@ char *plumbline_engine_weave_add_link_spans(struct PlumblineEngine *engine,
                                             int32_t b_hi,
                                             const char *added);
 
-// Parse a panel link URI into the typed verb the shell dispatches on
-// (`{verb, …}`; see `plumbline_core::panel::parse_link`) — the one verb vocabulary,
-// so a non-Rust shell routes clicks through the core instead of re-splitting
-// the URI string and risking drift from what the panel emits. Engine-
-// independent. Null for an unknown verb or malformed payload (a shell then
-// ignores the click).
+// Parse a panel link URI into the typed verb the shell dispatches on (`{verb, …}`; see
+// `plumbline_core::panel::parse_link`) — the one verb vocabulary, so a shell routes clicks
+// through the core instead of re-splitting the URI and drifting from what the panel emits.
+// Engine-independent. Null for an unknown verb or malformed payload.
 //
 // # Safety
 // `uri` is null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_route_link_json(const char *uri);
 
-// Load the cross-platform shell config (`%APPDATA%\plumbline\config.json` on
-// Windows) as JSON: `{studyMode, bodySize, openPanes, activePane, firstRun}`.
+// Load the shell config as JSON: `{studyMode, bodySize, openPanes, activePane, firstRun}`.
 // `firstRun` is true only when no config file existed. Never null.
 char *plumbline_config_load_json(void);
 
@@ -903,10 +858,10 @@ char *plumbline_config_load_json(void);
 // `json` is null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_config_save_json(const char *json);
 
-// Clipboard text for a verse (or its chapter, for the `chapter*` kinds) in one
-// of the shapes `plumbline_core::export::CopyKind` names (`verse` / `verseRef` /
-// `verseMarkdown` / `chapter` / `chapterMarkdown`). Plain text, not JSON; null
-// on a bad ref, an unknown kind, or a verse the corpus lacks. Caller-freed.
+// Clipboard text for a verse (or its chapter, for the `chapter*` kinds) in one of the shapes
+// `plumbline_core::export::CopyKind` names (`verse` / `verseRef` / `verseMarkdown` /
+// `chapter` / `chapterMarkdown`). Plain text, not JSON; null on a bad ref, an unknown kind,
+// or a verse the corpus lacks. Caller-freed.
 //
 // # Safety
 // `engine` is a live engine; the string args are null or valid NUL-terminated
@@ -922,9 +877,8 @@ char *plumbline_engine_copy_text(const struct PlumblineEngine *engine,
 // `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_user_note_json(const struct PlumblineEngine *engine, const char *ref_key);
 
-// All the reader's personal notes as JSON (`{notes:[…]}`), in canonical reading
-// order — for the gutter marks and a "your notes" browser. Never null on a live
-// engine (no notes → empty list).
+// All the reader's personal notes as JSON (`{notes:[…]}`), in canonical reading order. Never
+// null on a live engine (no notes → empty list).
 //
 // # Safety
 // `engine` is a live engine (or null → null).
@@ -949,15 +903,12 @@ char *plumbline_engine_user_note_set(struct PlumblineEngine *engine,
 // `theme` is null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_theme_palette_json(const char *theme);
 
-// Which SEATING a local date and hour fall in — `"sunday-morning"`,
-// `"sunday-evening"`, `"wednesday-evening"` or `"other"`. Engine-independent,
-// never null.
+// Which seating a local date and hour fall in — `"sunday-morning"`, `"sunday-evening"`,
+// `"wednesday-evening"` or `"other"`. Engine-independent, never null.
 //
-// The shells pass their OWN local date (`YYYY-MM-DD`) and hour (0–23), because
-// the core has no clock and no timezone: a slot computed in UTC would put a
-// Sunday-evening service in Monday for half the world. The RULE lives here so
-// the two shells cannot drift on when a service is, which is exactly the kind
-// of thing that would be written twice and quietly diverge.
+// The caller passes its own local date (`YYYY-MM-DD`) and hour (0–23), because the core has
+// no clock and no timezone: a slot computed in UTC would put a Sunday-evening service in
+// Monday for half the world. The rule lives here so no shell reimplements it.
 //
 // # Safety
 // `date` is null or valid NUL-terminated UTF-8 for the call.
@@ -974,29 +925,23 @@ char *plumbline_session_slot(const char *date, uint32_t hour);
 // `date` is null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_session_slot_at(const char *date, uint32_t minute, int32_t sunday_service);
 
-// EVERY user-visible string, for one language, in ONE call:
+// Every user-visible string, for one language, in ONE call:
 // `{"lang","strings":{id: text, …},"languages":[{"code","endonym"}]}`.
 //
-// The whole catalogue at once, deliberately. A shell asks at startup and holds
-// the map; a call per string would be thousands of round trips across the wasm
-// boundary to render one screen.
+// The whole catalogue at once, deliberately: a shell asks at startup and holds the map, where
+// a call per string would be thousands of round trips across the wasm boundary to render one
+// screen.
 //
-// Takes BOTH the reader's setting and the device's locale, and resolves them
-// here rather than in each shell: an empty setting means "follow the device"
-// (`Config::language`), and that rule implemented twice is a rule that
-// disagrees with itself once. Either may be null. Both tolerate a region tag —
-// a browser reporting `de-CH` gets German — and anything unrecognised falls
-// through to English, so an unsupported locale gets a working app rather than
-// an error. The reply's `lang` says which one won.
+// Takes both the reader's setting and the device's locale and resolves them here rather than
+// in each shell — an empty setting means "follow the device" (`Config::language`). Either may
+// be null. Both tolerate a region tag (`de-CH` gets German) and anything unrecognised falls
+// through to English, so an unsupported locale gets a working app rather than an error; the
+// reply's `lang` says which one won. Strings absent from the resolved language fall back to
+// English key by key.
 //
-// Strings absent from the resolved language fall back to English key by key,
-// so every id the shell asks for resolves to something printable.
+// `languages` rides along because a language picker needs the list, each labelled in itself.
 //
-// `languages` rides along because a language picker needs the list, each
-// labelled in ITSELF — someone looking for German is looking for "Deutsch".
-//
-// Engine-independent: the shells need their chrome before an engine exists.
-// Never null.
+// Engine-independent: a shell needs its chrome before an engine exists. Never null.
 //
 // # Safety
 // `chosen` and `device` are null or valid NUL-terminated UTF-8 for the call.
@@ -1004,51 +949,44 @@ char *plumbline_i18n_catalog_json(const char *chosen, const char *device);
 
 // Set the language the ENGINE writes in, and answer with the code it resolved.
 //
-// A shell calls this ONCE, at startup, alongside
-// `plumbline_i18n_catalog_json`. The catalogue covers what a shell spells; this
-// covers what the CORE spells — every book name and every reference it hands
-// back, in the table of contents, search hits, weave endpoints, note headers,
-// thread entries, the reading map. Without it a German reader gets a German
-// interface listing a book called Genesis, which is worse than either language
-// on its own.
+// Call once, at startup, alongside `plumbline_i18n_catalog_json`. The catalogue covers what a
+// shell spells; this covers what the core spells — every book name and reference it hands
+// back, in the table of contents, search hits, weave endpoints, note headers, thread entries,
+// the reading map.
 //
-// Two calls rather than one on purpose. Resolving a language and choosing one
-// are different acts, and a getter with a global side effect would mean every
-// test that asked for a catalogue silently repainted the whole process.
+// Two calls rather than one on purpose: resolving a language and choosing one are different
+// acts, and a getter with a global side effect would mean every test that asked for a
+// catalogue repainted the whole process.
 //
-// Same arguments and same rule as the catalogue call: an empty or unknown
-// `chosen` falls through to `device`, and an unknown device is English.
-// Caller-freed; never null.
+// Same arguments and rule as the catalogue call: an empty or unknown `chosen` falls through
+// to `device`, and an unknown device is English. Caller-freed; never null.
 //
 // # Safety
 // `chosen` and `device` are null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_i18n_set_language(const char *chosen, const char *device);
 
-// Force the lazy analytics indexes (concept engine, leitwort scan) to build
-// now — call once on a background thread at startup in Full mode so the first
-// study click doesn't stall. Safe to call from any thread (the builds are
-// `OnceLock`-guarded) and idempotent. Null on success, else an owned error.
+// Force the lazy analytics indexes (concept engine, leitwort scan) to build now — call once
+// on a background thread at startup in Full mode so the first study click doesn't stall. Safe
+// from any thread (the builds are `OnceLock`-guarded) and idempotent. Null on success, else
+// an owned error.
 //
 // # Safety
 // `engine` is a live engine (or null → an error string).
 char *plumbline_engine_warm_indexes(const struct PlumblineEngine *engine);
 
-// Load the stage-2 core data (Strong's dictionary + a study reload for the
-// 1769 margin notes) once those files have arrived in the home — the web
-// boots on the corpus alone (TODO #28: text on screen is the north star)
-// and calls this when the rest of the core pack lands. Idempotent, cheap
-// when nothing is missing. Null on success, else an owned error.
+// Load the stage-2 core data (Strong's dictionary + a study reload for the 1769 margin notes)
+// once those files have arrived in the home — the web boots on the corpus alone and calls
+// this when the rest of the core pack lands. Idempotent, cheap when nothing is missing. Null
+// on success, else an owned error.
 //
 // # Safety
 // `engine` is a live engine (or null → an error string).
 char *plumbline_engine_load_core_data(const struct PlumblineEngine *engine);
 
-// Load the optional R&D artifact (the morphology sidecar) from the engine's
-// home if it was absent at open. The web shell boots on the core data pack for
-// a fast first paint, fetches the R&D pack in the background, writes the files
-// into the home, then calls this. Idempotent (nothing loads twice), cheap when
-// the file is still missing, safe from any thread. Null on success, else an
-// owned error.
+// Load the optional R&D artifact (the morphology sidecar) from the engine's home if it was
+// absent at open — the web fetches the R&D pack in the background, writes it into the home,
+// then calls this. Idempotent, cheap when the file is still missing, safe from any thread.
+// Null on success, else an owned error.
 //
 // # Safety
 // `engine` is a live engine (or null → an error string).
@@ -1075,14 +1013,13 @@ char *plumbline_engine_memory_add(struct PlumblineEngine *engine,
                                   const char *verse_ref,
                                   const char *now);
 
-// Start memorizing the passage `start_ref`…`through_ref` (inclusive) as ONE
-// card — the whole section recalled in one go, rather than a card per verse.
-// The card is keyed and listed by `start_ref`.
+// Start memorizing the passage `start_ref`…`through_ref` (inclusive) as ONE card, keyed and
+// listed by `start_ref`.
 //
-// `through_ref` must name a later verse of the same chapter; anything else
-// seeds a plain single-verse card. Already memorizing `start_ref` is a no-op,
-// so re-running with a different end does NOT silently re-span the card —
-// remove it first. Null on success, else an owned error.
+// `through_ref` must name a later verse of the same chapter; anything else seeds a plain
+// single-verse card. Already memorizing `start_ref` is a no-op, so re-running with a
+// different end does NOT re-span the card — remove it first. Null on success, else an owned
+// error.
 //
 // # Safety
 // `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -1106,8 +1043,8 @@ char *plumbline_engine_memory_remove(struct PlumblineEngine *engine, const char 
 char *plumbline_engine_memory_card_json(const struct PlumblineEngine *engine,
                                         const char *verse_ref);
 
-// Verses due for review at `now` (RFC3339), reading order — the study queue, as
-// `{refs:[...]}`. Never null on a live engine (empty when nothing is due).
+// Verses due for review at `now` (RFC3339), in reading order, as `{refs:[...]}`. Never null
+// on a live engine (empty when nothing is due).
 //
 // # Safety
 // `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
@@ -1159,9 +1096,9 @@ char *plumbline_panel_about_blocks_json(void);
 // offers, as `{running:[…], catalogue:[…]}`. Never null on a live engine.
 //
 // `lang` selects the text (falling back to English per entry); null reads as
-// English. `today` is the reader's LOCAL `YYYY-MM-DD`; null reads as "no day",
-// which leaves every open entry `available` — the permissive direction, since
-// the cost of a missing date should never be a reader locked out.
+// English. `today` is the reader's local `YYYY-MM-DD`; null reads as "no day",
+// leaving every open entry `available` — a missing date must not lock a reader
+// out.
 //
 // # Safety
 // `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
@@ -1181,10 +1118,9 @@ char *plumbline_engine_devotional_day_json(const struct PlumblineEngine *engine,
                                            const char *lang);
 
 // Start a devotional by its catalogue `id`. Starting one already running is a
-// no-op, NOT a re-seed: a reader who taps Start again from a stale list must
-// not lose 12 days of progress, and there is no class exclusivity here to
-// force a replacement (a reader may run two booklets at once). Null on
-// success, else an owned error string.
+// no-op, not a re-seed, so Start from a stale list cannot wipe progress; a
+// reader may run two booklets at once. Null on success, else an owned error
+// string.
 //
 // # Safety
 // `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -1192,19 +1128,18 @@ char *plumbline_engine_devotional_start(struct PlumblineEngine *engine,
                                         const char *id,
                                         const char *now);
 
-// Stop a devotional, removing its run file and its progress. An absent run is
-// a no-op, not an error (the `plan_stop` stance). Null on success, else an
-// owned error string.
+// Stop a devotional, removing its run file and its progress. An absent run is a
+// no-op, not an error. Null on success, else an owned error string.
 //
 // # Safety
 // `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_devotional_stop(struct PlumblineEngine *engine, const char *id);
 
-// Bank day `day` of a running devotional on the reader's LOCAL `today`
-// (`YYYY-MM-DD`) — the Done at the foot of the page, and the only signal that
-// a day was read. Banking a day already banked is a no-op that does NOT
-// re-stamp the date, so a double tap cannot push tomorrow's entry further
-// away. Null on success, else an owned error string.
+// Bank day `day` of a running devotional on the reader's local `today`
+// (`YYYY-MM-DD`) — the Done at the foot of the page, and the only signal that a
+// day was read. Re-banking a banked day is a no-op that does not re-stamp the
+// date, so a double tap cannot push tomorrow's entry further away. Null on
+// success, else an owned error string.
 //
 // # Safety
 // `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -1213,11 +1148,10 @@ char *plumbline_engine_devotional_done(struct PlumblineEngine *engine,
                                        uint32_t day,
                                        const char *today);
 
-// Pause or resume a devotional — set aside, kept whole: its file and its
-// banked days stay put, and it stops asking (no chip) while `paused`. An
-// absent id is an error: pausing one that is not running means the shell's
-// list is stale, and saying so beats a silent no-op (the `plan_set_paused`
-// stance). Null on success, else an owned error string.
+// Pause or resume a devotional: its file and banked days stay put, and it stops
+// asking (no chip) while `paused`. An absent id is an error — pausing one that
+// is not running means the shell's list is stale, and saying so beats a silent
+// no-op. Null on success, else an owned error string.
 //
 // # Safety
 // `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
@@ -1227,9 +1161,7 @@ char *plumbline_engine_devotional_set_paused(struct PlumblineEngine *engine,
 
 // The reading map's tuning as JSON: `{wordsPerMinute, completeAt, freshDays,
 // staleDays, graceSeconds, tickSeconds, idleSeconds}`. Engine-independent and
-// free — the same object rides on `reading_books_json`, but a shell that only
-// wants the dials should not have to load every book's reading file and compute
-// 66 standings to read three floats. Never null.
+// free, unlike the same object riding on `reading_books_json`. Never null.
 char *plumbline_reading_spec_json(void);
 
 // One sample of reading time.
@@ -1269,21 +1201,21 @@ char *plumbline_engine_reading_tick_json(struct PlumblineEngine *engine,
 char *plumbline_engine_plans_json(const struct PlumblineEngine *engine, const char *now);
 
 // Start a built-in schedule plan by its `id` (see `plumbline_engine_plans_json`
-// `builtins`). Starting a plan whose class is already occupied REPLACES the
-// running one — the shell confirms first, and passing an already-running id
+// `builtins`). Starting a plan whose class is already occupied replaces the
+// running one — the shell confirms first — and passing an already-running id
 // re-seeds it from scratch. Null on success, else an owned error string.
 //
 // # Safety
 // `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 char *plumbline_engine_plan_start(struct PlumblineEngine *engine, const char *id, const char *now);
 
-// Start (or RESUME) a concept study for `tag`, returning the run's plan id —
-// the id the shell writes into `config.conceptStudy` to enter the mode. The id is derived
-// from the tag (`run-<slug>`), so re-starting a concept the reader is already
-// sweeping resumes it, coverage intact, rather than forking a second run. The
+// Start (or resume) a concept study for `tag`, returning the run's plan id —
+// what the shell writes into `config.conceptStudy` to enter the mode. The id is
+// derived from the tag (`run-<slug>`), so re-starting a concept already being
+// swept resumes it with coverage intact rather than forking a second run. The
 // tag itself need not exist yet; the first tap-to-tag creates it.
 //
-// Returns the id on success, or an error string PREFIXED with `!` (which no
+// Returns the id on success, or an error string prefixed with `!` (which no
 // plan id can start with) so the one out-parameter carries both.
 //
 // # Safety
@@ -1311,13 +1243,11 @@ char *plumbline_engine_concept_study_sweep(struct PlumblineEngine *engine,
 // `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_plan_stop(struct PlumblineEngine *engine, const char *id);
 
-// Pause or resume a plan — set aside, kept whole: its file, its progress and
-// its class stay put; shells stop asking for its today (no chip, no card)
-// while `paused`. A concept study can pause too (it simply stops being
-// offered as resumable-in-one-tap surfaces choose). An absent id is an
-// error — pausing a plan that is not running means the shell's list is
-// stale, and saying so beats a silent no-op. Null on success, else an owned
-// error string.
+// Pause or resume a plan: its file, progress and class stay put, and shells
+// stop asking for its today (no chip, no card) while `paused`. A concept study
+// can pause too. An absent id is an error — pausing a plan that is not running
+// means the shell's list is stale, and saying so beats a silent no-op. Null on
+// success, else an owned error string.
 //
 // # Safety
 // `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
@@ -1341,10 +1271,9 @@ char *plumbline_engine_reading_chapters_json(const struct PlumblineEngine *engin
 
 // Credit reading time to a chapter and persist it.
 //
-// `reached` is the furthest verse number the reader has had on screen and
-// `seconds` the dwell **since the last call** — a shell accumulates both while
-// a chapter is on screen and reports on the cadence in `spec.tickSeconds`, plus
-// on leaving the chapter and on going to the background.
+// `reached` is the furthest verse number the reader has had on screen and `seconds` the dwell
+// since the last call, reported on the cadence in `spec.tickSeconds` plus on leaving the chapter
+// and on going to the background.
 //
 // Returns the resulting `{book,chapter,pct,completed,lastRead?}`, or null when
 // the engine has no home to write to (reading is simply not tracked then).
@@ -1383,9 +1312,8 @@ char *plumbline_engine_reading_forget(struct PlumblineEngine *engine,
 //
 // Answers `{url, base, church, hasChurch, title, siteUrl}`: the link for the QR
 // and the share sheet, the church as the core normalized it, and the label /
-// site a Church button needs. One call rather than six shell-side helpers —
-// the web and Kotlin copies of those had already drifted on the query encoding
-// and on whether the church was cleaned before it went into a URL.
+// site a Church button needs. Query encoding and church cleaning live here, not
+// in each shell.
 //
 // Null only when `request` is null or not JSON.
 //

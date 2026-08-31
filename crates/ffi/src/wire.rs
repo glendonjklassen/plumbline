@@ -1,20 +1,16 @@
 //! The wire schemas: the JSON contract every binding decodes.
 //!
-//! These DTOs are deliberately **separate** from `plumbline_core` / `plumbline_layout`
-//! internals. The core's own serde impls serve its frozen on-disk formats (the
-//! positional token array, OSIS-keyed verses); this ABI instead speaks a
-//! flat, self-describing, `camelCase` JSON that is pleasant to bind from C#,
-//! Kotlin, Swift or JS and stable to evolve (new fields are additive). Verse
-//! references cross the wire as compact keys (`"John 3:16"`) plus a display
-//! form, so a shell needs no canon table of its own.
+//! Deliberately separate from `plumbline_core` / `plumbline_layout` internals.
+//! The core's own serde impls serve its frozen on-disk formats; this ABI speaks
+//! flat, self-describing `camelCase` JSON that binds easily from any language
+//! and evolves only additively. Verse references cross as compact keys
+//! (`"John 3:16"`) plus a display form, so a shell needs no canon table.
 //!
-//! **On an enum, `rename_all` renames the VARIANTS, not the fields inside
-//! them** — a tagged union needs `rename_all_fields = "camelCase"` as well, or
-//! its struct-variant fields go out in Rust's snake_case. That mistake shipped:
-//! `WireBlock` emitted `mark_glyph` / `top_gap`, so Android's decoder (which
-//! ignores unknown keys) read nothing and the tier marks and paragraph gaps
-//! never rendered. The golden key-set tests in `tests.rs` now pin the complete
-//! set of keys each variant emits, so the next one fails at the test.
+//! Footgun: on an enum, `rename_all` renames the VARIANTS, not the fields inside
+//! them — a tagged union needs `rename_all_fields = "camelCase"` too, or its
+//! struct-variant fields go out in snake_case and a decoder that ignores unknown
+//! keys silently reads nothing. The golden key-set tests in `tests.rs` pin the
+//! complete key set each variant emits.
 
 use serde::{Deserialize, Serialize};
 
@@ -49,8 +45,8 @@ pub struct TocBook {
     /// OSIS id, e.g. `"John"`.
     pub id: &'static str,
     /// Display name in the reader's language, e.g. `"John"` / `"1. Johannes"`.
-    /// Owned rather than `&'static str`: it is a translation now, not a slice of
-    /// the compiled-in canon table.
+    /// Owned, not `&'static str`: it is a translation, not a slice of the
+    /// compiled-in canon table.
     pub name: String,
     /// Chapters in the loaded corpus (floored at 1 for a book it lacks).
     pub chapters: u16,
@@ -113,12 +109,10 @@ pub fn verse_to_wire(v: &Verse) -> WireVerse {
 pub struct WireDisplayList {
     pub width: f32,
     pub height: f32,
-    /// Whether these boxes are laid out right to left. Additive (CLAUDE.md
-    /// §Frozen contracts). The shell needs it to set its canvas `direction`, so
-    /// that a trailing full stop lands at the visual END of an Arabic word
-    /// rather than leading it — and taking it from the display list is what
-    /// keeps that answer from ever disagreeing with the coordinates it came
-    /// with.
+    /// Whether these boxes are laid out right to left (additive). The shell sets
+    /// its canvas `direction` from it, so a trailing full stop lands at the
+    /// visual end of an Arabic word; carrying it on the display list keeps that
+    /// answer from disagreeing with the coordinates it came with.
     pub rtl: bool,
     pub items: Vec<WireItem>,
 }
@@ -134,9 +128,9 @@ pub struct WireItem {
     pub text: String,
     /// `"word"` or `"verseNumber"`.
     pub kind: &'static str,
-    /// For words: the verse this token belongs to (compact key); explicit
-    /// `null` for verse numbers. (Every field is always present — a strict
-    /// statically-typed decoder can rely on that.)
+    /// For words: the verse this token belongs to (compact key); explicit `null`
+    /// for verse numbers. Every field is always present, so a strict decoder can
+    /// rely on that.
     pub verse: Option<String>,
     /// For words: display form of `verse`; `null` for verse numbers.
     pub verse_display: Option<String>,
@@ -729,8 +723,8 @@ pub struct WireLinkPairs {
 }
 
 /// One deduped canonical weave pair, each endpoint spelled out (ref key +
-/// located book/chapter/verse) so a shell draws connectors and lays out the
-/// chord map without parsing ref keys or re-deriving the dedup.
+/// book/chapter/verse), so a shell draws connectors and lays out the chord map
+/// without parsing ref keys or re-deriving the dedup.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WireLinkPair {
@@ -742,9 +736,9 @@ pub struct WireLinkPair {
     pub b_book: String,
     pub b_chapter: u16,
     pub b_verse: u16,
-    /// Both endpoints resolve in the loaded corpus (drawable / navigable). The
-    /// same calc `weaves_to_wire` applies per link — an unresolved pair has an
-    /// endpoint the reader can't reach, so a shell skips it when drawing.
+    /// Both endpoints resolve in the loaded corpus (drawable / navigable), the
+    /// same calc `weaves_to_wire` applies per link. An unresolved pair has an
+    /// endpoint the reader cannot reach, so a shell skips it when drawing.
     pub resolved: bool,
 }
 
@@ -780,14 +774,14 @@ pub struct WireCanonSegments {
     pub ot_nt_divide: usize,
 }
 
-/// One canon section as `(label, first book index, last book index)` over the
-/// 66 books in OSIS order. The single source is `core::reference` — a shell
-/// consumes this instead of hardcoding the bands (they were drifting).
+/// One canon section as `(label, first book index, last book index)` over the 66
+/// books in OSIS order. `core::reference` is the single source; a shell consumes
+/// this rather than hardcoding the bands.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WireCanonSegment {
-    /// The section's name IN THE READER'S LANGUAGE (`reference::segment_label`).
-    /// Owned rather than `&'static` because it is translated, not a constant.
+    /// The section's name in the reader's language (`reference::segment_label`);
+    /// owned rather than `&'static` because it is translated, not a constant.
     pub label: String,
     pub first: usize,
     pub last: usize,
@@ -823,10 +817,10 @@ pub struct WireChordMap {
     pub book_count: usize,
 }
 
-/// One book-pair ribbon: two **canon book indices** (`a <= b`, so `a == b` is a
+/// One book-pair ribbon: two canon book indices (`a <= b`, so `a == b` is a
 /// self-pair) and how many deduped verse links weave those books together. The
-/// shell maps an index to a foot position and a name off its own book list —
-/// it neither folds the pairs nor re-derives the max.
+/// shell maps an index to a foot position off its own book list; it neither
+/// folds the pairs nor re-derives the max.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WireChordPair {
@@ -847,11 +841,10 @@ pub fn chord_map_to_wire(loaded: &[LoadedWeave]) -> WireChordMap {
 
 // ── constellation (the weave-library overview) ────────────────────────────────
 
-/// A laid-out page of the constellation (review item 3). Positions are
-/// **fractions / logical units** — `x` a canon fraction 0..1, `laneFrac` a
-/// 0..1 within a lane's band, `size` a 0..1 witness degree. The shell holds the
-/// transient `page`/`pins` (the endpoint's inputs), maps fractions to pixels,
-/// picks colours, and paints; it derives nothing.
+/// A laid-out page of the constellation. Positions are fractions / logical
+/// units: `x` a canon fraction 0..1, `laneFrac` a 0..1 within a lane's band,
+/// `size` a 0..1 witness degree. The shell holds the transient `page`/`pins`,
+/// maps fractions to pixels, picks colours and paints; it derives nothing.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WireConstellation {
@@ -864,7 +857,7 @@ pub struct WireConstellation {
     /// The fully-composed paging caption.
     pub caption: String,
     /// The fixed lane capacity — the shell's lane-height denominator, so it
-    /// can't drift from the paging arithmetic.
+    /// cannot drift from the paging arithmetic.
     pub lane_capacity: usize,
 }
 
@@ -1024,7 +1017,7 @@ pub enum WireBlock {
     Rule,
 }
 
-/// One styled span: text + a **semantic** colour role + a logical point size +
+/// One styled span: text, a semantic colour role, a logical point size,
 /// bold/italic, and an optional `uri` that makes it a link.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1036,8 +1029,7 @@ pub struct WireRun {
     pub italic: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
-    /// Pinned to the row's end (additive: absent means false, so older
-    /// decoders and goldens see the same shape they always did).
+    /// Pinned to the row's end (additive; absent means false).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub end: bool,
 }
@@ -1071,9 +1063,8 @@ fn run_to_wire(r: Run) -> WireRun {
     }
 }
 
-/// A parsed panel link (`plumbline_core::panel::parse_link`) — the one verb
-/// vocabulary, tagged by `verb` so a shell dispatches on the typed shape
-/// instead of re-splitting the URI string.
+/// A parsed panel link (`plumbline_core::panel::parse_link`), tagged by `verb`
+/// so a shell dispatches on the typed shape instead of re-splitting the URI.
 #[derive(Serialize)]
 #[serde(tag = "verb", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum WirePanelLink {
@@ -1159,7 +1150,7 @@ pub fn blocks_to_wire(blocks: Vec<Block>) -> WirePanel {
     }
 }
 
-// ── config / session (shared with the GTK shell via core::config) ─────────────
+// ── config / session ─────────────────────────────────────────────────────────
 
 /// For an ON-by-default switch, so an absent key reads as the shipped default
 /// rather than as the reader having turned it off.
@@ -1184,14 +1175,13 @@ pub struct WireConfigState {
     pub open_panes: Vec<WirePaneRef>,
     #[serde(default)]
     pub active_pane: usize,
-    /// Where the reader was PER SEATING, keyed by slot token (additive; see
-    /// `core::session_slot`). Absent for a reader who has never been anywhere
-    /// in a given slot, which is not the same as an empty position.
+    /// Where the reader was per seating, keyed by slot token (additive; see
+    /// `core::session_slot`). Absent for a slot the reader has never been in,
+    /// which is not the same as an empty position.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub slots: std::collections::BTreeMap<String, WirePaneRef>,
-    /// Lifetime reads through the Bible, or -1 for "never said" — which is NOT
-    /// the same as a reader who answered "none". Seeded once by hand and earned
-    /// thereafter; see `core::config::Config::bible_reads`.
+    /// Lifetime reads through the Bible, or -1 for "never said" — not the same
+    /// as answering "none". See `core::config::Config::bible_reads`.
     #[serde(default = "minus_one")]
     pub bible_reads: i64,
     /// Whether the current full-canon state has already been counted.
@@ -1208,12 +1198,10 @@ pub struct WireConfigState {
     /// never set — the Sunday seating keeps its before-noon rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sunday_service: Option<u32>,
-    /// The two reader-typography switches: paint the leading verse numbers,
-    /// and italicize the KJV's supplied words. Both ON by default, so they
-    /// default to TRUE when absent rather than to serde's `false` — a shell
-    /// built before these existed sends neither, and reading that as "the
-    /// reader turned them off" would strip a chapter of its numbers on the
-    /// first save an older shell made.
+    /// The two reader-typography switches: paint the leading verse numbers, and
+    /// italicize the KJV's supplied words. Both on by default, so absent must
+    /// read as TRUE, not serde's `false` — an older shell sends neither, and
+    /// reading that as "turned off" would strip a chapter of its numbers.
     #[serde(default = "default_true")]
     pub verse_numbers: bool,
     #[serde(default = "default_true")]
@@ -1247,9 +1235,8 @@ pub struct WireConfigState {
     /// Show the learned/statistical analysis tiers (additive).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub machine_analysis: Option<bool>,
-    /// The reader's home church (additive): shown in the welcome
-    /// when a shared link carried one, and attached to the links this reader
-    /// shares. Absent when unset.
+    /// The reader's home church (additive): shown in the welcome when a shared
+    /// link carried one, and attached to the links this reader shares.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub church: Option<WireChurch>,
     /// Present-screen shares open as a new believer (additive).
@@ -1264,17 +1251,16 @@ pub struct WireConfigState {
     pub intro: Option<String>,
     /// Whether the bundled devotional has already been offered (additive).
     /// Absent reads as false, so a config written before devotionals existed
-    /// gets the offer once — and a reader who STOPPED the booklet is not
-    /// offered it again, because by then this is true.
+    /// gets the offer once; a reader who stopped the booklet is not re-offered
+    /// it, because by then this is true.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub devotional_seeded: Option<bool>,
-    /// The reader's chosen language (additive). ABSENT means "follow the
-    /// device" — the shell then passes its locale to
-    /// `plumbline_i18n_catalog_json` and the core resolves it, so a German
-    /// phone opens in German without anyone visiting Settings.
+    /// The reader's chosen language (additive). Absent means "follow the
+    /// device": the shell passes its locale to `plumbline_i18n_catalog_json` and
+    /// the core resolves it, so a German phone opens in German untouched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
-    /// The active concept study's plan id (additive). ABSENT means normal
+    /// The active concept study's plan id (additive). Absent means normal
     /// reading mode; the shell suspends its reading tracker and turns verse
     /// taps into tag-with-confirm while this is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1284,9 +1270,9 @@ pub struct WireConfigState {
     pub gospel_thread: Option<String>,
     /// English definitions preferred over this language's own Strong's
     /// dictionary (additive). Absent = off: the localized one serves when the
-    /// pack ships it. `alias` keeps a shell or a stored payload still saying
-    /// `strongsDeOff` — the name it carried while German was the only
-    /// translation — from silently losing the reader's choice.
+    /// pack ships it. The `alias` keeps a shell or stored payload still saying
+    /// `strongsDeOff` (its name while German was the only translation) from
+    /// silently losing the reader's choice.
     #[serde(default, alias = "strongsDeOff", skip_serializing_if = "Option::is_none")]
     pub localized_lexicon_off: Option<bool>,
     /// Load-only: true when no config file existed yet (guided first run).
@@ -1303,8 +1289,8 @@ pub struct WirePaneRef {
     /// First visible verse (additive; absent = top of the chapter).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verse: Option<u16>,
-    /// This pane's TEXT language (additive; absent/empty = the reader's own).
-    /// A pane's text language is not the UI's — see `config::PaneRef::lang`.
+    /// This pane's text language (additive; absent/empty = the reader's own).
+    /// Not the UI's language — see `config::PaneRef::lang`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub lang: String,
 }
@@ -1315,9 +1301,8 @@ pub struct WirePaneRef {
 pub struct WireChurch {
     #[serde(default)]
     pub name: String,
-    /// When the church meets, minutes since local midnight; absent when it
-    /// never said. Replaced a free "when and where" line — see
-    /// `core::config::Church::service`.
+    /// When the church meets, minutes since local midnight; absent when it never
+    /// said. See `core::config::Church::service`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service: Option<u16>,
     #[serde(default)]
@@ -1473,8 +1458,8 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         verse_numbers: w.verse_numbers,
         added_italics: w.added_italics,
         theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
-        // Absent, or a face this build does not ship → the default face. Same
-        // stance as `core::config::from_wire`, and for the same reason.
+        // Absent, or a face this build does not ship → the default face
+        // (`core::config::from_wire`'s stance).
         text_font: w.text_font.as_deref().and_then(Font::parse).unwrap_or_default(),
         chrome_font: w.chrome_font.as_deref().and_then(Font::parse).unwrap_or_default(),
         copy_style: match w.copy_style.as_str() {
@@ -1508,21 +1493,20 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             Some("curious") => "curious".to_string(),
             _ => String::new(),
         },
-        // Empty means "follow the device", and a language this build does not
-        // ship means the same — never English by fiat. Validated here rather
-        // than trusted, since this is where a shell's value becomes the core's.
+        // Empty means "follow the device", and so does a language this build does not
+        // ship — never English by fiat. Validated here, where a shell's value becomes
+        // the core's, rather than trusted.
         language: match w.language.as_deref() {
             Some(code) if i18n::Lang::ALL.iter().any(|l| l.code() == code) => code.to_string(),
             _ => String::new(),
         },
-        // An id the plan store answers for at use — a stale one reads as
-        // normal mode there, so nothing validates it away here.
+        // An id the plan store answers for at use — a stale one reads as normal mode
+        // there, so nothing validates it away here.
         concept_study: w.concept_study.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
         gospel_thread: w.gospel_thread.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
         localized_lexicon_off: w.localized_lexicon_off.unwrap_or(false),
-        // Through the core's clamps, not a local trim: this is the one place a
-        // shell's church becomes the core's, so it is where the caps stop being
-        // something each shell has to remember.
+        // Through the core's clamps, not a local trim: the one place a shell's church
+        // becomes the core's, so no shell has to remember the caps.
         church: w.church.as_ref().map(|c| church::clean(&c.to_core())).unwrap_or_default(),
     }
 }
@@ -1546,7 +1530,7 @@ pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
     }
 }
 
-// ── personal notes (Tier 0 #3) ─────────────────────────────────────────────────
+// ── personal notes ────────────────────────────────────────────────────────────
 
 /// One personal note on a verse.
 #[derive(Serialize)]
@@ -1566,7 +1550,7 @@ pub struct WireUserNotes {
     pub notes: Vec<WireUserNote>,
 }
 
-// ── memorization (Tier 2 #15) — SRS cards, coverage/activity, drills ─────────
+// ── memorization — SRS cards, coverage/activity, drills ──────────────────────
 
 /// A verse's SRS card: SM-2 schedule, mastery bucket, and full review log.
 #[derive(Serialize)]
@@ -1827,13 +1811,9 @@ pub fn hymn_to_wire(h: &hymnal::Hymn, semis: i32) -> WireHymn {
 // ── i18n ────────────────────────────────────────────────────────────────────
 
 /// One language's whole catalogue, plus the list a picker needs
-/// (`plumbline_i18n_catalog_json`).
-///
-/// `camelCase` like every other wire type. It went without for as long as every
-/// field here was one word — and then the first two-word field crossed as
-/// `native_intros`, which both shells read as absent and quietly answered "no"
-/// to. Nothing renames under this: `lang`, `strings` and `languages` are their
-/// own camelCase.
+/// (`plumbline_i18n_catalog_json`). `camelCase` like every other wire type —
+/// without it a two-word field crosses as snake_case and a shell reads it as
+/// absent.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WireCatalog {
@@ -1845,12 +1825,10 @@ pub struct WireCatalog {
     pub strings: std::collections::BTreeMap<String, String>,
     /// Every language on offer, each labelled in itself.
     pub languages: Vec<WireLanguage>,
-    /// Whether THIS language may be offered the first-run welcome and the
-    /// curious path — see `i18n::Lang::has_native_intros`. Those two screens are
-    /// somebody speaking to a reader about their own life, and a shell must not
-    /// lead anyone into them in a language nobody has written them in. Sent with
-    /// the catalogue rather than asked for separately because first run happens
-    /// before there is an engine to ask.
+    /// Whether this language may be offered the first-run welcome and the
+    /// curious path (`i18n::Lang::has_native_intros`) — a shell must not lead
+    /// anyone into either in a language nobody has written them in. Sent with
+    /// the catalogue because first run happens before there is an engine to ask.
     pub native_intros: bool,
 }
 
@@ -1867,55 +1845,35 @@ pub struct WireLanguage {
     /// The Bible a reader of this language gets, by the name they would know it
     /// by: "KJV", "Luther", "Reina-Valera".
     pub bible: String,
-    /// Whether it is written right to left, for the shell's own chrome — the
-    /// document's `dir`, and which faces the font picker may offer.
-    ///
-    /// THE SECOND PLACE THIS HAD TO GO. `i18n::registry_json` carries the same
-    /// column for the pack BUILD (a Node script reads it through
-    /// `plumbline-hydrate languages`); this is what the running shell reads, and
-    /// adding it to only one of them shipped an Arabic app with `dir="ltr"` —
-    /// the exact shape of the problem the registry exists to end. If a third
-    /// consumer appears, it reads a row; it does not get its own list.
+    /// Written right to left: the document's `dir`. `i18n::registry_json` carries
+    /// the same column for the pack build; this is what the running shell reads,
+    /// and adding it to only one of them ships an Arabic app with `dir="ltr"`.
     pub rtl: bool,
-    /// The writing system, as `core::i18n::Script`'s token — "latin",
-    /// "arabic", "gurmukhi", "devanagari".
-    ///
-    /// WHICH FACES CAN SET THIS LANGUAGE, which is what `rtl` above was being
-    /// asked while Arabic was the only non-Latin script and the two questions
-    /// had one answer. They part at Gurmukhi: Punjabi reads left to right and
-    /// no Latin face has a glyph of it, so an `rtl`-shaped font picker hands a
-    /// Punjabi reader EB Garamond and their Bible renders from whatever the
-    /// system happens to have. Both columns ship, because `dir` really is a
-    /// direction question and the picker really is a script one.
+    /// The writing system, as `core::i18n::Script`'s token — "latin", "arabic",
+    /// "gurmukhi", "devanagari". This, not `rtl`, decides which faces can set the
+    /// language: Punjabi reads left to right and no Latin face has a Gurmukhi
+    /// glyph, so an `rtl`-shaped font picker would hand it EB Garamond.
     pub script: String,
     /// The manifest role its corpus cache is filed under, and the role its own
-    /// Strong's dictionary is filed under (absent when it has none).
-    ///
-    /// THE SHELLS ASK RATHER THAN KNOW. The web had `corpusRoleFor` returning a
-    /// literal `"germanCorpus"`, a `GERMAN_CACHE` constant and an
-    /// `if (code === "de")` in Settings — three places that each had to be found
-    /// and edited to add a language. They read these now.
+    /// Strong's dictionary is filed under (absent when it has none). Shells read
+    /// these instead of hardcoding a per-language constant.
     pub corpus_role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lexicon_role: Option<String>,
     /// Files this language needs that the device does not already hold, as home
-    /// paths (`data/…`). This is the whole answer to "is there anything to
-    /// download when the reader picks this language".
+    /// paths (`data/…`) — the whole answer to "is there anything to download when
+    /// the reader picks this language".
     ///
-    /// NOT the corpus. Every language's Bible ships to every device now
-    /// (`stage: "corpus"` in the web pack), so picking a language is a switch
-    /// and not a download — which is the point: a phone set to Arabic used to
-    /// open in Arabic over the English KJV, because the Arabic Bible was an
-    /// errand behind a Settings screen. Only the machine-translated dictionary
-    /// is left here, and only for a language that has one.
+    /// Not the corpus: every language's Bible ships to every device
+    /// (`stage: "corpus"` in the web pack), so picking a language is a switch and
+    /// not a download. Only the machine-translated dictionary is left, and only
+    /// for a language that has one.
     pub pack_files: Vec<String>,
 }
 
 pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
-    // ISO-639 code order, not registry order. Rows land in the registry in the
-    // order languages shipped, which put French below the Indic rows and read
-    // as a jumble in the picker (maintainer, 2026-08-30); the code is the one
-    // ordering that needs no judgment about language families.
+    // ISO-639 code order, not registry order: rows land in the registry in the order
+    // languages shipped, which reads as a jumble in the picker.
     let mut all: Vec<i18n::Lang> = i18n::Lang::ALL.to_vec();
     all.sort_by_key(|l| l.code());
     WireCatalog {
@@ -1927,14 +1885,10 @@ pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
 }
 
 pub(crate) fn language_to_wire(l: i18n::Lang) -> WireLanguage {
-    // THE TEXT IS NOT LISTED, and its absence is the decision. Every Bible is on
-    // the device by the time the reader can reach a language picker, so there is
-    // nothing to fetch when they choose one — see `pack_files` above.
-    //
-    // What is left is the machine-translated dictionary, which stays an ask: it
-    // is the lowest-confidence artifact in the pack, and nothing is broken
-    // without one, because `strongs_for` serves the English definitions. English
-    // has neither — its dictionary IS the base pack.
+    // The text is deliberately not listed: every Bible is already on the device by the
+    // time a reader reaches a language picker. Only the machine-translated dictionary
+    // stays an ask, and nothing breaks without one — `strongs_for` serves the English
+    // definitions. English has neither: its dictionary IS the base pack.
     let mut pack_files = Vec::new();
     if l != i18n::Lang::En {
         if let Some(lex) = l.spec().lexicon {

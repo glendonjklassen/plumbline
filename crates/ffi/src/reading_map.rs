@@ -1,11 +1,5 @@
 //! The reading map's C ABI — where the reader has been, and how long ago.
 //!
-//! Split out of `lib.rs` rather than added to it: that file is already past the
-//! repo's no-3k-line-files rule, and a feature's worth of endpoints had no
-//! business pushing it further. These are the same flat `extern "C"` fns bound
-//! the same way, and cbindgen walks the whole crate, so the generated header is
-//! unchanged by the move.
-//!
 //! All of these tolerate an engine with no home (opened from bytes): the map
 //! reads as "nothing recorded" rather than failing, so the navigator still opens.
 
@@ -23,12 +17,9 @@ impl PlumblineEngine {
         self.reading_words.get_or_init(|| reading::ChapterWords::build(&self.corpus))
     }
 
-    /// The reader's start date, creating it at `now` on the first call that ever
-    /// needs it. The anchor for the unread glow, so it wants to be stamped as
-    /// early in a reader's life as possible — which is why `record` stamps it
-    /// too, not only the navigator (someone may read for weeks before they ever
-    /// open Go to…). With no home there is nothing to persist, so `now` stands
-    /// in and every unread chapter reads as brand new.
+    /// The reader's start date, creating it at `now` on the first call that needs it. It anchors
+    /// the unread glow, so `record` stamps it too, not only the navigator. With no home there is
+    /// nothing to persist: `now` stands in and every unread chapter reads as brand new.
     fn reading_since(&self, now: &str) -> String {
         match self.home.as_ref() {
             Some(h) => reading::ensure_since(h, now).unwrap_or_else(|_| now.to_string()),
@@ -96,10 +87,9 @@ pub unsafe extern "C" fn plumbline_engine_reading_chapters_json(
 
 /// Credit reading time to a chapter and persist it.
 ///
-/// `reached` is the furthest verse number the reader has had on screen and
-/// `seconds` the dwell **since the last call** — a shell accumulates both while
-/// a chapter is on screen and reports on the cadence in `spec.tickSeconds`, plus
-/// on leaving the chapter and on going to the background.
+/// `reached` is the furthest verse number the reader has had on screen and `seconds` the dwell
+/// since the last call, reported on the cadence in `spec.tickSeconds` plus on leaving the chapter
+/// and on going to the background.
 ///
 /// Returns the resulting `{book,chapter,pct,completed,lastRead?}`, or null when
 /// the engine has no home to write to (reading is simply not tracked then).
@@ -123,8 +113,8 @@ pub unsafe extern "C" fn plumbline_engine_reading_record_json(
         if canon::book_by_id(book).is_none() || !seconds.is_finite() {
             return ptr::null_mut();
         }
-        // Stamp the start date here too: reading happens long before anyone
-        // opens the navigator, and the anchor should be the earlier of the two.
+        // Stamp the start date here too: reading happens long before anyone opens the
+        // navigator, and the anchor should be the earlier of the two.
         let _ = e.reading_since(now);
         let words = e.reading_words();
         let (chapter, reached) = (chapter as u16, reached.min(u16::MAX as u32) as u16);

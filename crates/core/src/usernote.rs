@@ -1,15 +1,10 @@
 //! Personal per-verse notes — the reader's own margin notes, distinct from the
-//! 1769 translators' notes in [`crate::notes`] (which are read-only shipped
-//! data). Tier 0 #3.
+//! 1769 translators' notes in [`crate::notes`], which are read-only shipped data.
 //!
-//! Personal study data, so it lives under the data home like threads/tags/weaves
-//! and writes through the same cross-platform atomic store: one JSON file per
-//! annotated verse under `home/notes/`, named by a slug of the refKey. The
-//! refKey is stored *inside* the file (the filename is only a slug), so loading
-//! is authoritative and a note survives a book being renamed in display.
-//!
-//! Notes are the anchor of the future sync service, so the on-disk shape is a
-//! plain, additive-friendly object with a `format` stamp.
+//! One JSON file per annotated verse under `home/notes/`, named by a slug of the
+//! refKey and written through the atomic store like threads/tags/weaves. The
+//! refKey is stored *inside* the file, so loading is authoritative and a note
+//! survives a book being renamed in display.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -20,6 +15,8 @@ use serde_json::{Map, Value};
 use crate::reference::VRef;
 use crate::Error;
 
+/// Frozen: this tag is serialized into every note file, and those files already
+/// sit inside shipped backup zips. Evolve the format additively; never rename it.
 const FORMAT: &str = "pure-note-v1";
 
 /// One personal note on a verse: the text plus create/update timestamps.
@@ -42,19 +39,14 @@ struct NoteRepr {
     #[serde(default)]
     updated: String,
     /// Every key in the file this build has never heard of, carried straight
-    /// back out again on save.
+    /// back out on save: the on-disk formats evolve additively, and a build that
+    /// dropped a later one's fields would drop them for good. The reader's file,
+    /// not this struct, decides what a note contains.
     ///
-    /// The on-disk formats evolve **additively** (CLAUDE.md §Data formats), and
-    /// a sideloaded APK never auto-updates: a build that drops the fields of a
-    /// later one drops them for good on that device. So the reader's file, not
-    /// this struct, decides what a note contains. Nothing has to be skipped
-    /// when it is empty — a flattened map with no entries writes no key at all,
-    /// so a note written here reads byte for byte as it always did.
-    ///
-    /// Serde fills this with the leftovers *after* the fields above are
-    /// matched, so a known key can never be swallowed, and a key a later
-    /// version promotes to a real field stops arriving here the moment that
-    /// field exists — it can never be written twice.
+    /// An empty map writes no key at all, so a note written here is byte-identical
+    /// to what it always was. Serde fills this with the leftovers *after* the
+    /// fields above are matched, so a known key can never be swallowed nor a
+    /// promoted one written twice.
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -124,23 +116,17 @@ pub fn set_note(home: impl AsRef<Path>, vref: &VRef, text: &str, stamp: &str) ->
             Err(e) => Err(Error::Io { path: path.display().to_string(), source: e }),
         }
     } else {
-        // Preserve `created` — and anything else the file carries that we do not
-        // understand (see [`NoteRepr::extra`]) — if a note is already there. A
-        // note is edited through its text, not by handing this function a
-        // `UserNote`, so the file we are replacing is the only place those keys
-        // can come from.
-        //
-        // Two ways that file can be something this build must not simply
-        // overwrite, and they need opposite answers:
+        // Preserve `created`, and anything else the existing file carries that we
+        // do not understand (see [`NoteRepr::extra`]) — the file being replaced is
+        // the only place those keys can come from. The two ways it can be
+        // something this build must not simply overwrite need opposite answers:
         let on_disk = std::fs::read(&path).ok();
         let existing = match &on_disk {
             None => None,
             Some(bytes) => match serde_json::from_slice::<NoteRepr>(bytes) {
-                // A FOREIGN format stamp — a `pure-note-v2` from a later build,
-                // say. It parsed, so it is not damaged; it is a file whose meaning
-                // we do not know. Refuse, the way `thread.rs` refuses to clobber a
-                // thread it could not load, rather than rewrite it as v1 and take
-                // the stamp off. Both shells surface a note-save error.
+                // A foreign format stamp parsed, so it is not damaged — it is a
+                // file whose meaning we do not know. Refuse, rather than rewrite
+                // it as v1 and take the stamp off; the shell surfaces the error.
                 Ok(r) if r.format != FORMAT => {
                     return Err(Error::Corpus(format!(
                         "{} is a {} note, which this build does not understand — refusing to overwrite it",
@@ -149,11 +135,9 @@ pub fn set_note(home: impl AsRef<Path>, vref: &VRef, text: &str, stamp: &str) ->
                     )))
                 }
                 Ok(r) => Some(r),
-                // UNPARSEABLE bytes: there is nothing in them to keep and nothing
-                // the reader can read, so the note they are writing now must land.
-                // Their old bytes go aside as `.bad` first — the same rescue a
-                // damaged config gets — so a truncated write is recoverable by hand
-                // instead of gone.
+                // Unparseable bytes hold nothing to keep, so the note being
+                // written now must land. The old bytes go aside as `.bad` first,
+                // leaving a truncated write recoverable by hand.
                 Err(_) => {
                     crate::store::move_damaged_aside(&path, bytes);
                     None
@@ -168,9 +152,9 @@ pub fn set_note(home: impl AsRef<Path>, vref: &VRef, text: &str, stamp: &str) ->
             text: text.to_string(),
             created,
             updated: stamp.to_string(),
-            // A NEW note is stamped with the language its ref was written in; an
-            // existing one keeps whatever its file said, including nothing. See
-            // `i18n::stamp` for why re-saving must not invent an answer.
+            // A new note is stamped with the language its ref was written in; an
+            // existing one keeps whatever its file said, including nothing —
+            // re-saving must not invent a provenance (`i18n::stamp`).
             extra: existing.map(|r| r.extra).unwrap_or_else(crate::i18n::stamped_extra),
         };
         let json = serde_json::to_string_pretty(&repr).map(|s| s + "\n").map_err(|e| Error::Parse(e.to_string()))?;
@@ -240,10 +224,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// Forward compatibility: the on-disk formats evolve
-    /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
-    /// auto-updates — so a key this build drops is dropped for good on that
-    /// device. Editing a note written by a later build must keep every one.
+    /// Forward compatibility: the on-disk formats evolve additively, so a key
+    /// this build drops is dropped for good. Editing a note written by a later
+    /// build must keep every one.
     #[test]
     fn a_note_keeps_the_keys_of_a_later_build() {
         let home = scratch("forward");
@@ -276,10 +259,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// A note with nothing unknown in it is written byte for byte as it was
-    /// before any of that landed, plus the language stamp a NEW file gets
-    /// (`i18n::stamp`) — these files already ship inside backup zips, so the
-    /// exact bytes matter and the one addition is deliberate.
+    /// The exact bytes matter — these files ship inside backup zips — so a note
+    /// with nothing unknown in it is written as it always was, plus the language
+    /// stamp a new file gets (`i18n::stamp`).
     #[test]
     fn a_note_with_no_unknown_keys_is_written_exactly_as_before() {
         let home = scratch("golden");
@@ -301,12 +283,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// The other half of the stamp's contract, and the one that matters more: a
-    /// file that has NO stamp does not gain one by being re-saved. See
-    /// `i18n::stamp` — inventing a provenance is worse than admitting none.
-    ///
-    /// MUTATION: in `set_note`, stamp on every save instead of only when there
-    /// was no existing file. Red here; the golden test above stays green.
+    /// The other half of the stamp's contract: a file with no stamp does not
+    /// gain one by being re-saved, because inventing a provenance is worse than
+    /// admitting none (`i18n::stamp`). Fails against stamping on every save
+    /// rather than only when there was no existing file — a change the golden
+    /// test above cannot see.
     #[test]
     fn a_note_from_an_older_build_does_not_gain_a_language_it_never_had() {
         let home = scratch("older-note");
@@ -327,11 +308,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    // ── malformed and foreign files (TODO §I) ────────────────────────────────
-
-    /// Unreadable bytes are reported, not silently treated as "no note". A
-    /// loader that swallowed them would show the reader an empty margin and then
-    /// overwrite whatever was really there.
+    /// Unreadable bytes are reported, not silently treated as "no note": a
+    /// loader that swallowed them would show an empty margin and then overwrite
+    /// whatever was really there.
     #[test]
     fn unreadable_and_foreign_notes_are_reported_rather_than_dropped() {
         let home = scratch("malformed");
@@ -345,18 +324,16 @@ mod tests {
             r#"{"format":"pure-note-v2","ref":"John 3:17","text":"x","created":"t","updated":"t"}"#,
         )
         .unwrap();
-        // No chapter:verse at all. Note the frozen parser does NOT check the
-        // book against the canon (`VRef::parse_ref_key` splits on the last space
-        // and the colon, nothing more), so "Nowhere 3:16" would load as a note on
-        // a book that does not exist — harmless, since it can never match a verse
-        // being read, and not this test's business.
+        // No chapter:verse at all. `VRef::parse_ref_key` splits on the last space
+        // and the colon and does not check the book against the canon, so
+        // "Nowhere 3:16" loads as a note on a book that does not exist —
+        // harmless, since it can never match a verse being read.
         std::fs::write(
             dir.join("badref.json"),
             r#"{"format":"pure-note-v1","ref":"John","text":"x","created":"t","updated":"t"}"#,
         )
         .unwrap();
-        // And one good one beside them: three bad files must not cost the reader
-        // the note that is fine.
+        // Three bad files must not cost the reader the note that is fine.
         set_note(&home, &VRef::new("Gen", 1, 1), "in the beginning", "2026-01-01T00:00:00Z").unwrap();
 
         let (notes, errs) = load_notes(&home);
@@ -371,10 +348,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// A note whose bytes are damaged is set aside as `.bad` and the note the
-    /// reader is writing now lands. Nothing else can recover those bytes — the
-    /// text is not on screen, because it could not be loaded — so the alternative
-    /// is losing them silently.
+    /// A note whose bytes are damaged is set aside as `.bad` and the note being
+    /// written now lands. Nothing else can recover those bytes — the text never
+    /// reached the screen — so the alternative is losing them silently.
     #[test]
     fn a_damaged_note_is_moved_aside_and_the_new_one_lands() {
         let home = scratch("damaged");
@@ -398,10 +374,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// A note written by a LATER format is refused, not rewritten. It parsed, so
-    /// it is not damaged — it is a file whose meaning this build does not know,
-    /// and a sideloaded APK that quietly restamped it as v1 would have taken the
-    /// stamp off for good.
+    /// A note written by a later format is refused, not rewritten: it parsed, so
+    /// it is not damaged, and quietly restamping it as v1 would take the stamp
+    /// off for good.
     #[test]
     fn a_note_from_a_later_format_is_refused_rather_than_rewritten() {
         let home = scratch("foreign");

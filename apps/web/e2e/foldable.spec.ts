@@ -1,26 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// THE FOLDABLE BAND: wide enough for the desktop shell, not wide enough for
-// three of anything.
+// The foldable band: wide enough for the desktop chrome, not wide enough for three of
+// anything. The web decides its layout by width, and the two breakpoints disagreed —
+// `s.narrow` (one pane, bottom bar) flipped at 700px while the study panel stayed a
+// bottom sheet to 900, so every viewport from 701 to 900 got the desktop chrome with a
+// study surface covering the reader. An unfolded Pixel Fold browser is ~841 CSS px and
+// landed exactly there.
 //
-// Android decides its two-pane layout by FOLD POSTURE and the web decides by
-// WIDTH, and for a long time the two breakpoints the web used disagreed with
-// each other. `s.narrow` (one pane, bottom bar) flipped at 700px, but the study
-// panel stayed a bottom sheet all the way to 900 — so every viewport from 701 to
-// 900 got the desktop chrome with a study surface that covered the reader. An
-// unfolded Pixel Fold browser is ~841 CSS px and landed exactly there: the one
-// thing that hardware is for, scripture and study side by side, was the one
-// thing the PWA withheld while the native app on the same device gave it.
-//
-// So this pins the band from both ends. 841 is a real unfolded Pixel Fold; 390 is
-// the same device folded, and it is here because the fix could trivially have
-// been "make the sidebar unconditional", which would put a 380px sidebar on a
-// phone. A test that only checked the wide case would have passed that.
-//
-// Mutation-tested (2026-08-01): restoring `max-width: 900px` on the panel's
-// media query fails `study sits beside the text` ("panel starts at 0, reader ends
-// at 841"); dropping the pane cap to the old flat 3 fails `two panes fit, three
-// do not`.
+// The band is pinned from both ends: 841 is a real unfolded Pixel Fold, 390 the same
+// device folded. The folded case is here because "make the sidebar unconditional" would
+// pass the wide case alone, and would put a 380px sidebar on a phone.
 
 const FOLD_OPEN = { width: 841, height: 763 };
 const FOLD_SHUT = { width: 390, height: 763 };
@@ -37,8 +26,8 @@ async function boot(page: Page, vp: { width: number; height: number }): Promise<
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
 }
 
-/** Raise the study panel through session state — this is about the LAYOUT, not
- *  about which tap happens to open it. */
+/** Raise the study panel through session state: this is about the layout, not about
+ *  which tap happens to open it. */
 async function openStudy(page: Page): Promise<void> {
   await page.evaluate(() => {
     (window as any).__plumbline.panel = { kind: "notesBrowser" };
@@ -55,12 +44,10 @@ test("unfolded: study sits beside the text, not over it", async ({ page }) => {
   expect(panel).not.toBeNull();
   expect(reader).not.toBeNull();
 
-  // BESIDE: the panel begins after the reader ends. This is the assertion the
-  // bottom sheet fails — a sheet spans the full width, so its left edge is 0 and
-  // it starts far to the LEFT of where the reader ends.
+  // Beside: the panel begins after the reader ends. A bottom sheet fails this — it
+  // spans the full width, so its left edge is 0.
   expect(panel!.x).toBeGreaterThanOrEqual(reader!.x + reader!.width - 1);
-  // And the reader keeps the majority of the window: a panel capped at 40vw
-  // leaves scripture the larger share, which is the point of the cap.
+  // The 40vw cap exists so scripture keeps the larger share of the window.
   expect(reader!.width).toBeGreaterThan(FOLD_OPEN.width * 0.5);
   expect(panel!.width).toBeLessThanOrEqual(FOLD_OPEN.width * 0.4 + 1);
 
@@ -82,8 +69,8 @@ test("folded: the same panel is still a bottom sheet", async ({ page }) => {
 test("unfolded: two panes fit, three do not", async ({ page }) => {
   await boot(page, FOLD_OPEN);
 
-  // The offer and the rule are the same number — the control is shown iff
-  // `addPane` would accept. Splitting once is allowed.
+  // The offer and the rule are the same number: the control is shown iff `addPane`
+  // would accept.
   await page.locator('.pane button[title="Split pane"]').first().click();
   await expect(page.locator(".pane")).toHaveCount(2);
 
@@ -116,23 +103,18 @@ test("a desktop's three-pane config reopens folded on what was being read", asyn
   await expect(page.locator('.pane button[title="Go to… (book · chapter · verse)"]').first()).toContainText("Romans 8");
 });
 
-// FOLDING WHILE RUNNING, which is the case the two tests above do not reach:
-// they RELOAD at the new width, and the boot path has enforced `maxPanes` since
-// it was written. Nothing enforced it when the width changed under a live app,
-// so shutting a foldable kept both panes on a layout that assumes one.
+// Folding while RUNNING, which the tests above do not reach: they reload at the new
+// width, and the boot path has always enforced `maxPanes`. Nothing enforced it when the
+// width changed under a live app, so shutting a foldable kept both panes on a layout
+// that assumes one. The language is the other half: the chip that sets a pane's
+// language lives on the pane's own strip, which Shell hides under 700px, so a per-pane
+// override was left with no control to undo it. Folding hands the pane back to the app
+// language, which Settings can reach on a phone.
 //
-// The language is the half that stranded the maintainer (2026-08-26): they
-// opened the fold, split, switched the new pane to German, and shut it — and the
-// passage was "basically stuck on German". The chip that sets a pane's language
-// lives on the pane's own strip, and Shell hides `.pane > .nav` under 700px, so
-// the override had no control left to undo it. Folding now hands the pane back
-// to the app language, which is the one a phone can actually reach (Settings).
-//
-// FAILS against the bug it describes: before `#collapseToPhone`, the media-query
-// listener only assigned `s.narrow`, so both assertions below held their
-// pre-fold values. `lang` is planted directly rather than through
-// `setPaneLang`, deliberately — that call downloads an 8 MB German corpus, and
-// what is under test is the shell's response to the fold, not the download.
+// Fails against that bug: before `#collapseToPhone` the media-query listener only
+// assigned `s.narrow`, so both assertions below held their pre-fold values. `lang` is
+// planted directly rather than through `setPaneLang` because that call downloads an
+// 8 MB German corpus, and the fold response is what is under test, not the download.
 test("folding a running app collapses to one pane and hands back its language", async ({ page }) => {
   await boot(page, FOLD_OPEN);
   await page.locator('.pane button[title="Split pane"]').first().click();

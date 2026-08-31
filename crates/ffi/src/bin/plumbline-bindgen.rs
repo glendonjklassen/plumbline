@@ -1,15 +1,11 @@
-//! Regenerate the committed C header from the `plumbline-ffi` C ABI.
+//! Regenerate the committed C header (`include/plumbline.h`, the ABI reference)
+//! from the `plumbline-ffi` C ABI:
 //!
 //! ```sh
 //! cargo run -p plumbline-ffi --features bindgen --bin plumbline-bindgen
 //! ```
 //!
-//! Emits `include/plumbline.h` relative to the crate root — the ABI's
-//! reference. The web shell's TS binding drives the same surface compiled to
-//! wasm.
-//!
-//! A developer tool, kept out of the cdylib so a plain build never pulls
-//! host-only generators.
+//! Feature-gated so a plain build never pulls host-only generators.
 
 use std::path::Path;
 
@@ -36,9 +32,8 @@ fn generate_c_header(crate_dir: &str) {
         ),
         usize_is_size_t: true,
         export: cbindgen::ExportConfig {
-            // `src/wasm.rs` is wasm32-only (the web shell's TS binding);
-            // cbindgen doesn't evaluate `cfg`, so its items are excluded by
-            // name — extend this list when that module gains an export.
+            // `src/wasm.rs` is wasm32-only; cbindgen doesn't evaluate `cfg`, so its items are
+            // excluded by name — extend this list when that module gains an export.
             exclude: [
                 "plumbline_js_measure",
                 "plumbline_web_alloc",

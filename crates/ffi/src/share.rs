@@ -1,11 +1,8 @@
 //! The share link's C ABI — one call for the link, the church and the two
 //! strings a Church button needs.
 //!
-//! Engine-independent: building a link touches no corpus and no home, and a
-//! share surface is often up before anything else is. In its own file rather
-//! than `lib.rs` for the same reason `reading_map.rs` is: that file is already
-//! past the repo's no-3k-line rule, and cbindgen walks the whole crate, so the
-//! generated header does not care where an export lives.
+//! Engine-independent: building a link touches no corpus and no home, so a
+//! share surface can be up before anything else is.
 
 use std::ffi::c_char;
 use std::ptr;
@@ -19,9 +16,8 @@ use crate::{guard, opt_str, out_json, wire};
 ///
 /// Answers `{url, base, church, hasChurch, title, siteUrl}`: the link for the QR
 /// and the share sheet, the church as the core normalized it, and the label /
-/// site a Church button needs. One call rather than six shell-side helpers —
-/// the web and Kotlin copies of those had already drifted on the query encoding
-/// and on whether the church was cleaned before it went into a URL.
+/// site a Church button needs. Query encoding and church cleaning live here, not
+/// in each shell.
 ///
 /// Null only when `request` is null or not JSON.
 ///

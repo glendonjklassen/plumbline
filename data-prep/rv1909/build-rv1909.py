@@ -8,31 +8,17 @@ eBible.org USFX rendering of the Reina-Valera 1909. Public domain — the 1909
 revision is long out of copyright, and it is the last Reina-Valera that is: the
 1960 most Spanish readers own is held by the Bible societies and cannot ship.
 
-WHY THIS SOURCE, and it is the same reason the Luther build gives:
+The source sits at KJV verse addresses already (Reina-Valera follows the KJV's
+chapter and verse breaks, so Spanish needs no `numbering` row in
+`crates/core/src/i18n.rs`, and `check-rv1909.py` proves it), it is Strong's-
+tagged inline in the same file as the text, and it marks translator-supplied
+words with `<add>` — the KJV's italics, so FLAG_ADDED means the same thing in
+both.
 
-  - IT SITS AT KJV VERSE ADDRESSES ALREADY. All 66 books in canon order, 1,189
-    chapters, 31,102 verses, every per-book chapter and verse count identical to
-    `data/kjv.jsonl`. Reina-Valera follows the KJV's chapter and verse breaks
-    throughout, so unlike German there is not even a printed-numbering
-    difference to annotate — `crates/core/src/i18n.rs` gives Spanish no
-    `numbering` row and `check-rv1909.py` proves it is entitled to none.
-  - IT IS ALREADY STRONG'S-TAGGED, inline, in the same file as the text
-    (`<w s="H7225">EN el principio</w>`). German needed a second edition and an
-    alignment pass (`data-prep/luther/merge-strongs.py`) because its text and
-    its tags came from different publishers. Here they arrive together, so the
-    tags are the source's own claim about its own words and nothing is guessed.
-  - IT MARKS TRANSLATOR-SUPPLIED WORDS with `<add>`, which is exactly what the
-    KJV's italics are. Those become `FLAG_ADDED`, so the reader's "italicize
-    inserted words" setting means the same thing in Spanish as in English.
-
-The output is `kjv.jsonl`'s frozen shape (CLAUDE.md §Data formats): a header
-line, then one verse per line with positional tokens
-`[pre, word, post, [strongs], flags]`.
-
-Of the flag bits, ADDED (1) and DIVINE NAME (2) are set. Not TITLE (4): this
-edition carries no superscription markup. Not PARAGRAPH (8) either — the
-source's `<p>` elements are roughly one per chapter rather than real paragraph
-divisions, and a pilcrow at every chapter opening would be an invention.
+The output is `kjv.jsonl`'s frozen shape (CLAUDE.md §Data formats). Of the flag
+bits, ADDED (1) and DIVINE NAME (2) are set. Not TITLE (4): this edition carries
+no superscription markup. Not PARAGRAPH (8) either — the source's `<p>` elements
+are roughly one per chapter, not real paragraph divisions.
 """
 
 import json
@@ -52,35 +38,20 @@ STRONGS = ROOT / "data" / "strongs.json"
 FLAG_ADDED = 1
 FLAG_DIVINE = 2
 
-# Reina-Valera renders the Tetragrammaton as "Jehová" where the KJV sets LORD,
-# so the same bit carries the same meaning in both texts and a shell painting
-# the divine name never has to know which Bible it is looking at.
-#
-# The bare word only. "Jehová-jireh" and its kin are place names the KJV does
-# not flag either, and flagging them would style an altar's name as the name of
-# God.
+# Reina-Valera sets "Jehová" where the KJV sets LORD, so FLAG_DIVINE means the
+# same thing in both. The bare word only: "Jehová-jireh" and its kin are place
+# names, which the KJV does not flag either.
 DIVINE = {"Jehová", "JEHOVÁ"}
 
-# THE HEAD OF A TAGGED PHRASE, and why only it carries the code.
+# Only the HEAD of a tagged phrase carries the code. This source tags SPANS
+# (`<w s="H8064">los cielos</w>` covers article and noun); `kjv.jsonl` tags the
+# word alone, and matching that convention is what keeps two things right:
+# `build-strongs.py` derives a code's renderings from the words standing under
+# it (span-tagging puts articles in the dictionary), and `occurrence_count`
+# counts tagged tokens (span-tagging reports three occurrences to the KJV's one).
 #
-# This source tags SPANS, not words: `<w s="H8064">los cielos</w>` puts one code
-# on an article and a noun. `data/kjv.jsonl` does the opposite — "In the
-# beginning" tags `beginning` alone and leaves `In` and `the` bare — and that
-# convention is the one worth matching, for two reasons that are not about
-# tidiness:
-#
-#   - THE RENDERING LISTS. `build-strongs.py` derives each code's Spanish
-#     renderings by counting the words that stand under it, so tagging every
-#     word in the span put articles in the dictionary: H430 read
-#     "Dios, de, tu" and G26 read "amor, caridad, la".
-#   - THE CONCORDANCE. `occurrence_count` counts tagged tokens, so a phrase-
-#     tagged corpus would report three occurrences where the KJV reports one,
-#     and the same word study would give different numbers in two languages.
-#
-# The head is the last word of the span that is not a function word — Spanish
-# puts it there ("de los cielos" → cielos, "estaban sobre" → sobre, "era buena"
-# → buena) — falling back to the last word when the span is function words
-# alone, which is what a span like "que" or "de" is.
+# The head is the last non-function word of the span — Spanish puts it there —
+# falling back to the last word when the span is function words alone.
 FUNCTION = {
     "el", "la", "los", "las", "lo", "un", "una", "unos", "unas",
     "de", "del", "a", "á", "al", "en", "y", "e", "o", "u", "que",
@@ -157,9 +128,8 @@ def attributed(chunk: str, known: set[str], dropped: dict[str, int]) -> list[tup
     def emit(text: str, codes: tuple, flags: int) -> None:
         for ch in text:
             if ch.isspace():
-                # Collapse runs of whitespace as they are appended, so the
-                # indices stay honest — a normalizing pass afterwards would
-                # break the attribution alongside it.
+                # Collapse whitespace as it is appended: a normalizing pass
+                # afterwards would break the attribution indices.
                 if out and out[-1][0] == " ":
                     continue
                 out.append((" ", (), 0))

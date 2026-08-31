@@ -1,27 +1,20 @@
 name: Release
 
 # Tag a version (v0.2.0) and this creates a GitHub Release (the changelog) and
-# deploys the PWA (apps/web) to GitHub Pages — the path for everyone (hosting
-# decided 2026-07-25). The desktop shells were retired 2026-07-25; the Android
-# shell was removed 2026-08-30.
+# deploys the PWA (apps/web) to GitHub Pages.
 #
-# The version a reader SEES is derived once, in the `version` job below. The
-# tag keeps its `v` (it is a git name); About does not. This used to be
-# computed per job, and consumers disagreed — the web said "v1.0.0" while the
-# APK said "1.0.0" for the same release.
+# The version a reader SEES is derived once, in the `version` job below. The tag
+# keeps its `v` (it is a git name); About does not. Computed per job, consumers
+# disagreed about the same release.
 
 on:
   push:
     tags: ["v*"]
-  # A manual run is a DRY RUN, and only a dry run. It does everything a tag
-  # does — the version gate, the data pack contract, the type check, the wasm
-  # engine, the Pages bundle — and publishes NOTHING: no release is created
-  # or touched, nothing reaches
-  # plumblinebible.org. Every publishing step carries the same guard,
-  # `github.event_name != 'workflow_dispatch'`. There are no inputs on purpose;
-  # a manual run cannot be pointed at a version, so it cannot be talked into
-  # overwriting one. Exercising this workflow should not cost a tag you then
-  # have to delete.
+  # A manual run is a DRY RUN: it does everything a tag does — the version gate,
+  # the data pack contract, the type check, the wasm engine, the Pages bundle —
+  # and publishes nothing. Every publishing step carries the same guard,
+  # `github.event_name != 'workflow_dispatch'`. No inputs on purpose, so a manual
+  # run cannot be pointed at a version and talked into overwriting one.
   workflow_dispatch:
 
 permissions:

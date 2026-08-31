@@ -1,32 +1,29 @@
-// Boot under a hostile network — the class of bug that shipped in v0.12.x:
-// a reload that sat forever on "preparing your study tools…" because the
-// service worker's network-first fetch had no timeout, on a device that
-// already held every byte it needed.
+// Boot under a hostile network: a reload that sat forever on "preparing your study
+// tools…" because the service worker's network-first fetch had no timeout, on a
+// device that already held every byte it needed.
 //
-// These tests do NOT use page.route(): Playwright's interception bypasses
-// service workers entirely, so a route-based "stall" tests nothing at all
-// (the first attempt at this repro passed while the bug was live). Instead a
-// proxy origin forwards to the preview server and can hold a request open
-// forever — a real stalled socket, below the browser.
+// These tests do NOT use page.route(): Playwright's interception bypasses service
+// workers entirely, so a route-based "stall" tests nothing at all — the first
+// attempt at this repro passed while the bug was live. A proxy origin forwards to
+// the preview server and can hold a request open forever: a real stalled socket,
+// below the browser.
 
 import { expect, test, type Page } from "@playwright/test";
 import http from "node:http";
 import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 
-// 127.0.0.1 BY NUMBER, both here and in `npm run preview`'s --host: this
-// origin is Node dialling Node, and inside a container the two runtimes can
-// resolve `localhost` to different address families — vite bound to one,
-// http.request trying the other, and every proxied request answered with
-// res.destroy() (net::ERR_EMPTY_RESPONSE). The browser is unaffected either
-// way (its own happy-eyeballs falls back); only this Node-to-Node hop needs
-// the family pinned.
+// 127.0.0.1 BY NUMBER, here and in `npm run preview`'s --host: this origin is Node
+// dialling Node, and in a container the two runtimes can resolve `localhost` to
+// different address families — vite bound to one, http.request trying the other,
+// every proxied request answered with res.destroy(). Only this Node-to-Node hop
+// needs the family pinned; the browser's own happy-eyeballs falls back.
 const UPSTREAM = "http://127.0.0.1:4173";
 
-/** A forwarding origin whose `stall` predicate holds matching requests open
- *  (no response, no error) for as long as the test needs.
+/** A forwarding origin whose `stall` predicate holds matching requests open (no
+ *  response, no error) for as long as the test needs.
  *
- *  `close()` also KILLS the origin mid-test — the port stops listening and every
+ *  `close()` also kills the origin mid-test — the port stops listening and every
  *  socket is dropped, so the next request is refused rather than answered. That is
  *  the only "offline" WebKit can be tested with (see the offline test below). */
 function stallableOrigin(): Promise<{
@@ -61,10 +58,9 @@ function stallableOrigin(): Promise<{
         close: () =>
           new Promise((done) => {
             for (const r of held) r.destroy();
-            // closeAllConnections BEFORE close's callback is waited on: the
-            // browser holds keep-alive sockets to this origin, and server.close()
-            // resolves only once every connection has ended — so without this the
-            // await simply never returns and the test's own cleanup is the hang.
+            // closeAllConnections before close's callback is waited on: the browser
+            // holds keep-alive sockets here, and server.close() resolves only once
+            // every connection has ended — without this the await never returns.
             server.closeAllConnections();
             server.close(() => done());
           }),
@@ -76,25 +72,19 @@ function stallableOrigin(): Promise<{
 /** Reload and return how long it took to get text on screen. */
 async function timedReload(page: Page): Promise<number> {
   const t0 = Date.now();
-  // An explicit navigation timeout. Every test in this file gets 240 s
-  // (test.setTimeout below), so a navigation that never resolves spends the whole
-  // budget and is then reported as the TEST timing out, which names nothing. That
-  // is exactly how the held-back first-run fix presented (TODO D-08, 2026-07-29):
-  // this file went from 27 s and 3/3 to 4.3 min with one test hung out to the
-  // timeout, and no line in the log pointed at a reload. 45 s matches the canvas
-  // budget below, so a navigation that cannot land fails as itself.
+  // An explicit navigation timeout. Tests here get 240 s, so a navigation that
+  // never resolves spends the whole budget and is then reported as the TEST timing
+  // out, which names nothing. 45 s matches the canvas budget below, so a navigation
+  // that cannot land fails as itself.
   await page.reload({ timeout: 45_000 });
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 45_000 });
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/);
   return Date.now() - t0;
 }
 
-/** First visit through the given origin, first-run dismissed, reader up.
- *
- *  The analysis tiers are ticked on the way through: they became opt-in
- *  2026-07-28, and the pack-update tests below are about a device that HAS the
- *  analysis pack — without this they would be asserting over a pack the app
- *  correctly never downloaded. */
+/** First visit through the given origin, first-run dismissed, reader up. The
+ *  analysis tiers are ticked on the way through: the pack-update tests below are
+ *  about a device that HAS the analysis pack, and it is opt-in. */
 async function firstVisit(page: Page, url: string): Promise<void> {
   await page.goto(url);
   const established = page.getByRole("button", { name: "Established believer" });
@@ -110,18 +100,10 @@ async function firstVisit(page: Page, url: string): Promise<void> {
   await page.waitForTimeout(1_500);
 }
 
-/// Wait until the device actually HOLDS every file its pin names.
-///
-/// `settleBackground` waits for the work the boot trace narrates; this waits for
-/// the depot to match the claim. They are not the same barrier, and the gap
-/// between them is where a test reads "prune deleted a pinned file" for a file
-/// that had simply not arrived yet.
-///
-/// It grew a second occupant when every language's Bible started shipping: the
-/// other corpora are ~9 MB fetched after the reader is served, and any test that
-/// treats the pin as a description of the disk has to wait for them. Expressed
-/// against the PIN rather than against filenames, so the next language is
-/// covered by having been added.
+/// Wait until the device actually holds every file its pin names. A test that
+/// treats the pin as a description of the disk has to wait for the other languages'
+/// ~9 MB of corpora, which arrive after the reader is served. Expressed against the
+/// pin rather than filenames, so the next language is covered by having been added.
 async function settleDepot(page: Page): Promise<void> {
   await expect
     .poll(
@@ -150,29 +132,26 @@ test("a stalled network cannot hang the boot (service-worker timebox)", async ({
   try {
     await firstVisit(page, origin.url);
 
-    // The radio dozes / the network hands over mid-reconnect: the request is
-    // accepted and then simply never answered. Everything needed is cached.
+    // The radio dozes: the request is accepted and then never answered, with
+    // everything needed already cached. Stalls `fonts.css`, NOT the pack manifest —
+    // the manifest is no longer in the service worker's path (the depot owns /pack/)
+    // nor on the boot path (the pin replaced it), so stalling it would prove nothing
+    // while the timebox rotted. fonts.css is the remaining render-blocking
+    // unversioned file and stalls exactly the same way.
     //
-    // Stalls `fonts.css`, NOT the pack manifest. The manifest was the original
-    // repro, but it is no longer in the service worker's path (the depot owns
-    // /pack/) and no longer on the boot path at all (the pin replaced it) — so
-    // stalling it would prove nothing and this test would pass while the timebox
-    // rotted. fonts.css is the remaining render-blocking unversioned file, and it
-    // stalls exactly the same way.
-    // MEASURE THIS MACHINE FIRST. The budget below is derived from an unstalled
-    // reload rather than being a constant: a fixed millisecond ceiling passed
-    // here for weeks and then failed inside a loaded full run, which is exactly
-    // the trap CLAUDE.md records. Under load the baseline and the stalled boot
-    // inflate together, so the DIFFERENCE between them is the stable quantity —
-    // and the difference is what the timebox governs.
+    // Measure this machine first: the budget below is derived from an unstalled
+    // reload, not a constant. Under load the baseline and the stalled boot inflate
+    // together, so their DIFFERENCE is the stable quantity — and the difference is
+    // what the timebox governs. A fixed ceiling passed for weeks, then failed inside
+    // a loaded full run.
     const baseline = await timedReload(page);
 
     origin.stall("fonts.css");
     const stalled = await timedReload(page);
 
-    // The stall may cost the 3.5 s timebox, and generous slack on top for the
-    // extra paint. What it must NOT cost is forever — which is the bug, and which
-    // the reload above would have failed on outright by never showing the canvas.
+    // The stall may cost the timebox plus generous slack for the extra paint. What
+    // it must not cost is forever — the bug, on which the reload above would already
+    // have failed by never showing the canvas.
     const TIMEBOX = 3500;
     expect(
       stalled - baseline,
@@ -198,37 +177,31 @@ test("a stalled navigation still reaches the reader (app shell from cache)", asy
 });
 
 test("boots offline after ONE visit — the whole promise of the thing", async ({ page }) => {
-  // A first visit must leave the device self-sufficient: someone opens a shared
-  // link once, then reads on a plane. The service worker cannot manage this alone
-  // (it isn't controlling the page while the shell loads, and it claims the engine
-  // worker mid-boot — a race the pack used to lose), so the page and the worker
-  // stash their own downloads.
+  // A first visit must leave the device self-sufficient: someone opens a shared link
+  // once, then reads on a plane. The service worker cannot manage this alone — it is
+  // not controlling the page while the shell loads and it claims the engine worker
+  // mid-boot — so the page and the worker stash their own downloads.
   //
-  // OFFLINE HERE IS A DEAD ORIGIN, not context.setOffline(true), and that is not
-  // a stylistic preference. Playwright's offline emulation makes WebKit stop
-  // consulting the service worker at all: the reload dies with "WebKit
-  // encountered an internal error" and a page fetch throws TypeError. It was
-  // proven to be the harness and not us — a minimal cache-first service worker on
-  // a throwaway origin fails identically there, while chromium serves it from
-  // cache — so this test simply could not run on the one engine where the Cache
-  // API, eviction and the storage budget actually differ, and on iOS is the only
-  // engine there is. A closed port is what a plane does anyway: it sits below the
-  // browser where no emulation can intervene, and the same WebKit device booted
-  // to John 3 in 222 ms through one.
+  // Offline here is a DEAD ORIGIN, not context.setOffline(true). Playwright's
+  // offline emulation makes WebKit stop consulting the service worker at all (a
+  // minimal cache-first worker on a throwaway origin fails there identically, while
+  // chromium serves it from cache), so this could not run on the one engine where
+  // the Cache API, eviction and the storage budget actually differ — and on iOS is
+  // the only engine there is. A closed port sits below the browser where no
+  // emulation can intervene, which is what a plane is.
   const origin = await stallableOrigin();
   let dead = false;
   try {
     await firstVisit(page, origin.url);
-    // The document can only come out of storage if the worker is CONTROLLING: on
-    // a first visit it claims clients somewhere mid-boot, and a reload started
-    // before that reaches the network with nothing in its path to answer for it.
+    // The document can only come out of storage if the worker is controlling: it
+    // claims clients somewhere mid-boot, and a reload started before that reaches
+    // the network with nothing in its path to answer for it.
     await expect
       .poll(async () => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 30_000 })
       .toBe(true);
-    // And the shell has to be COMPLETE before the network goes away. The precache
-    // runs at the first idle after boot; polling it beats the 1.5 s sleep in
-    // firstVisit, because a reload missing one lazily-imported bundle white-screens
-    // for a reason that has nothing to do with what this test is about.
+    // And the shell has to be complete before the network goes away. Polling beats
+    // firstVisit's 1.5 s sleep: a reload missing one lazily-imported bundle
+    // white-screens for a reason that has nothing to do with this test.
     await expect
       .poll(
         async () =>
@@ -254,10 +227,9 @@ test("boots offline after ONE visit — the whole promise of the thing", async (
 });
 
 /** A forwarding origin that rewrites `pack/manifest.json` on the way past —
- *  `mutate` receives the parsed manifest and returns the one to serve. Everything
+ *  `mutate` receives the parsed manifest and returns the one to serve; everything
  *  else is proxied verbatim. This is how a "new deploy" is simulated without a
- *  second server: page.route() would bypass the service worker AND cannot see
- *  requests the engine worker makes at all. */
+ *  second server: page.route() would bypass the service worker. */
 function rewritingOrigin(): Promise<{
   url: string;
   mutate: (f: ((m: any) => any) | null) => void;
@@ -266,19 +238,14 @@ function rewritingOrigin(): Promise<{
   let mutate: ((m: any) => any) | null = null;
   const server = http.createServer((req, res) => {
     const isManifest = req.url?.startsWith("/pack/manifest.json");
-    // Identity encoding when we intend to REWRITE the body: vite preview
-    // compresses JSON, and parsing gzip bytes as text fails silently — the
-    // rewrite is skipped and the test appears to prove the opposite of what it
-    // claims. (It did, for one run.)
     const headers = { ...req.headers, host: "localhost:4173" };
     if (isManifest) {
-      // A body we intend to REWRITE has to arrive as plain, complete text.
-      // Two things prevent that by default, and both made this fake silently
-      // serve the ORIGINAL manifest while the test looked like it was testing
-      // the rewrite:
+      // A body we intend to REWRITE has to arrive as plain, complete text. Two
+      // things prevent that by default, and both made this fake silently serve the
+      // ORIGINAL manifest while the test looked like it was testing the rewrite:
       //   - vite preview gzips JSON, so parsing the bytes as text fails;
-      //   - a reload sends If-None-Match, upstream answers 304 with NO body,
-      //     and the browser then serves its own cached copy.
+      //   - a reload sends If-None-Match, upstream answers 304 with NO body, and
+      //     the browser then serves its own cached copy.
       headers["accept-encoding"] = "identity";
       delete headers["if-none-match"];
       delete headers["if-modified-since"];
@@ -332,9 +299,7 @@ function rewritingOrigin(): Promise<{
   });
 }
 
-// Two full boots plus a background reconcile, so it needs more than the suite
-// default: it passed alone and timed out inside a loaded full run, which is a
-// flake, not a finding.
+// Two full boots plus a background reconcile: more than the suite default.
 test.setTimeout(240_000);
 test("a data update re-pins without re-downloading what did not change", async ({ page }) => {
   // The whole point of per-file content hashes. A release rotates the pack

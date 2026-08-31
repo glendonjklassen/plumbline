@@ -1,45 +1,23 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The two smallest promises an installed PWA makes, and how each one breaks:
+// The two smallest promises an installed PWA makes:
 //
 //   1. A launcher SHORTCUT is a URL (`?open=review`, manifest.webmanifest
-//      `shortcuts`) stored by the OS at install time. The app answers it on a
-//      COLD START in App.svelte via `launchDestination` (src/shell/church.ts) —
-//      and a destination is a screen, which REPLACES the reader (Shell.svelte),
-//      so "it booted" and "it landed where the shortcut points" are different
-//      claims. manifest.spec.ts holds the manifest's URLs to the whitelist;
-//      this file holds the whitelist to the actual boot.
+//      `shortcuts`) stored by the OS at install time, answered on a cold start by
+//      `launchDestination` (src/shell/church.ts). A destination is a screen, which
+//      replaces the reader, so "it booted" and "it landed where the shortcut points"
+//      are different claims. manifest.spec.ts holds the manifest's URLs to the
+//      whitelist; this file holds the whitelist to the actual boot.
+//   2. The icon BADGE is the due-card count (session.refreshAppBadge, the Badging
+//      API). Nothing can push it from a server, so its truth is its three call
+//      sites: boot (idle), resume, and every authoring write (`rpc.onAuthored`).
 //
-//   2. The icon BADGE is the due-card count (session.refreshAppBadge, the
-//      Badging API). It can only move while the app runs — there is no server
-//      to push from — so its truth is the three call sites: boot (idle),
-//      resume, and every authoring write (`rpc.onAuthored`). The test below
-//      exercises the authoring one end to end: a card added through the real
-//      engine must land on the (stubbed) OS API without any shell code being
-//      poked directly.
-//
-// WHY EVERY SHORTCUT TEST BOOTS TWICE. A shortcut exists only on an INSTALLED
-// app, and an install postdates the first run — so the profile that taps one
-// has always finished the welcome. The plain boot() first run mirrors that;
-// the second entry leaves the origin (about:blank) so the `?open=` arrival is
-// a real cold start, not a same-document navigation (routing.spec.ts's note).
-//
-// MUTATION AUDIT (2026-08-08, all three run against the built bundle, each
-// restored before the next):
-//   1. App.svelte — delete the `if (opened === "hymnal") … else if (opened)`
-//      block. → "a Review-due shortcut cold-starts into the drill" and the
-//      hymnal test both red (screen stays "read").
-//   2. shell/church.ts — `launchDestination` returns null for "review". →
-//      manifest.spec.ts "every launcher shortcut names a destination the app
-//      itself routes" red, AND the review test here red — the two failures
-//      that together say "whitelist and manifest agree, and both are wrong".
-//   3. state/session.svelte.ts — delete `this.refreshAppBadge()` from
-//      `rpc.onAuthored`. → "the installed icon's badge is the due-card count"
-//      red at the first poll (the boot-idle call still fires, so the recorded
-//      tail stays "clear" — proof the test isolates the authoring site).
+// Every shortcut test boots twice because a shortcut only exists on an installed
+// app, which postdates the first run. The second entry leaves the origin so the
+// `?open=` arrival is a real cold start, not a same-document navigation.
 
-/** routing.spec.ts's light boot: the analysis tiers are irrelevant here, so the
- *  first-run checkboxes are left alone and no pack is downloaded for them. */
+/** Light boot: the analysis tiers are irrelevant here, so the first-run checkboxes are
+ *  left alone and no pack is downloaded for them. */
 async function boot(page: Page, url = "/"): Promise<void> {
   await page.goto(url);
   const established = page.getByRole("button", { name: "Established believer" });
@@ -68,11 +46,10 @@ test("a Review-due shortcut cold-starts into the drill, and consumes its query",
   await boot(page);
   await reenter(page, "/?open=review");
 
-  // The empty-queue line is the review view's own copy (memorize.nothingDue) —
-  // a fresh profile has no cards, so reaching it proves the VIEW, not just the
-  // screen. The state check underneath pins where the app thinks it is.
-  // Exact, because "Nothing due" is also the short form's whole text and the
-  // body's opening words — substring matching would trip strict mode.
+  // The empty-queue line is the review view's own copy (memorize.nothingDue), so
+  // reaching it on a fresh profile proves the view and not just the screen. Exact,
+  // because "Nothing due" is also the short form's whole text and the body's opening
+  // words, and a substring match would trip strict mode.
   await expect(page.getByText("Nothing due.", { exact: true })).toBeVisible({ timeout: 90_000 });
   expect(await shellState(page)).toEqual({ screen: "memorize", view: "review", search: "" });
 });
@@ -87,9 +64,8 @@ test("a Hymnal shortcut cold-starts into the hymnal", async ({ page }) => {
 
 test("an ?open value the app does not route falls through to the reader", async ({ page }) => {
   await boot(page);
-  // "constellation" is a real surface but NOT a whitelisted destination — the
-  // adversarial neighbour of a valid value, per church.ts's stance that an
-  // unrecognized query is a normal boot, never a blank screen.
+  // "constellation" is a real surface but not a whitelisted destination: church.ts
+  // treats an unrecognized query as a normal boot, never a blank screen.
   await reenter(page, "/?open=constellation");
 
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
@@ -119,8 +95,8 @@ test("the installed icon's badge is the due-card count", async ({ page }) => {
   });
   await boot(page);
 
-  // Boot, no cards: the idle refresh must CLEAR, not skip — a reader who
-  // reviewed their last due card yesterday still carries yesterday's badge.
+  // Boot with no cards must clear, not skip: a reader who reviewed their last due
+  // card yesterday still carries yesterday's badge.
   await expect
     .poll(() => page.evaluate(() => (window as any).__badgeCalls.at(-1) ?? null), {
       message: "boot never touched the badge — the idle call site is gone",

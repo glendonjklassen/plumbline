@@ -1,14 +1,13 @@
 //! The Old↔New Testament concept bridge: links between Hebrew Strong's numbers
 //! (`H…`, OT) and Greek ones (`G…`, NT), which otherwise share no numbering.
-//! Without it, following a theme across the testaments is impossible.
 //!
-//! Ported from overlay `Bridge.hs` — the `etymologyLinks` layer only, which is
-//! **Strong's own 1890 cross-references**: Greek entries whose derivation says
-//! "of Hebrew origin (Hxxxx)". Authoritative but narrow (loanwords, proper
-//! nouns, cultic terms), and — crucially — derived entirely from the Strong's
-//! dictionary already in the repo: no Septuagint, no modern lexicon, no
-//! embeddings. The noisier `renderingCandidates` layer and the fused
-//! multi-source trust model are deferred to the data-pack tier.
+//! Ported from overlay `Bridge.hs`. The base layer is Strong's own 1890
+//! cross-references — Greek entries whose derivation says "of Hebrew origin
+//! (Hxxxx)" — authoritative but narrow, and derived entirely from the Strong's
+//! dictionary already in the repo. External witnesses (LXX alignment,
+//! Abbott-Smith, TIPNR, harvested quotations) fuse in below, weighted by trust
+//! priors fitted offline; a home with none of them degrades to the etymology
+//! layer.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -25,7 +24,7 @@ pub struct BridgeLink {
     pub grk: String,
 }
 
-/// Extract Hebrew Strong's references (`H####`) embedded in free text — e.g. the
+/// Extract Hebrew Strong's references (`H####`) from free text — e.g. the
 /// `(H0031)` in a derivation — normalised to the zero-stripped dictionary style
 /// (`H31`). Case-insensitive on the leading `H`.
 pub fn heb_refs_in(text: &str) -> Vec<String> {
@@ -119,8 +118,8 @@ fn push_unique(v: &mut Vec<String>, s: &str) {
 // ── external source links + trust (the fused bridge) ───────────────────────────
 
 /// A Hebrew↔Greek link asserted by an external witness (LXX alignment,
-/// Abbott-Smith, STEPBible TIPNR, harvested quotations). Corroborating
-/// evidence, never ground truth.
+/// Abbott-Smith, STEPBible TIPNR, harvested quotations): corroborating evidence,
+/// never ground truth.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceLink {
     pub heb: String,
@@ -142,10 +141,9 @@ struct BridgeSourcesWire {
 }
 
 /// Load every external bridge-source link under a home: the committed
-/// `bridge/*.json` (redistributable: LXX, Abbott-Smith, TIPNR), plus the
-/// optional hydrated `data/bridge-sources.json` and `data/quotation-pairs.json`.
-/// Missing/unreadable files are skipped, so the fused bridge degrades to the
-/// in-repo etymology layer when nothing external is present.
+/// `bridge/*.json` (LXX, Abbott-Smith, TIPNR), plus the optional hydrated
+/// `data/bridge-sources.json` and `data/quotation-pairs.json`.
+/// Missing/unreadable files are skipped.
 pub fn load_sources(home: impl AsRef<Path>) -> Vec<SourceLink> {
     let home = home.as_ref();
     let mut files: Vec<std::path::PathBuf> = Vec::new();
@@ -201,18 +199,15 @@ pub fn load_priors(home: impl AsRef<Path>) -> Priors {
     }
 }
 
-/// The authority tier of a piece of evidence — where it comes from, so the
-/// reader always knows the provenance of what they are looking at. Ported from
-/// overlay `Bridge.hs` `Tier`.
+/// The authority tier of a piece of evidence, so the reader knows the provenance
+/// of what they are looking at. Ported from overlay `Bridge.hs` `Tier`.
 ///
 /// - [`Tier::God`] — the text itself: TR/Masoretic words, and
-///   scripture-quotes-scripture, which is "the words read twice" and so
-///   inherits the text's own authority.
+///   scripture-quotes-scripture, which inherits the text's own authority.
 /// - [`Tier::Human`] — curated scholarship: lexicons, the 1769 translators'
 ///   renderings, TSK.
-/// - [`Tier::Machine`] — learned/aligned artifacts (the LXX alignment, concept
-///   embeddings, the R&D layer). Also the default for an unrecognized source,
-///   so nothing over-claims authority it has not earned.
+/// - [`Tier::Machine`] — learned/aligned artifacts, and the default for an
+///   unrecognized source so nothing over-claims.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tier {
     God,
@@ -231,10 +226,10 @@ impl Tier {
     }
 }
 
-/// The tier(s) a witness source attests — a *set*, because one source can carry
+/// The tier(s) a witness source attests — a set, because one source can carry
 /// both a content tier and a method tier (`quotation` is God-tier content found
-/// by a machine method). An unrecognized source defaults to machine-only, so it
-/// never over-claims. Ported from overlay `sourceTiers`.
+/// by a machine method). Unrecognized sources default to machine-only. Ported
+/// from overlay `sourceTiers`.
 pub fn source_tiers(source: &str) -> &'static [Tier] {
     match source {
         "quotation" => &[Tier::God, Tier::Machine],
@@ -250,9 +245,8 @@ pub fn research_grade(source: &str) -> bool {
     matches!(source, "quotation" | "text-witness")
 }
 
-/// A short human label for a witness source, tuned for lay readers (no
-/// Greek/Hebrew assumed). Ported from overlay `sourceLabel`, keeping the app's
-/// own plain wording for the sources it surfaces.
+/// A short human label for a witness source, assuming no Greek or Hebrew. Ported
+/// from overlay `sourceLabel`.
 pub fn source_label(source: &str) -> &str {
     match source {
         "etymology" => "etymology",
@@ -268,8 +262,8 @@ pub fn source_label(source: &str) -> &str {
 }
 
 /// The deduped union of tiers across a set of witness sources, ordered
-/// God → Human → Machine. The additive provenance model: a multi-source item
-/// shows every tier its witnesses attest, never a single "winning" one.
+/// God → Human → Machine. Provenance is additive: a multi-source item shows every
+/// tier its witnesses attest, never a single winning one.
 pub fn tiers_of<S: AsRef<str>>(sources: &[S]) -> Vec<Tier> {
     [Tier::God, Tier::Human, Tier::Machine]
         .into_iter()
@@ -316,9 +310,9 @@ impl FusedBridge {
     }
 
     /// The dictionary-only bridge: the etymology layer with no external
-    /// witnesses and default priors. For engines opened without a home dir —
-    /// no filesystem is probed (a CWD-relative probe would be
-    /// nondeterministic and a mild injection surface).
+    /// witnesses and default priors. For engines opened without a home dir; no
+    /// filesystem is probed, since a CWD-relative probe would be
+    /// nondeterministic and a mild injection surface.
     pub fn etymology_only(dict: &StrongsDict) -> FusedBridge {
         FusedBridge { etymology: Bridge::from_etymology(dict), source_ix: HashMap::new(), priors: Priors::default() }
     }
@@ -343,9 +337,9 @@ impl FusedBridge {
         if let Some(links) = self.source_ix.get(code) {
             let is_greek = code.starts_with('G');
             for l in links {
-                // The partner is the endpoint on the *other* testament.
+                // The partner is the endpoint on the other testament; a
+                // same-language link (which should not occur) is skipped.
                 let partner = if is_greek { &l.heb } else { &l.grk };
-                // Guard against a same-language link (shouldn't occur, but be safe).
                 if partner.starts_with(if is_greek { 'G' } else { 'H' }) {
                     continue;
                 }
@@ -382,12 +376,10 @@ mod tests {
     fn source_tiers_classify_provenance() {
         // God-tier content found by a machine method — carries both.
         assert_eq!(source_tiers("quotation"), &[Tier::God, Tier::Machine]);
-        // Curated scholarship.
         assert_eq!(source_tiers("etymology"), &[Tier::Human]);
         assert_eq!(source_tiers("abbott-smith"), &[Tier::Human]);
         assert_eq!(source_tiers("rendering"), &[Tier::Human]);
         assert_eq!(source_tiers("tsk"), &[Tier::Human]);
-        // Learned/aligned artifacts.
         assert_eq!(source_tiers("lxx"), &[Tier::Machine]);
         assert_eq!(source_tiers("embedding"), &[Tier::Machine]);
         // Unknown → machine-only, so it never over-claims.
@@ -406,10 +398,8 @@ mod tests {
     fn tiers_of_unions_and_orders_god_human_machine() {
         // A quotation alone already spans God + Machine.
         assert_eq!(tiers_of(&["quotation".to_string()]), vec![Tier::God, Tier::Machine]);
-        // Etymology (Human) + LXX (Machine) fused on one partner: both marks,
-        // ordered God→Human→Machine (no God here).
+        // Two sources fused on one partner: both marks, in tier order.
         assert_eq!(tiers_of(&["etymology".to_string(), "lxx".to_string()]), vec![Tier::Human, Tier::Machine]);
-        // All three tiers present, deduped and ordered.
         assert_eq!(
             tiers_of(&["quotation".to_string(), "etymology".to_string()]),
             vec![Tier::God, Tier::Human, Tier::Machine]

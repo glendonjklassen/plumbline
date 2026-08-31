@@ -1,12 +1,11 @@
-// The web shell's engine binding — the TS sibling of StudyEngine.kt (Kotlin)
-// and Plumbline.cs (C#), method-for-method over the same C ABI and camelCase
-// wire JSON. Returned JSON is parsed; authoring calls follow the shared
-// choreography (write → engine reloads from its home → shell re-fetches) and
+// The shell's engine binding: one method per endpoint of the core's flat C ABI,
+// over camelCase wire JSON. Returned JSON is parsed; authoring calls follow the
+// choreography write → engine reloads from its home → shell re-fetches, and
 // additionally mirror the virtual home to IndexedDB.
 
 import type { WasmEngine } from "./engine";
 
-/** Layout config in logical px — the shell passes the same shape GTK/WinUI do. */
+/** Layout config in logical px. */
 export interface LayoutCfg {
   width: number;
   lineHeight: number;
@@ -27,31 +26,19 @@ export function nowStamp(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-/**
- * TODAY, as the day-keyed reads spell it (`readingBooks`, `readingChapters`,
- * `memoryDue`) — midday UTC, so the stamp names one calendar day rather than
- * flipping across a timezone at midnight.
- *
- * ONE definition, because it is a CACHE KEY. It was written out longhand in
- * three places, two of them deriving "now" differently; a warm that computed
- * the key even slightly differently from the screen it was warming would miss
- * every time and look like it was simply slow.
- */
+/** TODAY, as the day-keyed reads spell it (`readingBooks`, `readingChapters`,
+ *  `memoryDue`) — midday UTC, so the stamp names one calendar day rather than
+ *  flipping across a timezone at midnight. One definition, because it is a CACHE
+ *  KEY: a warm that derived it differently would miss every time. */
 export function dayStamp(): string {
   return nowStamp().slice(0, 10) + "T12:00:00Z";
 }
 
-/**
- * TODAY IN THE READER'S OWN TIMEZONE, as `YYYY-MM-DD`.
- *
- * Deliberately NOT `dayStamp()`, and the difference is the whole of the
- * devotional's pacing rule: `dayStamp` is midday UTC, which is the right key
- * for a cache but the wrong answer for "has a day passed?". A reader at UTC-7
- * who presses Done at 6pm is already on the next UTC date, and a UTC comparison
- * would hand them tomorrow's entry immediately; a reader at UTC+13 would be
- * held back a day. The seating-slot restore computes the local date the same
- * way, for the same reason (session.svelte.ts).
- */
+/** TODAY IN THE READER'S OWN TIMEZONE, as `YYYY-MM-DD` — deliberately not
+ *  `dayStamp()`, which is midday UTC: the right key for a cache, the wrong answer
+ *  for "has a day passed?". A reader at UTC-7 pressing Done at 6pm is already on
+ *  the next UTC date and would be handed tomorrow's entry; one at UTC+13 would be
+ *  held back a day. session.svelte.ts computes the local date the same way. */
 export function localDay(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -94,11 +81,10 @@ export class StudyEngine {
   #engine: number;
   /** Invoked after any authoring write; boot wires this to home persistence. */
   onAuthored: () => void = () => {};
-  /** A reading-map write landed. Deliberately NOT `onAuthored`: dwell is
-   *  reported on a timer while somebody reads, and `onAuthored` runs a full
-   *  user-subtree diff into IndexedDB — fine for a note, wasteful every 30
-   *  seconds on the one thread that also answers taps. The worker binds this to
-   *  `home.persistUserDir("reading")` instead. */
+  /** A reading-map write landed. NOT `onAuthored`: dwell is reported on a timer,
+   *  and `onAuthored` runs a full user-subtree diff into IndexedDB — fine for a
+   *  note, wasteful every 30 seconds on the one thread that also answers taps. The
+   *  worker binds this to `home.persistUserDir("reading")`. */
   onReadingWrite: () => void = () => {};
 
   private constructor(w: WasmEngine, engine: number) {
@@ -116,14 +102,10 @@ export class StudyEngine {
     return new StudyEngine(w, engine);
   }
 
-  /**
-   * A SECOND engine on a named language's text, from the same home — what a
-   * pane reading German beside an English one runs on.
-   *
-   * It shares the reader's data because every text sits at the KJV's verse
-   * addresses (docs/PER-PANE-LANGUAGE.md). It does NOT fall back to English:
-   * a missing text throws, and the caller offers the download.
-   */
+  /** A second engine on a named language's text, from the same home — what a pane
+   *  reading German beside an English one runs on. It shares the reader's data,
+   *  every text sitting at the KJV's verse addresses. No fallback to English: a
+   *  missing text throws, and the caller offers the download. */
   static openLang(w: WasmEngine, home: string, lang: string): StudyEngine {
     const homePtr = w.inStr(home);
     const langPtr = w.inStr(lang);
@@ -209,10 +191,10 @@ export class StudyEngine {
     return s === null ? null : JSON.parse(s);
   }
 
-  /** `PlumblineLayoutConfig` is hand-marshalled here at fixed offsets: six f32
-   *  then two u32 flags, 32 bytes. It MUST match the #[repr(C)] struct in
-   *  crates/ffi/src/lib.rs field for field — a field added there and not here
-   *  hands the engine whatever was in that word of the heap. */
+  /** `PlumblineLayoutConfig` is hand-marshalled at fixed offsets: six f32 then two
+   *  u32 flags, 32 bytes. It MUST match the #[repr(C)] struct in crates/ffi/src/lib.rs
+   *  field for field — a field added there and not here hands the engine whatever
+   *  was in that word of the heap. */
   layoutChapter(book: string, chapter: number, cfg: LayoutCfg): DisplayList | null {
     const CFG_BYTES = 32;
     const cfgPtr = (this.#w.exports.plumbline_web_alloc as Function)(CFG_BYTES) as number;
@@ -287,11 +269,9 @@ export class StudyEngine {
   hymnal(): any {
     return this.#json("plumbline_engine_hymnal_json");
   }
-  /** One hymn, chords transposed `semis` semitones and split into paintable
-   *  parts. Null for an unknown id.
-   *
-   *  Hand-marshalled rather than through `#json`, which turns every argument
-   *  into a string pointer — `semis` is an i32 and has to cross as one. */
+  /** One hymn, chords transposed `semis` semitones and split into paintable parts.
+   *  Null for an unknown id. Hand-marshalled rather than through `#json`, which
+   *  turns every argument into a string pointer — `semis` crosses as an i32. */
   hymn(id: string, semis: number): any {
     const s = this.#call(
       (p) => this.#w.takeStr((this.#w.exports.plumbline_engine_hymn_json as Function)(this.#engine, p, semis) as number),
@@ -307,7 +287,7 @@ export class StudyEngine {
   setAkjvOverlay(on: boolean): void {
     (this.#w.exports.plumbline_engine_set_akjv_overlay as Function)(this.#engine, on ? 1 : 0);
   }
-  /** Whether this home carries a usable overlay (false until stage 2 lands). */
+  /** Whether this home carries a usable overlay — false until stage 2 lands. */
   akjvAvailable(): boolean {
     return !!(this.#w.exports.plumbline_engine_akjv_available as Function)(this.#engine);
   }
@@ -347,23 +327,21 @@ export class StudyEngine {
   warmStep(step: number): boolean {
     return ((this.#w.exports.plumbline_engine_warm_step as Function)(this.#engine, step) as number) === 1;
   }
-  /** Tell the engine we warm in SLICES, so it must never build an index inside
-   *  a reader's request (wasm-only export). Call it right after open — the warm
-   *  itself starts only after stage 2 lands, and a tap in that window would
-   *  otherwise build everything at once and freeze this thread. */
+  /** Tell the engine we warm in SLICES, so it must never build an index inside a
+   *  reader's request (wasm-only export). Call it right after open: the warm starts
+   *  only after stage 2 lands, and a tap in that window would otherwise build
+   *  everything at once and freeze this thread. */
   deferBuilds(on: boolean): void {
     (this.#w.exports.plumbline_engine_defer_builds as Function)(this.#engine, on ? 1 : 0);
   }
-  // NO verseSimSave / verseSimLoad. Nothing the engine builds now is worth
-  // persisting between tabs.
 
   /** Load the R&D artifacts from the home if they arrived after open (the
    *  deferred pack); no-op when already loaded or still missing. */
   loadRndData(): string | null {
     return this.#text("plumbline_engine_load_rnd_data");
   }
-  /** Load ONE machine-tier artifact (wasm-only export): true while more
-   *  remain. Split so a ~17 MB parse can't hold the worker for seconds. */
+  /** Load ONE machine-tier artifact (wasm-only export): true while more remain.
+   *  Split so a ~17 MB parse cannot hold the worker for seconds. */
   loadRndStep(step: number): boolean {
     return ((this.#w.exports.plumbline_engine_load_rnd_step as Function)(this.#engine, step) as number) === 1;
   }
@@ -399,11 +377,10 @@ export class StudyEngine {
     );
     return s === null ? null : JSON.parse(s);
   }
-  /** The word-usage card (word-first study candidate): totals, distribution
-   *  and one page of in-context occurrence lines. Pass either a non-empty
-   *  `word` (following a wusage: link) or `refKey` + `tokenIndex` (a tap);
-   *  a non-empty `code` opens the original-word lens (lusage: links);
-   *  `scope` is a SearchScope token ("all", "ot", "nt", "book:Gen", …). */
+  /** The word-usage card: totals, distribution and one page of in-context
+   *  occurrence lines. Pass either a non-empty `word` (a wusage: link) or
+   *  `refKey` + `tokenIndex` (a tap); a non-empty `code` opens the original-word
+   *  lens (lusage: links); `scope` is a SearchScope token ("all", "book:Gen", …). */
   wordUsageBlocks(
     word: string,
     code: string,
@@ -561,11 +538,11 @@ export class StudyEngine {
   threadSetNotes(name: string, notes: string): string | null {
     return this.#author("plumbline_engine_thread_set_notes", (f, ...p) => f(this.#engine, ...p), [name, notes]);
   }
-  /** Drop entry `index`. The thread survives its last entry — deleting the
-   *  thread itself is `threadRemove`. */
+  /** Drop entry `index`. The thread survives its last entry — deleting the thread
+   *  itself is `threadRemove`. */
   threadEntryRemove(name: string, index: number): string | null {
-    // The index rides in the CLOSURE, not in `args`: `#author` marshals strings
-    // and passes pointers, so a number in that list would cross as one.
+    // The index rides in the CLOSURE, not in `args`: `#author` marshals strings and
+    // passes pointers, so a number in that list would cross as one.
     return this.#author("plumbline_engine_thread_entry_remove", (f, n) => f(this.#engine, n, index), [name]);
   }
   /** Move entry `from` to position `to`; past the end clamps to a no-op. */
@@ -649,14 +626,13 @@ export class StudyEngine {
     return this.#json("plumbline_engine_reading_chapters_json", book, now);
   }
   /** One sample of reading time: `stepSeconds` passed with `book` `chapter` in
-   *  front of somebody, who has scrolled as far as `reached` and touched
-   *  something (`interacted`) or not. A null `book` means nothing is being read
-   *  — a dialog is up, the tab went hidden, the reader left — and banks the tail.
+   *  front of somebody who has scrolled as far as `reached` and touched something
+   *  (`interacted`) or not. A null `book` means nothing is being read — a dialog is
+   *  up, the tab went hidden, the reader left — and banks the tail.
    *
-   *  The counters and the thresholds live in the core (`reading::DwellTracker`),
-   *  so a shell holds only its clock. Answers null on almost every call, and the
-   *  same `{book,chapter,pct,completed,lastRead?}` `readingRecord` gives when it
-   *  banked a report. */
+   *  Counters and thresholds live in the core (`reading::DwellTracker`), so a shell
+   *  holds only its clock. Answers null on almost every call, else the same
+   *  `{book,chapter,pct,completed,lastRead?}` `readingRecord` gives. */
   readingTick(
     book: string | null,
     chapter: number,
@@ -706,16 +682,14 @@ export class StudyEngine {
   }
 
   // ── reading plans + the concept study ──────────────────────────────────────────
-  /** `{running:[…], builtins:[…]}` — the reader's plans with derived state,
-   *  and the catalogue the picker offers.
+  /** `{running:[…], builtins:[…]}` — the reader's plans with derived state, and the
+   *  catalogue the picker offers.
    *
-   *  `now` dates each schedule's `doneToday` (did a full plan-day finish
-   *  today?). Every shell call site passes `""` — it is the read-through
-   *  cache's KEY, and a key that carried the clock would mint a fresh entry
-   *  per call — so the empty stamp means "now", stamped here where the clock
-   *  is. The cache cannot go stale across midnight in a way that matters: it
-   *  is invalidated by every dwell report, so the moment reading resumes the
-   *  flag re-dates. */
+   *  `now` dates each schedule's `doneToday`. Call sites pass `""`, meaning "now,
+   *  stamped here": it is the read-through cache's KEY, and a key carrying the clock
+   *  would mint a fresh entry per call. Staleness across midnight does not matter —
+   *  every dwell report invalidates the cache, so the flag re-dates as reading
+   *  resumes. */
   plans(now: string): any {
     return this.#json("plumbline_engine_plans_json", now || new Date().toISOString());
   }
@@ -751,24 +725,21 @@ export class StudyEngine {
   }
 
   // ── devotionals ───────────────────────────────────────────────────────────
-  /** `{running:[…], catalogue:[…]}` — the reader's booklets with their open
-   *  day, and the catalogue every picker offers.
+  /** `{running:[…], catalogue:[…]}` — the reader's booklets with their open day,
+   *  and the catalogue every picker offers.
    *
-   *  `lang` picks the text (per-entry fallback to English lives in the core, so
-   *  no caller re-implements it). `today` is the reader's LOCAL day and is the
-   *  cache KEY: unlike `plans`, it is passed explicitly rather than stamped
-   *  here, because it is a calendar answer the shell owns and because a key of
-   *  `""` would never re-ask across midnight — and midnight is exactly when
-   *  this answer changes. */
+   *  `lang` picks the text (per-entry fallback to English lives in the core).
+   *  `today` is the reader's LOCAL day and the cache KEY: passed explicitly rather
+   *  than stamped here, unlike `plans`, because a key of `""` would never re-ask
+   *  across midnight — and midnight is when this answer changes. */
   devotionals(lang: string, today: string): any {
     return this.#json("plumbline_engine_devotionals_json", lang || "en", today || localDay());
   }
   /** One day of a booklet, open or browsed-back-to. Null for a day it has no
    *  entry for. */
   devotionalDay(id: string, day: number, lang: string): any {
-    // `#json` marshals STRINGS; `day` is a plain u32 across the ABI, so it is
-    // closed over rather than passed through the pointer list — the `token()`
-    // shape a few methods up.
+    // `#json` marshals STRINGS; `day` crosses the ABI as a plain u32, so it is
+    // closed over rather than passed through the pointer list (as in `token()`).
     const raw = this.#call(
       (i, l) =>
         this.#w.takeStr(
@@ -822,13 +793,12 @@ export function configSave(w: WasmEngine, config: unknown): string | null {
   return err;
 }
 
-/** The share link this reader hands over, plus the church it carries and the
- *  two strings a Church button needs (`core::church`). Engine-independent.
+/** The share link this reader hands over, plus the church it carries and the two
+ *  strings a Church button needs (`core::church`). Engine-independent.
  *
- *  The web shell's own `shell/church.ts` still builds share links, because they
- *  are read synchronously out of derived state and this crosses a worker. This
- *  binding exists so the ABI's TS sibling stays method-for-method with the
- *  Kotlin one, and so a test can ask the engine what the answer should be. */
+ *  `shell/church.ts` still builds share links itself, because they are read
+ *  synchronously out of derived state and this crosses a worker; this binding
+ *  covers the whole ABI and lets a test ask the engine what the answer should be. */
 export function shareLink(
   w: WasmEngine,
   request: { base?: string; church?: { name: string; info: string; url: string }; startAsNewBeliever?: boolean; at?: string },
@@ -847,11 +817,10 @@ export function readingSpec(w: WasmEngine): any {
   return s === null ? null : JSON.parse(s);
 }
 
-/** Every string the shell paints, in the reader's language, in ONE call.
- *
- *  Both arguments, because the core owns the rule that an empty setting means
- *  "follow the device" — see `i18n::resolve`. The reply's `lang` says which one
- *  won. Engine-independent: the chrome has to exist before an engine does. */
+/** Every string the shell paints, in the reader's language, in ONE call. Both
+ *  arguments, because the core owns the rule that an empty setting means "follow
+ *  the device" (`i18n::resolve`); the reply's `lang` says which won.
+ *  Engine-independent: the chrome has to exist before an engine does. */
 export function i18nCatalog(w: WasmEngine, chosen: string, device: string): any {
   const a = w.inStr(chosen);
   const b = w.inStr(device);
@@ -861,13 +830,11 @@ export function i18nCatalog(w: WasmEngine, chosen: string, device: string): any 
   return s === null ? null : JSON.parse(s);
 }
 
-/** Tell the ENGINE which language to write in, and get back the code it chose.
- *
- *  The catalogue covers what a shell spells; this covers what the core spells —
- *  book names and references, in the TOC, search hits, weave endpoints, note
- *  headers, the reading map. Both, or a German reader gets a German interface
- *  listing a book called Genesis. Engine-independent, and must be called BEFORE
- *  the boot reply builds the TOC. */
+/** Tell the ENGINE which language to write in, and get back the code it chose. The
+ *  catalogue covers what a shell spells; this covers what the core spells — book
+ *  names and references in the TOC, search hits, weave endpoints, note headers, the
+ *  reading map. Both are needed, or a German reader gets a German interface listing
+ *  a book called Genesis. Must be called BEFORE the boot reply builds the TOC. */
 export function i18nSetLanguage(w: WasmEngine, chosen: string, device: string): string {
   const a = w.inStr(chosen);
   const b = w.inStr(device);
@@ -884,10 +851,9 @@ export function themePalette(w: WasmEngine, theme: string): any {
   return s === null ? null : JSON.parse(s);
 }
 
-/** Which SEATING a LOCAL date and hour fall in — the rule lives in the core so
- *  the two shells cannot drift on when a service is. The date must be the
- *  reader's own (a slot computed in UTC would put a Sunday-evening service in
- *  Monday for half the world). */
+/** Which SEATING a LOCAL date and hour fall in. The date must be the reader's own:
+ *  a slot computed in UTC would put a Sunday-evening service in Monday for half the
+ *  world. */
 export function sessionSlot(w: WasmEngine, date: string, hour: number): string {
   const p = w.inStr(date);
   const s = w.takeStr((w.exports.plumbline_session_slot as Function)(p, hour) as number);

@@ -4,22 +4,19 @@
 //! public domain) words a verse differently from the KJV, this says so — as a
 //! DELTA over the KJV's frozen tokens, never as a second text. Each entry is a
 //! run of KJV tokens and the phrase the AKJV puts in their place:
-//! `[startTok, endTok, "you shall"]`.
+//! `[startTok, endTok, "you shall"]`. So `kjv.jsonl` and the frozen
+//! `kjv1769-tok2` stamp stay untouched, words are swapped at layout time, every
+//! Strong's code stays attached to the KJV token that owns it, and "show me the
+//! word this replaced" costs nothing.
 //!
-//! That shape is the whole point. `kjv.jsonl` and the frozen `kjv1769-tok2`
-//! stamp stay untouched; the reader swaps words at layout time; every Strong's
-//! code stays attached to the KJV token that owns it (the overlay never moves a
-//! code); and "show me the word this replaced" costs nothing, because the
-//! original is still sitting in the corpus at that index.
+//! The render rule, which `data-prep/README.md` also states because the producer
+//! has to agree with it: a span `[a,b]` renders as
+//! `pre(a) + replacement + post(b)`. The interior punctuation of `a..b` is
+//! dropped, because the replacement carries whatever the AKJV put between its
+//! own words (KJV "Verily, verily" → AKJV "Truly, truly").
 //!
-//! **The render rule, which `data-prep/README.md` also states because the
-//! producer has to agree with it:** a span `[a,b]` renders as
-//! `pre(a) + replacement + post(b)`. The interior punctuation of the tokens
-//! `a..b` is dropped — the replacement carries whatever punctuation the AKJV
-//! put between its own words (KJV "Verily, verily" → AKJV "Truly, truly").
-//!
-//! The overlay is a READING aid and nothing else. It must never reach a
-//! memory card, a Present hand-off, or copied text: those are the KJV.
+//! A reading aid and nothing else: it must never reach a memory card, a Present
+//! hand-off, or copied text — those are the KJV.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -29,11 +26,10 @@ use serde::Deserialize;
 use crate::corpus::Verse;
 use crate::reference::VRef;
 
-/// Display-only token flag: this word is an AKJV re-rendering. Lives beside the
-/// corpus `FLAG_*` bits in meaning but NEVER in `kjv.jsonl`, whose bitfield is a
-/// frozen contract — the overlay sets it on the display list on the way past, so
-/// a shell can mark the word (a dotted underline) with the same mechanism it
-/// already uses for the KJV's italics.
+/// Display-only token flag: this word is an AKJV re-rendering. Never appears in
+/// `kjv.jsonl`, whose bitfield is a frozen contract — the overlay sets it on the
+/// display list on the way past, so a shell can mark the word with the same
+/// mechanism it uses for the KJV's italics.
 pub const FLAG_RERENDERED: u32 = 16;
 
 /// A run of KJV tokens the AKJV words differently. `text` empty = the AKJV
@@ -83,28 +79,23 @@ impl Akjv {
         self.ix.get(vref).map(Vec::as_slice).unwrap_or(&[])
     }
 
-    /// The run covering `tok`, if the AKJV re-renders it. The reader uses this
-    /// twice: to know a word is marked, and to answer "what did this replace?".
+    /// The run covering `tok`, if the AKJV re-renders it — both "is this word
+    /// marked" and "what did it replace".
     pub fn span_at(&self, vref: &VRef, tok: u16) -> Option<&AkjvSpan> {
         self.spans(vref).iter().find(|s| s.start <= tok && tok <= s.end)
     }
 
     /// This verse as the AKJV words it, or `None` when it re-renders nothing
-    /// (the caller then lays out the corpus verse untouched, allocating
-    /// nothing).
+    /// (the caller then lays out the corpus verse untouched, allocating nothing).
     ///
-    /// **Token indices are preserved.** The run's first token takes the whole
-    /// replacement and the [`FLAG_RERENDERED`] bit; the interior tokens are
-    /// blanked rather than removed, and the layout skips anything that renders
-    /// to nothing. Rebuilding the vector instead would shift every index after
-    /// the first re-rendering, and `token_index` is what carries a tap back to
-    /// the corpus — so every Strong's lookup on the rest of the verse would
-    /// quietly resolve to the wrong word.
+    /// Token indices are preserved: the run's first token takes the whole
+    /// replacement and the [`FLAG_RERENDERED`] bit, and the interior tokens are
+    /// blanked rather than removed (the layout skips anything that renders to
+    /// nothing). Rebuilding the vector would shift every index after the first
+    /// re-rendering, and `token_index` is what carries a tap back to the corpus,
+    /// so every Strong's lookup after it would resolve to the wrong word.
     ///
-    /// The run renders as `pre(a) + replacement + post(b)`: the edges stay with
-    /// the KJV tokens that frame the run, and the interior punctuation goes,
-    /// because the replacement carries whatever the AKJV put between its own
-    /// words.
+    /// The run renders as `pre(a) + replacement + post(b)` — see the module docs.
     pub fn overlay_verse(&self, verse: &Verse) -> Option<Verse> {
         let spans = self.spans(&verse.vref());
         if spans.is_empty() {
@@ -126,8 +117,8 @@ impl Akjv {
                 t.pre.clear();
                 t.word.clear();
                 t.post.clear();
-                // Cleared so a blanked token cannot break a paragraph or read
-                // as an added word on the way through the layout.
+                // So a blanked token cannot break a paragraph or read as an
+                // added word on the way through the layout.
                 t.flags = 0;
             }
         }
@@ -181,11 +172,9 @@ pub fn akjvb_path(path: &Path) -> std::path::PathBuf {
 
 // ── the packed form (`.akjvb`) ────────────────────────────────────────────────
 //
-// Packed from the start, because the morphology sidecar taught the lesson the
-// expensive way: nothing an engine parses survives a browser tab, so a JSONL
-// parse is paid on EVERY launch. The shape here makes it nearly free — 46k
-// spans draw on only ~3k distinct replacement phrases, so interned they are
-// three small integers each.
+// Nothing an engine parses survives a browser tab, so a JSONL parse is paid on
+// every launch. Interning makes that nearly free: 46k spans draw on only ~3k
+// distinct replacement phrases, so a span is three small integers.
 //
 //   0..8    magic "PLAKJV01"
 //   8..12   verse_count u32
@@ -218,7 +207,7 @@ pub fn encode_akjv_bin(tok_version: &str, text: &str) -> Option<Vec<u8>> {
     let a = Akjv::parse(tok_version, text)?;
 
     // Deterministic order: the pack manifest hashes this file, so an unstable
-    // traversal would churn the pack version on every build.
+    // traversal re-mints its URL on every build.
     let mut refs: Vec<&VRef> = a.ix.keys().collect();
     refs.sort_by(|x, y| (&x.book, x.chapter, x.verse).cmp(&(&y.book, y.chapter, y.verse)));
 
@@ -362,9 +351,8 @@ mod tests {
         assert_eq!(a.spans(&john).len(), 3);
         // A single-token span.
         assert_eq!(a.span_at(&john, 3).map(|s| s.text.as_str()), Some("to"));
-        // Every token INSIDE a multi-token run resolves to the same span, which
-        // is what lets the reader mark the whole run and answer a tap on any
-        // word of it.
+        // Every token inside a multi-token run resolves to the same span, so the
+        // whole run marks and a tap on any word of it answers.
         assert_eq!(a.span_at(&john, 5).map(|s| s.text.as_str()), Some("Truly, truly"));
         assert_eq!(a.span_at(&john, 6).map(|s| s.text.as_str()), Some("Truly, truly"));
         // An untouched token is not marked.
@@ -376,10 +364,10 @@ mod tests {
         assert_eq!(a.span_at(&VRef::new("Ps", 23, 1), 2).map(|s| s.text.as_str()), Some(""));
     }
 
-    /// The property the whole design rests on: an overlaid verse reads as the
-    /// AKJV, but every surviving token keeps its CORPUS index, so a tap still
-    /// resolves to the right Strong's entry. A rebuilt token vector would shift
-    /// every index after the first re-rendering and be wrong in silence.
+    /// An overlaid verse reads as the AKJV, but every surviving token keeps its
+    /// corpus index, so a tap still resolves to the right Strong's entry. A
+    /// rebuilt token vector would shift every index after the first
+    /// re-rendering and be wrong in silence.
     #[test]
     fn overlaying_a_verse_keeps_corpus_token_indices() {
         use crate::corpus;
@@ -408,15 +396,15 @@ mod tests {
         assert_eq!(o.tokens[0].word, "For");
         assert_eq!(o.tokens[1].word, "God");
         assert_eq!(o.tokens[1].strongs, vec!["G2316".to_string()]);
-        // The run's first token carries the whole phrase, the mark, and — by the
-        // render rule — the END token's punctuation.
+        // The run's first token carries the whole phrase, the mark, and by the
+        // render rule the end token's punctuation.
         assert_eq!(o.tokens[2].word, "so much loved");
         assert_eq!(o.tokens[2].post, ",");
         assert!(o.tokens[2].has_flag(FLAG_RERENDERED));
         // Its interior token renders to nothing, so the layout drops it.
         assert_eq!(o.tokens[3].render(), "");
-        // And CRUCIALLY the Strong's codes never moved: G25 is still on index 3
-        // and G2889 still on index 5, where a tap will look for them.
+        // The Strong's codes never moved: G25 is still on index 3 and G2889 on
+        // index 5, where a tap will look for them.
         assert_eq!(o.tokens[3].strongs, vec!["G25".to_string()]);
         assert_eq!(o.tokens[5].strongs, vec!["G2889".to_string()]);
         assert_eq!(o.tokens[5].word, "earth");
@@ -452,8 +440,8 @@ mod tests {
 
     #[test]
     fn a_stale_overlay_is_refused() {
-        // The whole risk of an overlay: shown over a text it was not aligned
-        // to, every span points at the wrong word.
+        // Shown over a text it was not aligned to, every span points at the
+        // wrong word.
         assert!(Akjv::parse("kjv1611-tok1", OVERLAY).is_none());
         assert!(Akjv::parse("kjv1769-tok2", "").is_none());
         assert!(Akjv::parse("kjv1769-tok2", "not json at all").is_none());
@@ -488,8 +476,8 @@ mod tests {
         assert!(parse_akjv_bin("kjv1769-tok2", b"not an akjvb").is_none());
         assert!(parse_akjv_bin("kjv1769-tok2", &good[..good.len() - 8]).is_none());
         assert!(parse_akjv_bin("kjv1769-tok2", &[]).is_none());
-        // The stamp rides INSIDE the packed file, so staleness is caught with
-        // no JSONL header present.
+        // The stamp rides inside the packed file, so staleness is caught with no
+        // JSONL header present.
         assert!(parse_akjv_bin("kjv1611-tok1", &good).is_none());
         assert!(encode_akjv_bin("kjv1611-tok1", OVERLAY).is_none());
     }
