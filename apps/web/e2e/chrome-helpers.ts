@@ -19,12 +19,6 @@ export async function bootDark(page: Page): Promise<void> {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");
-  const est = page.getByRole("button", { name: "Established believer" });
-  await expect(est.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
   // The CHOICE, and nothing else: the writers are $effects, and a test that
   // called one by hand would be testing a path the app no longer takes.

@@ -1240,21 +1240,10 @@ pub struct WireConfigState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub church: Option<WireChurch>,
     /// Present-screen shares open as a new believer (additive).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub present_shares_as_new: Option<bool>,
     /// The plain-English overlay (the AKJV delta) on the reader (additive).
     /// Absent → off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub akjv_overlay: Option<bool>,
-    /// The welcome this reader was given, "new" | "curious" (additive).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub intro: Option<String>,
-    /// Whether the bundled devotional has already been offered (additive).
-    /// Absent reads as false, so a config written before devotionals existed
-    /// gets the offer once; a reader who stopped the booklet is not re-offered
-    /// it, because by then this is true.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub devotional_seeded: Option<bool>,
     /// The reader's chosen language (additive). Absent means "follow the
     /// device": the shell passes its locale to `plumbline_i18n_catalog_json` and
     /// the core resolves it, so a German phone opens in German untouched.
@@ -1268,6 +1257,12 @@ pub struct WireConfigState {
     /// The thread "share the gospel" opens; absent = the stock Romans Road.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gospel_thread: Option<String>,
+    /// The reader's saved share-link presets. A LIST, not an `Option`: absent and
+    /// empty both mean "none saved", and the core normalizes what arrives
+    /// (`config::clean_presets`) so a shell cannot write a nameless or duplicate
+    /// one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub share_presets: Vec<plumbline_core::config::SharePreset>,
     /// English definitions preferred over this language's own Strong's
     /// dictionary (additive). Absent = off: the localized one serves when the
     /// pack ships it. The `alias` keeps a shell or stored payload still saying
@@ -1331,12 +1326,18 @@ pub struct WireShareRequest {
     pub base: Option<String>,
     #[serde(default)]
     pub church: Option<WireChurch>,
-    /// Present only: the recipient's welcome opens on the new-believer path.
-    #[serde(default)]
-    pub start_as_new_believer: bool,
     /// A refKey the recipient opens at (`"Ps 23:1"`).
     #[serde(default)]
     pub at: Option<String>,
+    /// The language code the recipient reads in, whatever the sender reads in.
+    #[serde(default)]
+    pub lang: Option<String>,
+    /// A thread the recipient lands on, by name.
+    #[serde(default)]
+    pub thread: Option<String>,
+    /// A devotional booklet the recipient lands on, by id.
+    #[serde(default)]
+    pub devotional: Option<String>,
 }
 
 /// Everything a share surface needs, from one call: the link for the QR and the
@@ -1400,13 +1401,11 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             .collect(),
         human_analysis: Some(cfg.human_analysis),
         machine_analysis: Some(cfg.machine_analysis),
-        present_shares_as_new: Some(cfg.present_shares_as_new),
         akjv_overlay: Some(cfg.akjv_overlay),
-        intro: (!cfg.intro.is_empty()).then(|| cfg.intro.clone()),
-        devotional_seeded: cfg.devotional_seeded.then_some(true),
         language: (!cfg.language.is_empty()).then(|| cfg.language.clone()),
         concept_study: (!cfg.concept_study.is_empty()).then(|| cfg.concept_study.clone()),
         gospel_thread: (!cfg.gospel_thread.is_empty()).then(|| cfg.gospel_thread.clone()),
+        share_presets: cfg.share_presets.clone(),
         localized_lexicon_off: Some(cfg.localized_lexicon_off),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
             name: cfg.church.name.clone(),
@@ -1484,15 +1483,8 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         // Absent = off; the tiers are opt-in (core::config::from_wire).
         human_analysis: w.human_analysis.unwrap_or(false),
         machine_analysis: w.machine_analysis.unwrap_or(false),
-        present_shares_as_new: w.present_shares_as_new.unwrap_or(true),
         // Absent = off (core::config::from_wire): the KJV is the text.
         akjv_overlay: w.akjv_overlay.unwrap_or(false),
-        devotional_seeded: w.devotional_seeded.unwrap_or(false),
-        intro: match w.intro.as_deref() {
-            Some("new") => "new".to_string(),
-            Some("curious") => "curious".to_string(),
-            _ => String::new(),
-        },
         // Empty means "follow the device", and so does a language this build does not
         // ship — never English by fiat. Validated here, where a shell's value becomes
         // the core's, rather than trusted.
@@ -1504,6 +1496,9 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         // there, so nothing validates it away here.
         concept_study: w.concept_study.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
         gospel_thread: w.gospel_thread.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
+        // Normalized here as well as on load: the shell is the other untrusted
+        // writer, and a save must not be able to store what a load would refuse.
+        share_presets: plumbline_core::config::clean_presets(&w.share_presets),
         localized_lexicon_off: w.localized_lexicon_off.unwrap_or(false),
         // Through the core's clamps, not a local trim: the one place a shell's church
         // becomes the core's, so no shell has to remember the caps.
@@ -1825,11 +1820,6 @@ pub struct WireCatalog {
     pub strings: std::collections::BTreeMap<String, String>,
     /// Every language on offer, each labelled in itself.
     pub languages: Vec<WireLanguage>,
-    /// Whether this language may be offered the first-run welcome and the
-    /// curious path (`i18n::Lang::has_native_intros`) — a shell must not lead
-    /// anyone into either in a language nobody has written them in. Sent with
-    /// the catalogue because first run happens before there is an engine to ask.
-    pub native_intros: bool,
 }
 
 #[derive(Serialize)]
@@ -1880,7 +1870,6 @@ pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
         lang: lang.code().to_string(),
         strings: i18n::resolved(lang),
         languages: all.into_iter().map(language_to_wire).collect(),
-        native_intros: lang.has_native_intros(),
     }
 }
 

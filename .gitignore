@@ -71,3 +71,8 @@ __pycache__/
 # apps/web/scripts/subset-fonts.mjs, never committed; only the built
 # public/fonts/*.woff2 ships. The other fonts-src TTFs are small and stay.
 apps/web/fonts-src/NotoSerifCJKtc-Regular.otf
+
+# Playwright's run artifacts when the suite is driven from the repo root rather
+# than apps/web (whose own .gitignore covers its copies).
+test-results/
+playwright-report/

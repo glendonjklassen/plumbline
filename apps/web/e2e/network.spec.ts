@@ -82,22 +82,25 @@ async function timedReload(page: Page): Promise<number> {
   return Date.now() - t0;
 }
 
-/** First visit through the given origin, first-run dismissed, reader up. The
- *  analysis tiers are ticked on the way through: the pack-update tests below are
- *  about a device that HAS the analysis pack, and it is opt-in. */
-async function firstVisit(page: Page, url: string): Promise<void> {
+/** First visit through the given origin, reader up, and the device actually
+ *  holding what its pin names.
+ *
+ *  The `settleDepot` is not belt-and-braces. These tests read the pin as a
+ *  description of the disk, and the fixed 1.5s that used to stand in for that
+ *  was calibrated when a first-run welcome sat between boot and the assertion —
+ *  clicking through it was the wait. With the welcome gone the reader arrives at
+ *  once, the background downloads have not landed, and three of these went red
+ *  against a device that was still fetching. Waiting on the pin itself is the
+ *  deterministic form of the same wait, and it is what the suite already had. */
+async function firstVisit(page: Page, url: string, settle = true): Promise<void> {
   await page.goto(url);
-  const established = page.getByRole("button", { name: "Established believer" });
-  await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await established.isVisible().catch(() => false)) {
-    await established.click();
-    for (const box of await page.locator(".dialog label.card input[type=checkbox]").all())
-      if (!(await box.isChecked())) await box.check();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
   // The shell precache runs at the first idle after boot.
   await page.waitForTimeout(1_500);
+  // `settle: false` for the tests whose SUBJECT is a device that cannot finish —
+  // one that aborts the other Bibles' downloads never reaches a settled depot,
+  // and waiting for one would be waiting for the thing it is proving impossible.
+  if (settle) await settleDepot(page);
 }
 
 /// Wait until the device actually holds every file its pin names. A test that
@@ -708,7 +711,9 @@ test("an update re-pins even while the other Bibles are still on their way", asy
   // depot deliberately bypasses those anyway.
   await page.route(/(luther1912|rv1909|svd1865)/, (r) => r.abort());
   try {
-    await firstVisit(page, origin.url);
+    // Un-settled on purpose: those aborts are the premise, so this device never
+    // holds everything its pin names — which is the state the re-pin has to work in.
+    await firstVisit(page, origin.url, false);
 
     origin.mutate((m) => ({ ...m, version: "st1lln0b1bles000" }));
     await page.reload();

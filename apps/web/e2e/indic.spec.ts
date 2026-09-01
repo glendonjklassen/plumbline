@@ -30,13 +30,7 @@ interface Box {
 
 async function reader(page: Page, lang: Record<string, string>): Promise<void> {
   await page.goto("/");
-  const est = page.getByRole("button", { name: lang["intro.pathEstablished"] });
   const canvas = page.locator(".pane canvas").first();
-  await expect(est.or(canvas)).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: lang["intro.start"] }).click();
-  }
   await expect(canvas).toBeVisible({ timeout: 90_000 });
 }
 

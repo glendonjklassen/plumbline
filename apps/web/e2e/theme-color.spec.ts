@@ -15,12 +15,6 @@ import { bootDark, chrome, chromeFollows, chromeIsTheme } from "./chrome-helpers
 test("every theme-color tag carries the surface under the bar, on a dark-mode device too", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");
-  const est = page.getByRole("button", { name: "Established believer" });
-  await expect(est.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 
   // A LIGHT reader theme on a DARK device — the mismatch that exposed it.

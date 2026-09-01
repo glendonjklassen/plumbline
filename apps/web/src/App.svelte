@@ -7,10 +7,17 @@
   import { deviceLocale, lastLang, setCatalog, t, readerFace } from "./lib/i18n.svelte";
   import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "./engine/fonts.generated";
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
-  import { churchFromQuery, hasChurch, launchDestination, sharedAtRef, startsAsNewBeliever } from "./shell/church";
+  import {
+    churchFromQuery,
+    hasChurch,
+    launchDestination,
+    sharedAtRef,
+    sharedDevotional,
+    sharedLang,
+    sharedThread,
+  } from "./shell/church";
   import { initSession, type Session } from "./state/session.svelte";
   import { dispatchLink } from "./study/links";
-  import FirstRun from "./shell/FirstRun.svelte";
   import Shell from "./shell/Shell.svelte";
 
   // "prepare", not "download": this is what the splash paints before the worker
@@ -114,16 +121,22 @@
     try {
       const rpc = new EngineRpc();
       rpc.onProgress = (p) => (phase = p);
-      // Phones defer the machine-tier auto-download; the shell offers an explicit
-      // action instead of spending the download behind the reader's back.
-      const deferRnd = matchMedia("(max-width: 700px)").matches;
+      // Never deferred. Phones used to hold the machine tier back and offer an
+      // explicit action instead, because spending a download unasked is rude —
+      // but it is 3 MB against the 35 MB of text the same boot already fetches
+      // and the 260 MB of Bibles behind it. Holding that back bought a phone
+      // nothing and cost every reader the tier until they went looking.
+      const deferRnd = false;
       const hinted = hintedTextFont();
+      // Read before the boot message, because `?lang=` decides which CORPUS gets
+      // inflated — a language resolved after the engine opens picks nothing.
+      const linkLang = sharedLang(location.search) ?? "";
       const [info] = await Promise.all([
         // `textFont` is a hint from localStorage, like `lang`: the real choice is
         // in a config only the worker can read, but the worker needs a face before
         // the first layout. Guess, overlap the download with boot, and reconcile
         // below — a wrong guess costs one relayout before anything is painted.
-        rpc.boot({ deferRnd, locale: deviceLocale(), lang: lastLang(), textFont: hinted }),
+        rpc.boot({ deferRnd, locale: deviceLocale(), lang: lastLang(), sharedLang: linkLang, textFont: hinted }),
         ...documentFaces(hinted),
       ]);
       // The worker measures layout with its own FontFaceSet. If its load failed it
@@ -146,6 +159,10 @@
       // Both type axes, from the config the worker just handed over — before the
       // shell mounts, so a wrong guess above has painted nothing.
       s.applyFonts();
+      // The boot that found no config writes one. The welcome used to, on its way
+      // out; nothing does now, so a fresh install would carry no config file at
+      // all until the reader changed a setting.
+      s.writeConfigOnFirstBoot(info.config?.firstRun === true);
       // Compared through `readerFace`, because the catalogue has arrived by here:
       // an Arabic session's face is the script one whatever the config says.
       // Without resolving on this side, config === hint and the mismatch is
@@ -158,29 +175,45 @@
       // own (theirs wins if they've already set one), then strip it from the
       // address bar so a bookmark or a reload isn't a link about a church.
       const shared = churchFromQuery(location.search);
-      s.startAsNewBeliever = startsAsNewBeliever(location.search);
       if (shared && !s.config.church?.name) {
         // Through `setChurch`, not by assigning `config.church`: the meeting time
         // is stored separately in `config.sundayService`, and only setChurch knows
         // to write it.
         s.setChurch(shared);
+        // FLUSHED, not left to the 300 ms debounce. This arrived from someone
+        // else's link and the reader did nothing to earn it back — closing the
+        // tab, or reloading, inside that window would drop the church the QR was
+        // handed over to carry. The same reason a saved preset flushes.
+        s.flushConfig();
         s.sharedByChurch = shared;
       } else if (shared) {
-        s.sharedByChurch = shared; // shown in the welcome, not saved over theirs
+        s.sharedByChurch = shared; // theirs stands; this is only for the record
       }
       // A shared passage opens where it points (`?at=Ps 23:1`) — the QR on the
       // Present end card hands over the weave, not just the app.
       const at = sharedAtRef(location.search);
+      // The palette's destinations. Names and ids, resolved below against what
+      // THIS install actually has — a link asserts nothing about the phone that
+      // opens it, so anything unmatched falls through to an ordinary boot.
+      const linkThread = sharedThread(location.search);
+      const linkDevotional = sharedDevotional(location.search);
+      // The language the link asked for, kept only if this reader had none of
+      // their own — the rule `boot()` already applied when it opened the corpus,
+      // written down here so a reload stays in the language this visit resolved.
+      if (linkLang && !s.config.language) {
+        s.config.language = info.i18n?.lang ?? linkLang;
+        s.saveConfig();
+      }
       // A launcher shortcut names a destination (`?open=review`, from the
       // manifest's `shortcuts`). Stripped with the rest: a destination is a way in,
       // and a reload should reopen the reader, not the drill.
       const opened = launchDestination(location.search);
-      if (shared || s.startAsNewBeliever || at || opened) {
+      if (shared || at || opened || linkLang || linkThread || linkDevotional) {
         history.replaceState(null, "", location.pathname + location.hash);
       }
-      // Returning readers never see the welcome, so without this a link's
-      // church would be saved with no sign it happened.
-      if (hasChurch(shared) && !s.showFirstRun) {
+      // There is no welcome to name the church any more, so the toast is the
+      // only sign a link brought one.
+      if (hasChurch(shared)) {
         s.showToast(t("shell.homeChurchSet", { church: shared.name }));
       }
       // "Deferred" must mean the reader wants the machine tier and its download was
@@ -229,6 +262,10 @@
         s.screen = "memorize";
         s.memorize = { view: opened === "review" ? "review" : "hub" };
       }
+      // Straight to what the link named. There is no welcome in the way: a
+      // person handed this over, and they provide the context it used to.
+      if (linkDevotional) void s.openSharedDevotional(linkDevotional);
+      else if (linkThread) void s.openSharedThread(linkThread);
       // The on-device boot numbers (also under Settings → boot diagnostics).
       void rpc.bootTrace().then((t) => {
         s.bootTrace = t;
@@ -298,18 +335,7 @@
 {/if}
 
 {#if session}
-  {#if session.showFirstRun}
-    <!-- First launch: the welcome owns the screen; the reader mounts only after a
-         path is chosen, so nothing flashes under the question. -->
-    <div class="firstrun-stage">
-      <FirstRun />
-    </div>
-  {:else}
-    <Shell />
-    <!-- Also mounted over the app: the welcome is re-openable from the top
-         bar, and it renders as its own dialog. -->
-    <FirstRun />
-  {/if}
+  <Shell />
 {:else}
   <div class="splash">
     <div class="mark">✦</div>
@@ -343,11 +369,6 @@
 {/if}
 
 <style>
-  .firstrun-stage {
-    position: fixed;
-    inset: 0;
-    background: var(--paper, #fcf9f4);
-  }
   .splash {
     /* A system serif on purpose: EB Garamond, inherited from body, is
        render-blocking, so with font-display: block the splash painted nothing

@@ -21,12 +21,6 @@ const INSET = { top: 44, right: 48, bottom: 34, left: 47 };
 async function boot(page: Page): Promise<void> {
   await page.setViewportSize(PHONE);
   await page.goto("/");
-  const est = page.getByRole("button", { name: "Established believer" });
-  await expect(est.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
 }
 

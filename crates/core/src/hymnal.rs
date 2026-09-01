@@ -186,9 +186,10 @@ pub fn stanza_lines(stanza: &str, semis: i32, flats: bool) -> Vec<Vec<Segment>> 
 
 // ── chords and keys ───────────────────────────────────────────────────────────
 
-/// Quality tokens the grammar accepts; concatenations are valid (`madd9` is `m`
-/// + `add9`). Order matters — the scan takes the first prefix match, so every
-/// token must precede its own prefixes (`maj7` before `m`, `dim7` before `dim`).
+/// Quality tokens the grammar accepts; concatenations are valid (`madd9` is
+/// `m` + `add9`). Order matters — the scan takes the first prefix match, so
+/// every token must precede its own prefixes (`maj7` before `m`, `dim7` before
+/// `dim`).
 const QUALITIES: [&str; 23] = [
     "mmaj7", "7sus4", "add11", "add13", "m7b5", "maj7", "dim7", "aug7", "sus2", "sus4", "add9", "add2", "maj", "min",
     "dim", "aug", "m7", "11", "13", "m", "6", "7", "9",

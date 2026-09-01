@@ -2,12 +2,6 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
-  const est = page.getByRole("button", { name: "Established believer" });
-  await expect(est.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
 }
 
@@ -63,7 +57,7 @@ test("phone: one bar of chrome above the text, with no app title", async ({ page
   await expect(page.getByText("Share Plumbline")).toBeVisible();
 });
 
-test("phone: the church rides the Share destination and Welcome the ≡ menu", async ({ page }) => {
+test("phone: the church rides the Share destination, not the ≡ menu", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.evaluate(() => localStorage.setItem("plumbline:intro", "new"));
@@ -72,11 +66,13 @@ test("phone: the church rides the Share destination and Welcome the ≡ menu", a
     (window as any).__plumbline.setChurch({ name: "Grace Chapel", service: 600, url: "" }),
   );
 
-  // The ≡ holds utilities: Welcome yes, Church no — the church lives on the Share
-  // screen, beside the QR its setting feeds.
+  // The ≡ holds utilities only. Church is not among them — it lives on the Share
+  // screen, beside the QR its setting feeds — and neither is Welcome, which went
+  // with the first-run personas.
   await page.getByLabel("Menu").click();
-  await expect(page.locator(".menu").getByRole("button", { name: "Welcome" })).toBeVisible();
+  await expect(page.locator(".menu").getByRole("button", { name: "Settings" })).toBeVisible();
   await expect(page.locator(".menu").getByRole("button", { name: "Church" })).toHaveCount(0);
+  await expect(page.locator(".menu").getByRole("button", { name: "Welcome" })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   await page.locator(".bottom-nav").getByRole("button", { name: "Share" }).click();

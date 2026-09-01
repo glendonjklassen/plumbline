@@ -109,13 +109,7 @@ function recordingOrigin(upstream: string): Promise<{
  *  optional analytics pack would only add noise to the requests being counted. */
 async function firstVisit(page: Page, url: string): Promise<void> {
   await page.goto(url);
-  const established = page.getByRole("button", { name: "Established believer" });
   const canvas = page.locator(".pane canvas").first();
-  await expect(established.or(canvas)).toBeVisible({ timeout: 120_000 });
-  if (await established.isVisible().catch(() => false)) {
-    await established.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(canvas).toBeVisible({ timeout: 120_000 });
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 120_000 });
 }

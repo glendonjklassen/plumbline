@@ -15,12 +15,6 @@ import { expect, test, type Page } from "@playwright/test";
 async function boot(page: Page): Promise<void> {
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto("/");
-  const est = page.getByRole("button", { name: "Established believer" });
-  await expect(est.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
@@ -71,12 +65,6 @@ test("the last-opened seating is stored but is not a chip", async ({ page }) => 
 test("several chips are visible at once, not one page at a time", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 }); // a phone, where one-at-a-time hid the rest
   await page.goto("/");
-  const est = page.getByRole("button", { name: "Established believer" });
-  await expect(est.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;

@@ -135,22 +135,9 @@ pub struct Config {
     /// `sunday-morning` seating is this time until 1.5 hours after
     /// ([`crate::session_slot::slot_for_at`]); unset keeps the before-noon rule.
     pub sunday_service: Option<u32>,
-    /// Whether a link shared from Present opens for a new believer. On by default.
-    pub present_shares_as_new: bool,
     /// The plain-English overlay (the AKJV delta) on the reader. Reader-only:
     /// memorize, Present, copy and share stay KJV (see [`crate::akjv`]).
     pub akjv_overlay: bool,
-    /// Which welcome this reader was given ("new" | "curious"), empty when none.
-    pub intro: String,
-    /// Whether the bundled devotional has been offered, so the new-believer
-    /// welcome starts it exactly once.
-    ///
-    /// The start can legitimately fail the first time (the welcome can finish
-    /// before the pack's text stage lands, and `devotional_start` refuses a
-    /// booklet the catalogue lacks), so the shell retries on a later boot. This
-    /// separates "never managed to start it" from "the reader stopped it";
-    /// without it a booklet the reader threw away comes back every launch.
-    pub devotional_seeded: bool,
     /// The reader's language ([`crate::i18n::Lang::code`]). Empty = follow the
     /// device, not English: storing "en" on the first resolve would freeze a
     /// German reader into English. Only an explicit choice is written.
@@ -167,6 +154,93 @@ pub struct Config {
     /// `strongs-es.json`) in favour of the English definitions. Applied when the
     /// engine opens, like the language.
     pub localized_lexicon_off: bool,
+    /// The reader's saved share-link presets, in the order they were made. See
+    /// [`SharePreset`]; normalized by [`clean_presets`] on the way in.
+    pub share_presets: Vec<SharePreset>,
+}
+
+/// One saved share-link preset: a name and the palette choices it restores.
+///
+/// The reader's CHOICES, not the finished URL. A stored link would freeze the
+/// church as it read the day it was saved, so renaming a church would leave
+/// every preset handing out the old name; and it would freeze availability, so a
+/// preset made before a booklet was translated could never notice that it had
+/// been. Rebuilding from the choices means a preset is re-checked against what
+/// exists every time it is applied.
+///
+/// At most one of `thread` / `devotional` / `at` is set — a recipient lands on
+/// one thing. All empty is the plain app link, which is a legitimate preset (a
+/// language and a persona and nothing else).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharePreset {
+    /// What the reader called it. Capped at [`PRESET_NAME_MAX`]; unique among
+    /// this reader's presets, which is also how one is addressed for deletion.
+    pub name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub thread: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub devotional: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub at: String,
+    /// Empty means the link carries no language and the recipient's own device
+    /// decides — a real choice, not an unset field.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub lang: String,
+    /// Whether the link carries the reader's church. Defaults TRUE when the key
+    /// is absent, matching the palette: a hand-edited file that lost the key
+    /// should keep sharing the church, not silently stop.
+    #[serde(default = "yes", skip_serializing_if = "is_yes")]
+    pub church: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn is_yes(b: &bool) -> bool {
+    *b
+}
+
+/// The longest a preset name may be — a label on a chip, not a document.
+pub const PRESET_NAME_MAX: usize = 40;
+
+/// The most presets kept. A cap because they live in the config file, which is
+/// read on every boot before anything is painted.
+pub const PRESET_CAP: usize = 24;
+
+impl SharePreset {
+    /// Trim and cap a preset as it arrives from a shell or a hand-edited file.
+    /// Truncation counts CODE POINTS, like [`crate::church::clean`].
+    pub fn clean(&self) -> SharePreset {
+        let cut = |v: &str, max: usize| v.trim().chars().take(max).collect::<String>();
+        SharePreset {
+            name: cut(&self.name, PRESET_NAME_MAX),
+            thread: cut(&self.thread, crate::church::TARGET_MAX),
+            devotional: cut(&self.devotional, crate::church::TARGET_MAX),
+            at: cut(&self.at, crate::church::TARGET_MAX),
+            lang: cut(&self.lang, 16),
+            church: self.church,
+        }
+    }
+}
+
+/// Clean a list of presets: drop the unnamed, dedupe by name keeping the first,
+/// and cap the count. The one place a preset list is normalized, so a shell, a
+/// restored backup and a hand-edited file all get the same answer.
+pub fn clean_presets(list: &[SharePreset]) -> Vec<SharePreset> {
+    let mut out: Vec<SharePreset> = Vec::new();
+    for p in list {
+        let c = p.clean();
+        if c.name.is_empty() || out.iter().any(|q| q.name == c.name) {
+            continue;
+        }
+        out.push(c);
+        if out.len() == PRESET_CAP {
+            break;
+        }
+    }
+    out
 }
 
 /// A verse copy-shape token accepted for [`Config::copy_style`].
@@ -196,19 +270,21 @@ impl Default for Config {
             side_margin: 28.0,
             line_spacing: 1.35,
             history: Vec::new(),
-            // Opt-in: see the note on `from_wire` below.
-            human_analysis: false,
-            machine_analysis: false,
+            // ON by default. They were opt-in while the first-run welcome asked
+            // about them; with the welcome gone nothing asks, and opt-in would
+            // mean nobody ever finds them. The machine tier's download is 3 MB
+            // against 35 MB of text and 260 MB of Bibles — small enough that
+            // spending it unasked is not the imposition it would be for a corpus.
+            human_analysis: true,
+            machine_analysis: true,
             church: Church::default(),
             sunday_service: None,
-            present_shares_as_new: true,
             akjv_overlay: false,
             localized_lexicon_off: false,
-            intro: String::new(),
-            devotional_seeded: false,
             language: String::new(),
             concept_study: String::new(),
             gospel_thread: String::new(),
+            share_presets: Vec::new(),
         }
     }
 }
@@ -284,8 +360,6 @@ struct ConfigWire {
     machine_analysis: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     church: Option<ChurchWire>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    present_shares_as_new: Option<bool>,
     /// `alias`: this shipped as `strongsDeOff` when German was the only
     /// translation, and that key sits in config files on devices. Read the old
     /// spelling, write only the new one.
@@ -294,15 +368,16 @@ struct ConfigWire {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     akjv_overlay: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    intro: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    devotional_seeded: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     language: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     concept_study: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     gospel_thread: Option<String>,
+    /// A LIST rather than an `Option<Vec>`: absent and empty mean the same
+    /// thing (no presets), and skipping it when empty keeps the key off a
+    /// config that has never saved one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    share_presets: Vec<SharePreset>,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -443,21 +518,14 @@ impl Config {
                 .map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1), verse: None, lang: String::new() })
                 .take(HISTORY_CAP)
                 .collect(),
-            // The tiers are opt-in; a reader who switched one on has an explicit
-            // `true` on the wire.
-            human_analysis: w.human_analysis.unwrap_or(false),
-            machine_analysis: w.machine_analysis.unwrap_or(false),
-            present_shares_as_new: w.present_shares_as_new.unwrap_or(true),
+            // Absent = a config written before the tiers had a default, or one
+            // this build has not seen. Reads as ON, matching `Config::default`;
+            // a reader who switched one OFF has an explicit `false` on the wire
+            // and keeps it.
+            human_analysis: w.human_analysis.unwrap_or(true),
+            machine_analysis: w.machine_analysis.unwrap_or(true),
             localized_lexicon_off: w.localized_lexicon_off.unwrap_or(false),
             akjv_overlay: w.akjv_overlay.unwrap_or(false),
-            // Absent = never offered, so a config written before devotionals
-            // existed gets the offer once.
-            devotional_seeded: w.devotional_seeded.unwrap_or(false),
-            intro: match w.intro.as_deref() {
-                Some("new") => "new".to_string(),
-                Some("curious") => "curious".to_string(),
-                _ => String::new(), // unknown token → no welcome to re-open
-            },
             // A language this build does not ship reads as "follow the device",
             // not English.
             language: match w.language.as_deref() {
@@ -468,6 +536,9 @@ impl Config {
             // use (a stale id reads as normal mode), so nothing validates here.
             concept_study: w.concept_study.map(|s| s.trim().to_string()).unwrap_or_default(),
             gospel_thread: w.gospel_thread.map(|s| s.trim().to_string()).unwrap_or_default(),
+            // Normalized on the way IN, so a hand-edited file and a restored
+            // backup get exactly what a shell's save gets.
+            share_presets: clean_presets(&w.share_presets),
             // A minute outside the day is corrupt; read it as "never set".
             sunday_service: w.sunday_service.filter(|m| *m < 24 * 60),
             church: w
@@ -541,14 +612,12 @@ impl Config {
                 .collect(),
             human_analysis: Some(self.human_analysis),
             machine_analysis: Some(self.machine_analysis),
-            present_shares_as_new: Some(self.present_shares_as_new),
             localized_lexicon_off: Some(self.localized_lexicon_off),
             akjv_overlay: Some(self.akjv_overlay),
-            intro: (!self.intro.is_empty()).then(|| self.intro.clone()),
-            devotional_seeded: self.devotional_seeded.then_some(true),
             language: (!self.language.is_empty()).then(|| self.language.clone()),
             concept_study: (!self.concept_study.is_empty()).then(|| self.concept_study.clone()),
             gospel_thread: (!self.gospel_thread.is_empty()).then(|| self.gospel_thread.clone()),
+            share_presets: self.share_presets.clone(),
             church: (!self.church.is_empty()).then(|| ChurchWire {
                 name: self.church.name.clone(),
                 service: self.church.service,
@@ -674,6 +743,57 @@ mod tests {
         assert_eq!(cfg, Config::default());
     }
 
+    /// What [`clean_presets`] refuses, and why each one matters.
+    ///
+    /// The config file is the least trusted input the app reads after a query
+    /// string — it survives backups, hand edits and older builds — and every rule
+    /// here is one that would otherwise reach the share palette as a broken row:
+    /// an unnamed preset is a chip with no label, a duplicate name is two chips
+    /// that delete each other, and an unknown persona token would put a value in
+    /// the link that no recipient's app can read.
+    #[test]
+    fn preset_cleaning_refuses_what_would_break_the_palette() {
+        let named = |n: &str| SharePreset { name: n.to_string(), ..SharePreset::default() };
+
+        // Unnamed (or whitespace-only) is dropped: the name IS the handle.
+        assert_eq!(clean_presets(&[named(""), named("   ")]).len(), 0);
+
+        // Deduped by name, first wins — the name addresses a preset for deletion,
+        // so two of them would make "delete" ambiguous.
+        let dupes = clean_presets(&[
+            SharePreset { thread: "Kept".to_string(), ..named("One") },
+            SharePreset { thread: "Dropped".to_string(), ..named("One") },
+        ]);
+        assert_eq!(dupes.len(), 1);
+        assert_eq!(dupes[0].thread, "Kept");
+
+        // Trimmed and capped in CODE POINTS, so a cap can never split a character
+        // and leave a lone surrogate on a chip.
+        let long = clean_presets(&[named(&format!("  {}  ", "\u{1F600}".repeat(PRESET_NAME_MAX + 10)))]);
+        assert_eq!(long[0].name.chars().count(), PRESET_NAME_MAX);
+        assert!(!long[0].name.contains('\u{FFFD}'));
+
+        // Capped, so a config file cannot grow without bound — it is read on
+        // every boot before anything is painted.
+        let many: Vec<SharePreset> = (0..PRESET_CAP + 10).map(|i| named(&format!("p{i}"))).collect();
+        assert_eq!(clean_presets(&many).len(), PRESET_CAP);
+    }
+
+    /// An absent `church` key reads as TRUE, matching the palette's own default.
+    /// A hand-edited file that lost the key should keep sharing the church rather
+    /// than silently stop, and `false` must still survive as a deliberate choice.
+    #[test]
+    fn a_preset_missing_its_church_key_still_carries_the_church() {
+        let with_key: SharePreset = serde_json::from_str(r#"{"name":"a","church":false}"#).unwrap();
+        assert!(!with_key.church);
+        let without: SharePreset = serde_json::from_str(r#"{"name":"a"}"#).unwrap();
+        assert!(without.church, "absent must not read as false");
+        // And `true` is skipped on the way out, so the common case adds no key.
+        let json = serde_json::to_string(&without).unwrap();
+        assert!(!json.contains("church"), "{json}");
+        assert!(serde_json::to_string(&with_key).unwrap().contains("\"church\":false"));
+    }
+
     #[test]
     fn roundtrips_and_reload_is_not_first_run() {
         let path = std::env::temp_dir().join(format!("plumbline-cfg-rt-{}.json", std::process::id()));
@@ -713,13 +833,31 @@ mod tests {
             ],
             human_analysis: true,
             machine_analysis: false,
-            present_shares_as_new: false,
             akjv_overlay: true,
-            intro: "curious".to_string(),
-            devotional_seeded: true,
             language: "de".to_string(),
             concept_study: "run-grace".to_string(),
             gospel_thread: "My Gospel Walk".to_string(),
+            // Two presets, not one: a list that round-trips its first element
+            // and drops the rest would pass with one. Each carries a DIFFERENT
+            // destination so a builder that writes the same field for all three
+            // cannot pass either.
+            share_presets: vec![
+                SharePreset {
+                    name: "Romans Road · Punjabi".to_string(),
+                    thread: "Romans Road".to_string(),
+                    lang: "pa".to_string(),
+                    church: true,
+                    ..SharePreset::default()
+                },
+                SharePreset {
+                    name: "Booklet".to_string(),
+                    devotional: "new-believer-30".to_string(),
+                    // Church OFF, which is the non-default: it must survive, or a
+                    // preset made deliberately without a church grows one back.
+                    church: false,
+                    ..SharePreset::default()
+                },
+            ],
             localized_lexicon_off: true,
             church: Church {
                 name: "Grace Bible Church".into(),
@@ -977,9 +1115,8 @@ mod tests {
   "sideMargin": 28.0,
   "lineSpacing": 1.35,
   "history": [],
-  "humanAnalysis": false,
-  "machineAnalysis": false,
-  "presentSharesAsNew": true,
+  "humanAnalysis": true,
+  "machineAnalysis": true,
   "localizedLexiconOff": false,
   "akjvOverlay": false
 }

@@ -880,20 +880,6 @@
         {/if}
       {/if}
       <hr />
-      <label class="toggle">
-        <span class="body">
-          <span class="name">{t("settings.presentAsNew")}</span>
-          <span class="desc">{t("settings.presentAsNewDesc")}</span>
-        </span>
-        <input
-          type="checkbox"
-          checked={s.config.presentSharesAsNew !== false}
-          onchange={() => {
-            s.config.presentSharesAsNew = s.config.presentSharesAsNew === false;
-            s.saveConfig();
-          }}
-        />
-      </label>
       <hr />
       <p class="label">{t("settings.offline")}</p>
       <div class="offline">

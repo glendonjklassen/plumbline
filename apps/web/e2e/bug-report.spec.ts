@@ -9,12 +9,6 @@ async function boot(page: Page): Promise<void> {
   await page.goto("/");
   // The analysis tiers are left off deliberately: nothing in a report header comes
   // from the analysis pack, so these tests need not wait for that download.
-  const established = page.getByRole("button", { name: "Established believer" });
-  await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await established.isVisible().catch(() => false)) {
-    await established.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 

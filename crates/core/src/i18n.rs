@@ -365,19 +365,6 @@ impl Lang {
         self.spec().corpus.is_some() && self != Lang::En
     }
 
-    /// Whether this language's own catalogue carries the first-run prose rather
-    /// than falling back to English. Derived, never declared: writing the prose
-    /// is what turns the feature on, so the flag and the words cannot disagree.
-    /// Measured against English's key set, since English defines "all of it".
-    pub fn has_native_intros(self) -> bool {
-        if self == Lang::En {
-            return true;
-        }
-        let mine = table(self);
-        let mut wanted = table(Lang::En).keys().filter(|k| is_intro_prose(k)).peekable();
-        wanted.peek().is_some() && wanted.all(|k| mine.contains_key(k))
-    }
-
     /// The web manifest role this language's corpus cache is filed under.
     /// English's is the distinguished `corpusCache`: the one file the stage-1
     /// boot opens, never optional, found before the loader knows anything about
@@ -592,24 +579,10 @@ pub fn resolved(lang: Lang) -> Strings {
     merged(lang).clone()
 }
 
-/// The first-run prose: the two welcomes that address the reader's own life
-/// rather than the app.
-///
-/// The only strings exempt from translation, because they are somebody speaking
-/// out of a shared world rather than labels a translator can render. They wait
-/// for someone inside the culture to write them, and until then the paths that
-/// lead to them are not offered at all.
-///
-/// One list, read by [`Lang::has_native_intros`], the completeness test's
-/// exemption, and the all-or-nothing test beside it.
-pub const INTRO_PROSE: [&str; 2] = ["intro.welcome.", "intro.curious."];
-
-/// Whether `id` is one of the first-run prose strings. See [`INTRO_PROSE`].
-pub fn is_intro_prose(id: &str) -> bool {
-    INTRO_PROSE.iter().any(|p| id.starts_with(p))
-}
-
 /// Keys English has that `lang` does not. Empty for English by definition.
+///
+/// Nothing is exempt any more: the first-run prose was the one thing a
+/// translation was allowed to be missing, and it is gone with the welcome.
 pub fn missing(lang: Lang) -> Vec<String> {
     let en = catalog(Lang::En);
     let mine = catalog(lang);
@@ -885,70 +858,23 @@ mod tests {
         }
     }
 
-    /// [`INTRO_PROSE`] is the one permitted exemption, and adding to it is a
-    /// decision rather than a convenience. Nothing else may fall back.
-
+    /// Nothing may fall back. The first-run prose was the one permitted
+    /// exemption, and it went with the welcome.
     #[test]
     fn every_shipped_string_is_translated() {
         for lang in Lang::ALL {
             if lang == Lang::En {
                 continue;
             }
-            let gaps: Vec<String> = missing(lang).into_iter().filter(|k| !is_intro_prose(k)).collect();
+            // No exemption any more: the first-run prose was the one thing a
+            // translation was allowed to be missing, and it is gone.
+            let gaps: Vec<String> = missing(lang);
             assert!(
                 gaps.is_empty(),
-                "{} is missing {} key(s), and only the welcome prose may be missing: {:?}",
+                "{} is missing {} key(s), and every shipped string must be translated: {:?}",
                 lang.code(),
                 gaps.len(),
                 gaps
-            );
-        }
-    }
-
-    #[test]
-    fn english_carries_the_prose_the_gate_is_about() {
-        // Without this the gate guards nothing: with no prose in en.json,
-        // `has_native_intros` has no keys to require, so every language passes
-        // and every reader is offered a path to a blank welcome.
-        let en = catalog(Lang::En);
-        for prefix in INTRO_PROSE {
-            assert!(en.keys().any(|k| k.starts_with(prefix)), "no {prefix}* strings: the gate guards nothing");
-        }
-    }
-
-    #[test]
-    fn the_first_run_prose_is_all_or_nothing_in_every_language() {
-        // A half-written welcome renders two paragraphs in the reader's language
-        // and then three in English, mid-thought.
-        let en = catalog(Lang::En);
-        let all: Vec<&String> = en.keys().filter(|k| is_intro_prose(k)).collect();
-        for lang in Lang::ALL {
-            let mine = catalog(lang);
-            let have = all.iter().filter(|k| mine.contains_key(**k)).count();
-            assert!(
-                have == 0 || have == all.len(),
-                "{} has {have} of {} first-run prose strings — write the rest or none",
-                lang.code(),
-                all.len()
-            );
-        }
-    }
-
-    #[test]
-    fn the_gate_and_the_words_can_never_disagree() {
-        // The contract the shell acts on: a language is offered these paths
-        // exactly when a reader taking one meets no English paragraph. An
-        // equivalence rather than a snapshot, so writing a language's prose turns
-        // its paths on without a test to update.
-        for lang in Lang::ALL {
-            let own = catalog(lang);
-            let fell_back =
-                catalog(Lang::En).keys().filter(|k| is_intro_prose(k)).filter(|k| !own.contains_key(*k)).count();
-            assert_eq!(
-                lang.has_native_intros(),
-                fell_back == 0,
-                "{} is offered the first-run prose with {fell_back} of its paragraphs falling back to English",
-                lang.code()
             );
         }
     }

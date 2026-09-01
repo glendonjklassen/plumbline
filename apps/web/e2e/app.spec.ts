@@ -1,22 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// Boot to the reader. On a fresh profile the first-run chooser owns the screen
-// until a path is chosen, so take the established one. The tier checkboxes are
-// ticked because the analysis tiers are opt-in: every test below that is about
-// the analysis pack needs a reader who has it on.
+// Boot to the reader. There is no first run — the reader IS the first screen,
+// and both analysis tiers are on by default, so nothing here has to switch them
+// on the way it used to tick the welcome's checkboxes.
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page).toHaveTitle("Plumbline Bible");
-  const established = page.getByRole("button", { name: "Established believer" });
-  // Either the chooser (fresh profile) or the reader canvas (returning) —
-  // the canvas, not .subtitle, because phones hide the subtitle.
-  await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await established.isVisible().catch(() => false)) {
-    await established.click();
-    for (const box of await page.locator(".dialog label.card input[type=checkbox]").all())
-      if (!(await box.isChecked())) await box.check();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
@@ -93,61 +82,13 @@ test("boots to the reader with the stock set seeded", async ({ page }) => {
   expect(counts.tags).toBe(1);
 });
 
-test("first-run: the welcome owns the boot screen, with no reader behind it", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("button", { name: "New believer" })).toBeVisible({ timeout: 90_000 });
-  // The reader must not mount until a path is chosen — John 3 used to paint
-  // underneath the welcome.
-  await expect(page.locator(".pane canvas")).toHaveCount(0);
-  await expect(page.locator("header .search")).toHaveCount(0);
-});
-
-test("first-run: a new believer's welcome reference opens beside John", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
-  await expect(page.getByText("I'm so glad you've put your faith in Jesus")).toBeVisible();
-  // "Psalms", not "Psalm": the chip's label is derived from the canon's book name
-  // plus the catalogue's `ref.range` template, so it localizes and cannot disagree
-  // with what the app calls the book elsewhere.
-  await page.getByRole("button", { name: "Psalms 12:6–7" }).click();
-  const panes = await page.evaluate(() => {
-    const s = (window as any).__plumbline;
-    return { gates: s.gates, panes: s.panes.map((p: any) => ({ book: p.book, chapter: p.chapter, verse: p.targetVerse })) };
-  });
-  expect(panes.gates).toBe(0); // just the text
-  expect(panes.panes[0]).toEqual({ book: "John", chapter: 1, verse: null });
-  expect(panes.panes[1]).toEqual({ book: "Ps", chapter: 12, verse: 6 });
-});
-
-test("first-run: sharing the gospel asks for your church, then opens the Romans Road", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Sharing the gospel" }).click({ timeout: 90_000 });
-  // The reader is asked for their church and told why; it is optional.
-  await expect(page.getByText("Before you share it")).toBeVisible();
-  await expect(page.getByText(/links and QR codes you share contain your church/)).toBeVisible();
-  await page.getByPlaceholder("Church name").fill("Grace Bible Church");
-  // The service time is the same `config.sundayService` Settings edits — one
-  // stored value, given once.
-  await page.evaluate(() => {
-    const s = (window as any).__plumbline;
-    s.config.sundayService = 10 * 60;
-    s.saveConfig();
-  });
-  await page.getByRole("button", { name: "Open the presentation screen" }).click();
-  await expect(page.locator(".present .title")).toContainText("Romans Road");
-  await expect(page.getByText("For all have sinned")).toBeVisible();
-
-  const church = await page.evaluate(() => (window as any).__plumbline.church);
-  expect(church.name).toBe("Grace Bible Church");
-  expect(church.service, "the meeting time rides along as minutes").toBe(10 * 60);
-});
-
-test("a shared link carries the church, and the welcome names them", async ({ page }) => {
-  // One QR hands over the Bible and the people who sent it.
+test("a shared link carries the church, and says so", async ({ page }) => {
+  // One QR hands over the Bible and the people who sent it. The welcome used to
+  // name them; with it gone the toast is the only sign a link brought a church,
+  // which is why it is asserted rather than merely the stored value.
   await page.goto("/?church=Grace+Bible+Church&churchService=600&churchUrl=https%3A%2F%2Fexample.org");
-  await expect(page.getByText("Shared with you by")).toBeVisible({ timeout: 90_000 });
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText("Grace Bible Church")).toBeVisible();
-  await expect(page.getByText("Meets Sundays at 10:00 AM")).toBeVisible();
 
   // The address bar is left clean: a bookmark of this is the app, not a link
   // about somebody's church.
@@ -158,11 +99,13 @@ test("a shared link carries the church, and the welcome names them", async ({ pa
   // stored number, not a second copy on the church.
   expect(church).toEqual({ name: "Grace Bible Church", service: 600, url: "https://example.org" });
 
-  // And it survives a relaunch — first-run has to be finished first, or a reload
-  // just shows the welcome again.
-  await page.getByRole("button", { name: "Established believer" }).click();
-  await page.getByRole("button", { name: "Start reading" }).click();
-  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  // And it survives a relaunch. Waiting on the worker first, not because the app
+  // is slow to save — the link's church is flushed, not left to the 300 ms
+  // debounce — but because "flushed" means the save is POSTED, and the write
+  // itself lands in the worker. Reloading without waiting races the thing this
+  // assertion is about, which is how it failed under parallel load while passing
+  // alone.
+  await page.evaluate(() => (window as any).__plumbline.rpc.flush());
   await page.reload();
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
   const after = await page.evaluate(() => (window as any).__plumbline.church.name);
@@ -470,15 +413,6 @@ test("phones keep ONE pane (no split; weaves navigate instead)", async ({ page }
   await expect(page.locator(".pane canvas")).toHaveCount(1);
   const panes = await page.evaluate(() => (window as any).__plumbline.panes.length);
   expect(panes).toBe(1);
-});
-
-test("the first-run choice survives a relaunch", async ({ page }) => {
-  // Config must persist without an authoring write. It once reached IndexedDB only
-  // as a side effect of authoring, so a pure reader saw the intro every launch.
-  await boot(page); // dismisses first-run via the established path
-  await page.reload();
-  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByRole("button", { name: "Established believer" })).toHaveCount(0);
 });
 
 test("phones clamp a restored multi-pane session to one pane", async ({ page }) => {
@@ -1039,42 +973,6 @@ test("Settings can make the app completely offline, and says when it is", async 
   expect(rawJsonlShipped, "data/kjv.jsonl is back in the pack").toBe(false);
 });
 
-test("the welcome's verses are the corpus text, verbatim and instant", async ({ page }) => {
-  // The welcome quotes scripture from literals rather than asking the engine for ten
-  // verses one at a time, which made them pop in a beat after the page. A copy can
-  // drift, so every quote on screen is compared against the corpus itself.
-  await page.goto("/");
-  await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
-  await expect(page.getByText("I'm so glad you've put your faith in Jesus")).toBeVisible();
-
-  // The quotes are present in the very first paint of this screen, not filled
-  // in later: no blockquote may be empty at any point.
-  const quotes = await page.locator("blockquote .vq-text").allInnerTexts();
-  expect(quotes.length).toBeGreaterThan(5);
-  for (const q of quotes) expect(q.replace(/[“”]/g, "").trim().length).toBeGreaterThan(20);
-
-  const expected = await page.evaluate(async () => {
-    const s = (window as any).__plumbline;
-    const groups = [
-      ["Ps 12:6", "Ps 12:7"],
-      ["Heb 10:24", "Heb 10:25"],
-      ["Rom 5:8", "John 3:16"],
-      ["John 10:28", "1John 5:13"],
-      ["Phil 1:6", "1John 1:9"],
-      ["2Tim 3:16", "2Tim 3:17"],
-      ["Ps 34:18"],
-    ];
-    const out: string[] = [];
-    for (const g of groups) {
-      const parts: string[] = [];
-      for (const k of g) parts.push((await s.engine.verse(k))?.body ?? `MISSING ${k}`);
-      out.push(parts.join(" "));
-    }
-    return out;
-  });
-  expect(quotes.map((q) => q.replace(/[“”]/g, "").trim())).toEqual(expected);
-});
-
 test("the share QR encodes the church, not just the app", async ({ page }) => {
   // One scan hands over both. The QR is generated at render time, so setting a
   // church must change what it encodes — a longer payload needs a bigger symbol.
@@ -1105,9 +1003,11 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
 // Sharing a passage is a QR carrying the passage, not a share sheet carrying a wall
 // of text: what the person in front of you scans must land in the reader at the verse.
 test("Present shares the passage as a QR whose link opens at the first verse", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Sharing the gospel" }).click({ timeout: 90_000 });
-  await page.getByRole("button", { name: "Open the presentation screen" }).click();
+  await boot(page);
+  // Through the Share screen, which is where Present is raised now that the
+  // welcome's "Sharing the gospel" path is gone.
+  await page.getByRole("navigation").getByRole("button", { name: "Share", exact: true }).click();
+  await page.getByRole("button", { name: "Present the Gospel" }).click();
   await expect(page.locator(".present .title")).toContainText("Romans Road");
 
   // Record what the copy button hands over, without needing clipboard perms.
@@ -1130,8 +1030,6 @@ test("Present shares the passage as a QR whose link opens at the first verse", a
 // The receiving half of that QR: the link must actually land on the verse.
 test("a shared passage link opens the reader at its verse", async ({ page }) => {
   await page.goto("/?at=Ps+23%3A1");
-  await page.getByRole("button", { name: "Established believer" }).click({ timeout: 90_000 });
-  await page.getByRole("button", { name: "Start reading" }).click();
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
 
   const where = await page.evaluate(() => {
@@ -1267,58 +1165,11 @@ test("a new deploy offers an update, and only when the build really changed", as
 // shell strips the query only once it has consumed something from it.
 test("a bogus at= parameter is rejected, not merely survived", async ({ page }) => {
   await page.goto("/?at=javascript%3Aalert(1)");
-  await page.getByRole("button", { name: "Established believer" }).click({ timeout: 90_000 });
-  await page.getByRole("button", { name: "Start reading" }).click();
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 
   const book = await page.evaluate(() => (window as any).__plumbline.panes[0].book);
   expect(book).toBe("John"); // the default landing, untouched
   expect(await page.evaluate(() => location.search)).toContain("at=");
-});
-
-test("a Present link names the church and drops the setup paths", async ({ page }) => {
-  // A Present link says who it was meant for: the welcome offers only the two paths
-  // that fit, and still names whoever handed it over.
-  await page.goto("/?church=Grace+Bible+Church&start=new");
-  await expect(page.getByText("Shared with you by")).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByRole("button", { name: "New believer" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Curious about the Bible" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Established believer" })).toHaveCount(0);
-  expect(await page.evaluate(() => location.search)).toBe("");
-});
-
-test("first-run: curious about the Bible is its own path, and stays re-readable", async ({ page }) => {
-  // A third way in, and the welcome a reader was given must stay readable from the
-  // chrome afterwards rather than by reinstalling.
-  await page.goto("/");
-  await page.getByRole("button", { name: "Curious about the Bible" }).click({ timeout: 90_000 });
-  await expect(page.getByText("I'm glad you're curious about the Bible")).toBeVisible();
-  await expect(page.getByText(/help thou mine unbelief/)).toBeVisible();
-  await expect(page.getByText(/contrite spirit/)).toBeVisible(); // the struggles verse
-  await page.getByRole("button", { name: "Open the Bible" }).click();
-  await expect(page.locator(".subtitle")).toContainText("John 1");
-
-  // Back to it from the ≡ utilities, without changing anything.
-  await page.getByLabel("Menu").click();
-  await page.getByRole("button", { name: "Welcome" }).click();
-  await expect(page.getByText("I'm glad you're curious about the Bible")).toBeVisible();
-  await page.getByRole("button", { name: "Close" }).click();
-  await expect(page.locator(".pane canvas").first()).toBeVisible();
-
-  // …and it survives a relaunch, since it's the reader's own welcome now.
-  await page.reload();
-  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
-  await page.getByLabel("Menu").click();
-  await expect(page.getByRole("button", { name: "Welcome" })).toBeVisible();
-});
-
-test("a Present link offers only the two paths it was meant for", async ({ page }) => {
-  // Handed to someone in person: new believer or curious, not tier setup.
-  await page.goto("/?start=new");
-  await expect(page.getByRole("button", { name: "New believer" })).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByRole("button", { name: "Curious about the Bible" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Established believer" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Sharing the gospel" })).toHaveCount(0);
 });
 
 test("the phone top bar stays on one row, search behind a glass", async ({ page }) => {
@@ -1350,33 +1201,6 @@ test("the phone top bar stays on one row, search behind a glass", async ({ page 
   await expect(page.getByRole("searchbox")).toBeFocused();
   await page.getByRole("searchbox").fill("in the beginning");
   await expect(page.locator('[data-surface="search results"]')).toContainText("result");
-});
-
-test("the welcome points a new believer at the church that shared it", async ({ page }) => {
-  // "Find a church" must name the church the link carried, not speak in the
-  // abstract.
-  await page.goto(
-    "/?church=Grace+Bible+Church&churchService=600&churchUrl=https%3A%2F%2Fexample.org&start=new",
-  );
-  await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
-  const findChurch = page.locator(".welcome p", { hasText: "Find a church" });
-  await expect(findChurch).toContainText("shared with you by");
-  await expect(findChurch).toContainText("Grace Bible Church");
-  // The meeting time is formatted by the app, not echoed from the link: it carried
-  // `churchService=600`, and an English reader sees 10:00 AM (a German one, 10:00).
-  await expect(findChurch).toContainText("Meets Sundays at 10:00 AM");
-  await expect(findChurch.getByRole("link", { name: /Visit Grace Bible Church/ })).toHaveAttribute(
-    "href",
-    "https://example.org",
-  );
-});
-
-test("with no church shared, the welcome keeps its general advice", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
-  const findChurch = page.locator(".welcome p", { hasText: "Find a church" });
-  await expect(findChurch).toContainText("If someone shared this app with you");
-  await expect(findChurch).not.toContainText("shared with you by");
 });
 
 // The Check button once read the engine through `session.engine`, the console/e2e

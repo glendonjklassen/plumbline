@@ -62,11 +62,6 @@ function seed(): { code: string; strings: Record<string, string> } {
 const initial = seed();
 let strings = $state<Record<string, string>>(initial.strings);
 let code = $state<string>(initial.code);
-/** Whether the first-run prose exists in the painted language — the engine's
- *  answer (`i18n::Lang::has_native_intros`), never derived here. Seeded from the
- *  guessed code rather than `true`, so the frame before the boot reply cannot
- *  offer a non-English reader a path into English paragraphs. */
-let nativeIntros = $state<boolean>(initial.code === "en");
 export interface LanguageChoice {
   code: string;
   endonym: string;
@@ -101,12 +96,11 @@ let choices = $state<LanguageChoice[]>([]);
  *  the boot seed wholesale — including the `boot.*` keys, so a language the
  *  seed guessed wrong is corrected everywhere at once. */
 export function setCatalog(
-  cat: { lang?: string; strings?: Record<string, string>; languages?: any[]; nativeIntros?: boolean } | null,
+  cat: { lang?: string; strings?: Record<string, string>; languages?: any[] } | null,
 ): void {
   if (!cat?.strings) return;
   strings = cat.strings;
   code = cat.lang ?? "en";
-  nativeIntros = cat.nativeIntros === true;
   choices = (cat.languages ?? []).map((l) => ({
     code: String(l.code),
     endonym: String(l.endonym),
@@ -213,14 +207,6 @@ export function hasOwnBible(code: string): boolean {
   return role !== undefined && role !== "corpusCache";
 }
 
-/** Whether the first-run welcome and the curious path may be offered in the
- *  language being painted. Those two screens wait for someone inside the culture
- *  to write them rather than being translated. The engine decides
- *  (`i18n::Lang::has_native_intros`); re-deriving it here by peeking at `strings`
- *  would be a second copy of the rule. */
-export function hasNativeIntros(): boolean {
-  return nativeIntros;
-}
 
 /** Whether the language being painted has a dictionary of its own. */
 export function hasOwnLexicon(): boolean {

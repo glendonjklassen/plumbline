@@ -231,7 +231,7 @@ export class EngineRpc {
    *  chosen from it alone opens the KJV for a phone we are about to speak Arabic to.
    *  See `corpusRoleFor`. */
   boot(
-    opts: { deferRnd?: boolean; locale?: string; lang?: string; textFont?: string } = {},
+    opts: { deferRnd?: boolean; locale?: string; lang?: string; sharedLang?: string; textFont?: string } = {},
   ): Promise<BootInfo> {
     const base = new URL(import.meta.env.BASE_URL, location.href).href;
     // Armed for the whole boot, rearmed by every message, dropped when boot settles
@@ -248,6 +248,11 @@ export class EngineRpc {
       textFont: opts.textFont ?? DEFAULT_FONT,
       deferRnd: opts.deferRnd === true,
       locale: opts.locale ?? "",
+      // A `?lang=` off the link that opened this visit. Separate from `lang`,
+      // which is what this DEVICE resolved last time: one is a choice made for
+      // the reader, the other a memory of what they were given, and conflating
+      // them would freeze a device-resolved language into a stored setting.
+      sharedLang: opts.sharedLang ?? "",
       // From `localStorage`, which only this thread can read. Stage 1 uses it to
       // inflate one corpus instead of every one; see `corpusRoleFor`.
       lang: opts.lang ?? "",

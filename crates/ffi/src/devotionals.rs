@@ -114,7 +114,7 @@ fn wire_section(s: &devotional::Section) -> WireSection {
 
 /// The booklet's name in `lang`, or its id when the catalogue carries no text at
 /// all: every list shows a name, so it must never be blank.
-fn booklet_name(d: &Devotional, lang: &str) -> String {
+pub(crate) fn booklet_name(d: &Devotional, lang: &str) -> String {
     d.text(lang).map(|t| t.name.clone()).unwrap_or_else(|| d.id.clone())
 }
 
@@ -178,9 +178,9 @@ pub unsafe extern "C" fn plumbline_engine_devotionals_json(
         let runs = e.home.as_ref().map(|h| devotional::load_runs(h).0).unwrap_or_default();
         out_json(&WireDevotionals {
             running: runs.iter().filter_map(|r| running_state(r, catalogue, lang, today)).collect(),
-            // Only booklets written in `lang` are offered, the same gate the first-run welcome
-            // uses (`i18n::Lang::has_native_intros`). `running` above is deliberately built
-            // from the UNfiltered catalogue: taking a booklet off the shelf must not take it
+            // Only booklets written in `lang` are offered — the gate the share palette
+            // reads to mark one "coming soon". `running` above is deliberately built from
+            // the UNfiltered catalogue: taking a booklet off the shelf must not take it
             // out of the hands of a reader who started it and then switched language.
             catalogue: catalogue
                 .iter()

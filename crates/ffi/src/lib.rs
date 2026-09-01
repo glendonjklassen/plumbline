@@ -2645,12 +2645,12 @@ pub unsafe extern "C" fn plumbline_engine_chord_map_json(engine: *const Plumblin
     })
 }
 
-/// One laid-out page of the constellation (the weave-library overview popup): lanes with nodes
-/// + edges as fractions, plus the pin/paging state resolved into a caption. The shell holds
-/// the transient `page` and `pins` (weave indices, the handles the lanes carry) and passes
-/// them in; everything derived — usable filter, largest-first order, per-verse degree, jitter,
-/// lane assignment, paging — lives here. `pins_json` is a JSON array of weave indices (e.g.
-/// `"[3,7]"`); null / empty / malformed means no pins. Never null on a live engine.
+/// One laid-out page of the constellation (the weave-library overview popup): lanes with
+/// nodes + edges as fractions, plus the pin/paging state resolved into a caption. The shell
+/// holds the transient `page` and `pins` (weave indices, the handles the lanes carry) and
+/// passes them in; everything derived — usable filter, largest-first order, per-verse degree,
+/// jitter, lane assignment, paging — lives here. `pins_json` is a JSON array of weave indices
+/// (e.g. `"[3,7]"`); null / empty / malformed means no pins. Never null on a live engine.
 ///
 /// # Safety
 /// `engine` is a live engine (or null → null); `pins_json` is null or valid
@@ -2939,9 +2939,26 @@ impl PanelSource for PlumblineEngine {
     fn word_usage(&self, word: &str, scope: &str, page: u32) -> Option<panel::WordUsageView> {
         let ix = self.search_ix_ready()?;
         let folded = search::fold_word(word);
-        let all = ix.word_verses(&folded);
-        let key = folded.clone();
-        Some(usage_over(&self.corpus, all, scope, page, folded, &move |t| search::fold_word(&t.word) == key))
+        // "rulers" answers with "ruler" too. The stemmer and the stem table are
+        // the search's own (`SearchIx::stem_group`, the variant tier's), so this
+        // screen and a search for the same word agree about what a form is.
+        //
+        // ENGLISH ONLY, deliberately. `stem_word` is English suffix rules —
+        // possessive, plural, -ing/-ed — and the index applies it to whatever
+        // corpus is loaded. On Arabic, Hindi and Chinese it is a no-op (nothing
+        // matches those suffixes), but on German and French it fires on a quarter
+        // of the vocabulary and merges words that are not forms of each other.
+        // A reader of those gets exact matches, which is the honest answer until
+        // a stemmer for their language exists.
+        let (all, group) = if self.is_kjv_text() {
+            let words: std::collections::HashSet<String> = ix.stem_group(&folded).iter().cloned().collect();
+            (ix.stem_verses(&folded), words)
+        } else {
+            (ix.word_verses(&folded).to_vec(), std::collections::HashSet::from([folded.clone()]))
+        };
+        // Membership rather than re-stemming per token: the group is fixed for
+        // the whole card, and this runs over every token of every verse painted.
+        Some(usage_over(&self.corpus, &all, scope, page, folded, &move |t| group.contains(&search::fold_word(&t.word))))
     }
     fn code_usage(&self, code: &str, scope: &str, page: u32) -> Option<panel::WordUsageView> {
         let ix = self.search_ix_ready()?;

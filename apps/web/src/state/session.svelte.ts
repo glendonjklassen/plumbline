@@ -11,7 +11,16 @@ import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "../engine/fonts.gener
 import { EngineRpc, type BootInfo } from "../engine/worker-client";
 import { dayStamp, localDay, nowStamp } from "../engine/StudyEngine";
 import { fontStackFor, setReaderFont } from "../reader/measure";
-import { cleanChurch, clockLabel, PWA_URL, shareUrl, type Church } from "../shell/church";
+import {
+  cleanChurch,
+  clockLabel,
+  PWA_URL,
+  REF_SHAPE,
+  shareUrl,
+  type Church,
+  type SharePreset,
+  type ShareTarget,
+} from "../shell/church";
 import { lang, t, readerFace } from "../lib/i18n.svelte";
 
 export interface PaneState {
@@ -265,7 +274,6 @@ export class Session {
    *  fresh by each ReaderPane for the connectors overlay + canon pins. */
   paneVerseGeom = $state<Map<number, { y: number; h: number }>[]>([]);
   toast = $state<string | null>(null);
-  showFirstRun = $state(false);
   showShortcuts = $state(false);
   /** Open context menu (verse actions), positioned at client coords. */
   contextMenu = $state<{ x: number; y: number; refKey: string } | null>(null);
@@ -439,8 +447,6 @@ export class Session {
    * `keyof Session` is the point of the `satisfies`: a typo'd field name would
    * otherwise assign a brand-new property and silently stop closing a surface.
    *
-   * Not showFirstRun: a reader who has never chosen a path must not be able to
-   * tab past the question. It closes by being answered.
    */
   static readonly TRANSIENT = [
     ["screen", "read"],
@@ -456,7 +462,6 @@ export class Session {
     ["memorizePassageFrom", null],
     ["markReadFor", null],
     ["bookNavFor", null],
-    ["reopenIntro", null],
     ["showHistory", false],
     ["showSettings", false],
     ["showShortcuts", false],
@@ -513,7 +518,6 @@ export class Session {
     else if (this.tagPickFor) this.tagPickFor = null;
     else if (this.tagWeaveFor !== null) this.tagWeaveFor = null;
     else if (this.memorizePassageFrom) this.memorizePassageFrom = null;
-    else if (this.reopenIntro) this.reopenIntro = null;
     else if (this.showSettings) this.showSettings = false;
     else if (this.showHistory) this.showHistory = false;
     else if (this.showShortcuts) this.showShortcuts = false;
@@ -1176,29 +1180,151 @@ export class Session {
     return shareUrl(PWA_URL, this.church);
   }
 
-  /** The link Present hands over: [[shareLink]] plus, by default, a marker that
-   *  opens the recipient's welcome on the new-believer path, Present being the
-   *  screen you show someone face to face. Settings can turn that off; the
-   *  ordinary Share never carries it. */
+  /** The link Present hands over — the same one Share does. Present used to mark
+   *  it "for a new believer"; personas are gone, so a link handed over face to
+   *  face is an ordinary link. */
   get presentShareLink(): string {
-    return shareUrl(PWA_URL, this.church, {
-      startAsNewBeliever: this.config.presentSharesAsNew !== false,
+    return shareUrl(PWA_URL, this.church);
+  }
+
+  /** The palette's live draft on the Share screen: what the custom link will
+   *  carry. Not persisted — a share is a thing you do once, and a remembered
+   *  half-built link is one you hand over by accident on the next visit.
+   *
+   *  `target` is single-valued because a recipient lands on ONE thing. The value
+   *  fields are kept alongside it rather than collapsed into one, so switching
+   *  from a thread to a verse and back does not make the sender re-pick the
+   *  thread; only the field `target` names reaches the link. */
+  shareDraft = $state<{
+    target: ShareTarget;
+    thread: string;
+    devotional: string;
+    at: string;
+    lang: string;
+    church: boolean;
+  }>({ target: "app", thread: "", devotional: "", at: "", lang: "", church: true });
+
+  /** What the palette's draft builds — the QR, the share sheet and the readout
+   *  all read this one derived value, so they cannot show three different links.
+   *  A default draft is exactly [[shareLink]]. */
+  get customShareLink(): string {
+    const d = this.shareDraft;
+    const at = d.at.trim();
+    return shareUrl(PWA_URL, d.church ? this.church : null, {
+      lang: d.lang || null,
+      thread: d.target === "thread" ? d.thread || null : null,
+      devotional: d.target === "devotional" ? d.devotional || null : null,
+      // A verse travels only once it is SHAPED like one: a half-typed "John 3"
+      // must not quietly become part of the link behind the QR.
+      at: d.target === "verse" && REF_SHAPE.test(at) ? at : null,
     });
   }
 
-  /** This session was opened from a link that said "for a new believer". */
-  startAsNewBeliever = false;
-
-  /** Re-showing the welcome a reader was given, from the top bar. Holds which
-   *  page to show; null when closed. The first-run flow is separate
-   *  (`showFirstRun`) — this one changes no settings, it just reads. */
-  reopenIntro = $state<"new" | "curious" | null>(null);
-  /** Which welcome this reader saw, if any (persisted, so the button is there
-   *  on every launch — not only the one where they chose it). */
-  get intro(): "new" | "curious" | null {
-    const v = this.config.intro;
-    return v === "new" || v === "curious" ? v : null;
+  /** What a shared link may carry, for the language the draft is aimed at.
+   *
+   *  Two languages: the draft's (what is AVAILABLE) and this reader's (what the
+   *  labels are IN). The sender is the one reading this list, so it comes back in
+   *  their language whatever language they are aiming the link at. */
+  shareOptions(): any {
+    return this.q("shareOptions", this.shareDraft.lang || lang(), lang());
   }
+
+  /** The reader's saved share-link presets, newest last. Stored in the config —
+   *  the same file the church and the gospel thread live in — so they survive a
+   *  relaunch and ride along in a backup. */
+  get sharePresets(): SharePreset[] {
+    return (this.config.sharePresets ?? []) as SharePreset[];
+  }
+
+  /** Save the current draft under `name`, replacing any preset of that name.
+   *
+   *  Stores the CHOICES, not the built link: a stored URL would freeze the church
+   *  as it read today, and freeze availability as it stands today. Only the
+   *  destination the draft is actually pointing at is kept — the draft holds the
+   *  other two so switching back and forth does not lose them, but a preset that
+   *  remembered all three would be a preset with no single answer. */
+  savePreset(name: string): Promise<void> {
+    const d = this.shareDraft;
+    const at = d.at.trim();
+    const preset: SharePreset = {
+      name,
+      thread: d.target === "thread" ? d.thread : "",
+      devotional: d.target === "devotional" ? d.devotional : "",
+      at: d.target === "verse" && REF_SHAPE.test(at) ? at : "",
+      lang: d.lang,
+      church: d.church,
+    };
+    // Replaced IN PLACE when the name already exists, so re-saving a preset does
+    // not shuffle the row the reader is looking at.
+    const next = [...this.sharePresets];
+    const i = next.findIndex((p) => p.name === name);
+    if (i >= 0) next[i] = preset;
+    else next.push(preset);
+    this.config.sharePresets = next;
+    return this.#writePresets();
+  }
+
+  /** Forget a preset by name. */
+  deletePreset(name: string): Promise<void> {
+    this.config.sharePresets = this.sharePresets.filter((p) => p.name !== name);
+    return this.#writePresets();
+  }
+
+  /** Persist a preset edit NOW, and answer when the worker has it.
+   *
+   *  Not the debounced [[saveConfig]]: the reader pressed a button called Save,
+   *  and a 300 ms window in which closing the tab loses it is not what that word
+   *  means. Awaited by the caller so the "saved" toast is the truth. */
+  async #writePresets(): Promise<void> {
+    this.flushConfig();
+    await this.rpc.flush();
+  }
+
+  /** Load a preset into the draft. The target is DERIVED from which destination
+   *  the preset carries rather than stored beside it: two fields that must agree
+   *  are one fact, and a preset whose stored target named an empty field would
+   *  restore a palette pointing at nothing. */
+  applyPreset(p: SharePreset): void {
+    this.shareDraft = {
+      target: p.thread ? "thread" : p.devotional ? "devotional" : p.at ? "verse" : "app",
+      thread: p.thread ?? "",
+      devotional: p.devotional ?? "",
+      at: p.at ?? "",
+      lang: p.lang ?? "",
+      church: p.church !== false,
+    };
+  }
+
+  /** Open a thread a shared link named, if this install has it.
+   *
+   *  Present, not the study screen: a shared thread is one someone meant to be
+   *  walked through a passage at a time. The name is resolved against the LOADED
+   *  threads exactly as [[gospelThread]] resolves a configured one, so a
+   *  stranger's `?thread=` cannot put the reader on an empty surface. */
+  async openSharedThread(name: string): Promise<void> {
+    const threads = (await this.fetchQ("threads").catch(() => null))?.threads ?? [];
+    if (!threads.some((t: { name: string }) => t.name === name)) return;
+    this.presentThreadName = name;
+    this.showPresent = true;
+  }
+
+  /** Open a devotional a shared link named, starting it if it is not running.
+   *
+   *  Handing someone a booklet STARTS it for them — this is what the welcome's
+   *  new-believer path used to do, and a shared link is now how a booklet is put
+   *  into someone's hands. Checked against the CATALOGUE, which the engine has
+   *  already filtered to the booklets written in this reader's language, so a
+   *  link naming an untranslated one lands them in the app rather than on pages
+   *  they cannot read. Already running is left alone: restarting would throw
+   *  away their banked days. */
+  async openSharedDevotional(id: string): Promise<void> {
+    const wire = await this.fetchQ("devotionals", lang(), localDay()).catch(() => null);
+    if (!(wire?.catalogue ?? []).some((b: { id: string }) => b.id === id)) return;
+    const running = ((wire?.running ?? []) as { id: string; day?: number }[]).find((r) => r.id === id);
+    if (!running) await this.author("devotionalStart", id, nowStamp());
+    this.openDevotional(id, typeof running?.day === "number" ? running.day : 1);
+  }
+
   setChurch(c: Church): void {
     const cleaned = cleanChurch(c);
     // One stored number: the church's meeting time IS `config.sundayService`, so
@@ -1257,13 +1383,6 @@ export class Session {
     } catch {
       /* no storage: the home config stands as loaded */
     }
-    this.showFirstRun = !!loaded.firstRun;
-
-    // The new-believer booklet's retry: a first run that finished before the
-    // pack's text stage landed leaves `devotionalSeeded` false with nothing
-    // running. A no-op for everyone else, including anyone who started it and
-    // stopped it — the flag is set by then. Fire-and-forget.
-    if (this.config.intro === "new" && !this.config.devotionalSeeded) void this.seedDevotional();
 
     // Which seating is this? Asked of the engine with the reader's own local date
     // and hour, then used to prefer that slot's saved position over the plain
@@ -1589,6 +1708,19 @@ export class Session {
       return Session.GOSPEL_THREAD_DEFAULT;
     }
     return chosen;
+  }
+
+  /** Write the reader's config once, on the boot that found none.
+   *
+   *  The welcome used to do this: choosing a path wrote the config on the way
+   *  out, so a fresh install always had one. With no first run nothing writes it
+   *  until the reader changes a setting, which left a brand-new install with no
+   *  config file at all — and with the analysis tiers now defaulting ON, no
+   *  record of that default either. Written once so the defaults this build
+   *  chose are the ones a later build reads back, instead of being re-derived
+   *  from whatever the defaults have become by then. */
+  writeConfigOnFirstBoot(firstRun: boolean): void {
+    if (firstRun) this.flushConfig();
   }
 
   /** Save immediately (tab hide/close) — no debounce. */
@@ -2000,36 +2132,6 @@ export class Session {
     if (this.conceptStudyId === id) this.exitConceptStudy();
     const err = await this.author("planStop", id);
     this.showToast(err ?? t("plans.stopped", { name }));
-  }
-
-  /** Start the bundled new-believer booklet — EXACTLY ONCE, ever.
-   *
-   *  Called from two places on purpose. The welcome calls it as it hands over,
-   *  which is where it belongs; and boot calls it again for the reader whose
-   *  first run finished before the pack's text stage landed, because the engine
-   *  refuses a booklet its catalogue does not carry yet and that first attempt
-   *  simply fails.
-   *
-   *  `config.devotionalSeeded` is what makes the retry safe. It is set once the
-   *  start SUCCEEDS, and it is the difference between "never managed to start
-   *  it" and "started it, and the reader then stopped it" — without it, a
-   *  booklet someone deliberately threw away would come back on every launch,
-   *  which is the bug `meta:stockSeeded` exists to prevent for the stock set.
-   *
-   *  WHICH booklet comes off the catalogue's own `newBeliever` flag, never an
-   *  id written in here: a second booklet must not be able to become the one a
-   *  new believer is handed by shipping alphabetically earlier. */
-  async seedDevotional(): Promise<void> {
-    if (this.config.devotionalSeeded) return;
-    const wire = await this.rpc.call("devotionals", lang(), localDay()).catch(() => null);
-    const booklet = ((wire?.catalogue ?? []) as any[]).find((b) => b.newBeliever);
-    // No catalogue yet (the pack is still landing) — leave the flag unset so
-    // the next boot tries again.
-    if (!booklet) return;
-    const already = ((wire?.running ?? []) as any[]).some((r) => r.id === booklet.id);
-    if (!already && (await this.author("devotionalStart", booklet.id, nowStamp()))) return;
-    this.config.devotionalSeeded = true;
-    this.flushConfig();
   }
 
   /** Start a devotional. No class exclusivity and no confirm: booklets do not

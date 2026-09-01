@@ -63,28 +63,23 @@ typedef struct PlumblineLayoutConfig {
   uint32_t verse_numbers;
 } PlumblineLayoutConfig;
 
-// Advance-width callback: given the caller's context pointer and a
-// NUL-terminated UTF-8 run of text, return its width in device pixels in the
-// reader's scripture font. The shell backs this with its native text stack so
-// the hit regions this crate computes line up exactly with painted glyphs.
-//
-// Nullable (`Option<fn>`): a null callback makes layout return null.
+// Advance-width callback: given the caller's context pointer and a NUL-terminated UTF-8 run
+// of text, return its width in device pixels in the reader's scripture font — backed by the
+// caller's own text stack, so the hit regions this crate computes line up with painted
+// glyphs. Nullable (`Option<fn>`): a null callback makes layout return null.
 //
 // # Contract — the callback MUST be total
-// It must **not** throw or panic across the boundary and should return a **finite,
-// non-negative** width. This crate's [`catch_unwind`] firewall only catches *Rust* panics; a
-// foreign exception unwinding out of this callback is undefined behaviour. A returned
-// `NaN`/negative is clamped to `0.0` here (a degraded but safe layout) rather than corrupting
-// line-breaking.
+// It must not throw or panic across the boundary and should return a finite, non-negative
+// width. The [`catch_unwind`] firewall catches only *Rust* panics; a foreign exception
+// unwinding out of this callback is undefined behaviour. A `NaN`/negative is clamped to `0.0`
+// here rather than corrupting line-breaking.
 //
 // # Contract — the config must describe the font the callback measures with
 // Widths are memoized on this side of the ABI (see [`font_identity`]) and nothing in this ABI
 // names a typeface, so a shell that changes the font the callback measures with must also
-// move `line_height` or `space_width` in the [`PlumblineLayoutConfig`] it passes. A shell
-// that derives both by measuring in the current font satisfies this by construction (the
-// web's `space_width` is `measure(" ")` through this very callback). A shell that switched
-// typeface while holding both bit-identical would be handed the previous typeface's widths: a
-// mis-laid-out chapter.
+// move `line_height` or `space_width` in the [`PlumblineLayoutConfig`] it passes. Deriving
+// both by measuring in the current font satisfies this by construction; a shell that switched
+// typeface while holding both bit-identical would be handed the previous typeface's widths.
 typedef float (*PlumblineMeasureFn)(void *ctx, const char *text);
 
 #ifdef __cplusplus
@@ -667,12 +662,12 @@ char *plumbline_engine_hymn_json(const struct PlumblineEngine *engine,
 // `engine` is a live engine (or null → null).
 char *plumbline_engine_chord_map_json(const struct PlumblineEngine *engine);
 
-// One laid-out page of the constellation (the weave-library overview popup): lanes with nodes
-// + edges as fractions, plus the pin/paging state resolved into a caption. The shell holds
-// the transient `page` and `pins` (weave indices, the handles the lanes carry) and passes
-// them in; everything derived — usable filter, largest-first order, per-verse degree, jitter,
-// lane assignment, paging — lives here. `pins_json` is a JSON array of weave indices (e.g.
-// `"[3,7]"`); null / empty / malformed means no pins. Never null on a live engine.
+// One laid-out page of the constellation (the weave-library overview popup): lanes with
+// nodes + edges as fractions, plus the pin/paging state resolved into a caption. The shell
+// holds the transient `page` and `pins` (weave indices, the handles the lanes carry) and
+// passes them in; everything derived — usable filter, largest-first order, per-verse degree,
+// jitter, lane assignment, paging — lives here. `pins_json` is a JSON array of weave indices
+// (e.g. `"[3,7]"`); null / empty / malformed means no pins. Never null on a live engine.
 //
 // # Safety
 // `engine` is a live engine (or null → null); `pins_json` is null or valid
@@ -1307,8 +1302,8 @@ char *plumbline_engine_reading_forget(struct PlumblineEngine *engine,
                                       const char *book,
                                       uint32_t chapter);
 
-// Build the link this reader hands over, from `{base?, church?,
-// startAsNewBeliever?, at?}` (all optional — `{}` is the plain app link).
+// Build the link this reader hands over, from `{base?, church?, at?, lang?,
+// thread?, devotional?}` (all optional — `{}` is the plain app link).
 //
 // Answers `{url, base, church, hasChurch, title, siteUrl}`: the link for the QR
 // and the share sheet, the church as the core normalized it, and the label /
@@ -1320,6 +1315,35 @@ char *plumbline_engine_reading_forget(struct PlumblineEngine *engine,
 // # Safety
 // `request` is null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_share_url_json(const char *request);
+
+// What a shared link may carry: every shipped language, the four first-run
+// paths, the shareable threads and the devotional booklets — each with whether
+// it exists in the chosen language yet.
+//
+// TWO languages, because a share palette has two of them and they are almost
+// never the same one:
+//
+// - `lang` is what the RECIPIENT will read in — the sender's choice for someone
+//   else, and what every `available` here is about.
+// - `ui_lang` is what the SENDER reads, and every `label` comes back in it.
+//
+// Conflating them produces a picker whose own options the person using it
+// cannot read: an English sender aiming a link at Arabic was being offered
+// "متسائل عن الكتاب المقدس — Coming soon". The sender has to understand the
+// choice; the recipient's language is what the choice is ABOUT. `ui_lang` null
+// reads as `lang`, which is the right default for the common case where a
+// reader shares in their own language.
+//
+// Engine-taking, unlike [`plumbline_share_url_json`], because threads and
+// booklets are data an engine has loaded. Building a link stays engine-free.
+//
+// Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_share_options_json(const struct PlumblineEngine *engine,
+                                          const char *lang,
+                                          const char *ui_lang);
 
 #ifdef __cplusplus
 }  // extern "C"

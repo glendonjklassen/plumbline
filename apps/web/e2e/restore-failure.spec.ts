@@ -21,12 +21,6 @@ test.setTimeout(240_000); // a boot, a failed restore, and the reload after it
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
-  const established = page.getByRole("button", { name: "Established believer" });
-  await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await established.isVisible().catch(() => false)) {
-    await established.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 

@@ -136,10 +136,7 @@
   const firstRef = $derived(entries[0]?.ref ?? null);
   /** The app link plus the verse this thread opens on. */
   const passageLink = $derived(
-    shareUrl(PWA_URL, s.church, {
-      startAsNewBeliever: s.config.presentSharesAsNew !== false,
-      at: firstRef,
-    }),
+    shareUrl(PWA_URL, s.church, { at: firstRef }),
   );
 
   async function copyPassages(): Promise<void> {

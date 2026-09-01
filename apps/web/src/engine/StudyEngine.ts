@@ -724,6 +724,24 @@ export class StudyEngine {
     );
   }
 
+  // ── sharing ───────────────────────────────────────────────────────────────
+  /** What a shared link may carry, for the language it will be READ in:
+   *  `{lang, languages, paths, threads, devotionals}`, each option carrying
+   *  whether it exists in that language yet (`available`).
+   *
+   *  TWO languages, and they are almost never the same one: `lang` is the
+   *  RECIPIENT's, which every `available` is about; `uiLang` is the SENDER's,
+   *  which every `label` comes back in. A picker whose options the person using
+   *  it cannot read is not a picker. Asked again whenever the target changes, not
+   *  once per session. Unavailable options are RETURNED, not filtered: the
+   *  palette shows them as coming soon.
+   *
+   *  Engine-taking, unlike `shareLink`, because threads and booklets are loaded
+   *  data. Building the link itself stays engine-free. */
+  shareOptions(lang: string, uiLang: string): any {
+    return this.#json("plumbline_engine_share_options_json", lang || "en", uiLang || lang || "en");
+  }
+
   // ── devotionals ───────────────────────────────────────────────────────────
   /** `{running:[…], catalogue:[…]}` — the reader's booklets with their open day,
    *  and the catalogue every picker offers.
@@ -801,7 +819,15 @@ export function configSave(w: WasmEngine, config: unknown): string | null {
  *  covers the whole ABI and lets a test ask the engine what the answer should be. */
 export function shareLink(
   w: WasmEngine,
-  request: { base?: string; church?: { name: string; info: string; url: string }; startAsNewBeliever?: boolean; at?: string },
+  request: {
+    base?: string;
+    church?: { name: string; info: string; url: string };
+    at?: string;
+    lang?: string;
+    thread?: string;
+    devotional?: string;
+    path?: string;
+  },
 ): any {
   const p = w.inStr(JSON.stringify(request));
   const s = w.takeStr((w.exports.plumbline_share_url_json as Function)(p) as number);

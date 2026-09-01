@@ -14,12 +14,6 @@ import { expect, test, type Page } from "@playwright/test";
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page).toHaveTitle("Plumbline Bible");
-  const established = page.getByRole("button", { name: "Established believer" });
-  await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await established.isVisible().catch(() => false)) {
-    await established.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
@@ -270,13 +264,7 @@ test.describe("a German reader", () => {
 
   test("is offered the canon's sections in German", async ({ page }) => {
     await page.goto("/");
-    const est = page.getByRole("button", { name: DE_CAT["intro.pathEstablished"] });
     const canvas = page.locator(".pane canvas").first();
-    await expect(est.or(canvas)).toBeVisible({ timeout: 90_000 });
-    if (await est.isVisible().catch(() => false)) {
-      await est.click();
-      await page.getByRole("button", { name: DE_CAT["intro.start"] }).click();
-    }
     await expect(canvas).toBeVisible({ timeout: 90_000 });
 
     await page.getByLabel(DE_CAT["common.openSearch"]).click();

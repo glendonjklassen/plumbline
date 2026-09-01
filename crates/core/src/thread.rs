@@ -22,6 +22,23 @@ pub type Span = (u16, u16);
 
 const FORMAT: &str = "overlay-thread-v1";
 
+/// The threads every install is seeded with, from `stock/threads/`.
+///
+/// This is what a SHARE may offer. A link carries a thread by NAME, and the only
+/// names the recipient is guaranteed to have are the ones their own install
+/// seeded — offering a thread the sender authored would build a link that lands
+/// on the plain app for everyone except the person who made it.
+///
+/// A list rather than a single name because the stock set is expected to grow.
+/// `stock_threads_are_the_shipped_set` holds it to `stock/threads/`, so adding a
+/// file there without adding it here fails rather than quietly staying
+/// unshareable.
+pub const STOCK_THREADS: [&str; 1] = ["Romans Road"];
+
+/// The thread "share the gospel" opens when the reader has not chosen another.
+/// The shell's `GOSPEL_THREAD_DEFAULT` is this same string.
+pub const GOSPEL_DEFAULT: &str = STOCK_THREADS[0];
+
 /// One passage on a thread: where it is, which words it covered (a snapshot),
 /// and an optional note.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -476,6 +493,41 @@ pub fn move_in_thread(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// [`STOCK_THREADS`] against the files actually in `stock/threads/`.
+    ///
+    /// The share palette offers exactly this list, so a thread added to the
+    /// stock set and not to the constant would ship as something every install
+    /// has and nobody can share. Reads the NAME out of each file rather than
+    /// its filename: the name is what a link carries, and `romans-road.json`
+    /// holding "Romans Road" is precisely the mapping that could drift.
+    ///
+    /// Skips when the tree is not beside the crate (a packaged crate has no
+    /// `stock/`), the same shape as the other repo-relative tests here.
+    #[test]
+    fn stock_threads_are_the_shipped_set() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../stock/threads");
+        if !dir.is_dir() {
+            eprintln!("no stock/threads beside the crate — skipping");
+            return;
+        }
+        let mut shipped: Vec<String> = std::fs::read_dir(&dir)
+            .expect("stock/threads")
+            .filter_map(|e| {
+                let path = e.ok()?.path();
+                (path.extension()? == "json").then_some(path)
+            })
+            .map(|p| {
+                let raw = std::fs::read_to_string(&p).expect("stock thread");
+                let v: Value = serde_json::from_str(&raw).expect("stock thread is JSON");
+                v["name"].as_str().expect("a stock thread has a name").to_string()
+            })
+            .collect();
+        shipped.sort();
+        let mut declared: Vec<String> = STOCK_THREADS.iter().map(|s| s.to_string()).collect();
+        declared.sort();
+        assert_eq!(shipped, declared, "stock/threads/ and thread::STOCK_THREADS disagree");
+    }
 
     const SAMPLE: &str = r#"{
       "format":"overlay-thread-v1","name":"Romans Road",

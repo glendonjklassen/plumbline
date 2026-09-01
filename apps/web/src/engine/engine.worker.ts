@@ -398,12 +398,21 @@ async function reconcilePack(): Promise<void> {
   // it. The same call decides what gets pinned below, so the sweep and the pin cannot
   // disagree about which files should be here.
   const mine = devicePackFiles(live, (f) => hasOptional(booted!.home, f));
-  // Not the other Bibles. They are in `mine` — the pin claims their URLs and prune
-  // keeps them — but they must not gate this sweep: ~9 MB against the base pack's
-  // ~200 KB of typical drift, and `fetchOtherCorpora` (which runs right after this) is
-  // their download path. Gating on them strands a slow or offline device's pin on the
-  // old release until every Bible has landed.
-  const gating = mine.filter((f) => f.stage !== "corpus");
+  // Not the other Bibles, and not the analysis pack. They are in `mine` — the pin
+  // claims their URLs and prune keeps them — but they must not gate this sweep:
+  // ~9 MB of corpora and ~3 MB of analysis against the base pack's ~200 KB of
+  // typical drift, and each has its own download path running alongside this one
+  // (`fetchOtherCorpora`, `loadRndChunked`). Gating on them strands a slow or
+  // offline device's pin on the old release until every last byte has landed.
+  //
+  // `analysis` joined `corpus` here when the tiers began defaulting ON: that made
+  // the analysis pack a background download on every device, which is exactly
+  // what the corpus carve-out is about. Before that it was fetched only where a
+  // reader had opted in, and a device that had it had it before the sweep ran.
+  // Gating on it also raced its own downloader — the sweep fetching a file
+  // `loadRndChunked` was already fetching failed verification and abandoned the
+  // whole re-pin, which is how a deploy left the reader stranded.
+  const gating = mine.filter((f) => f.stage !== "corpus" && f.stage !== "analysis");
   for (const f of gating) {
     const url = packFileUrl(f, live.version);
     if (await depotHas(url)) continue; // unchanged: same hash, same URL, already here
@@ -810,7 +819,12 @@ self.onmessage = async (ev: MessageEvent) => {
         // un-awaited; the await below still sees a failure. `loadFonts` swallows a
         // refused face itself, so this is only for a platform that throws elsewhere.
         void fonts.catch(() => {});
-        booted = await boot((p) => self.postMessage({ type: "progress", ...p }), m.locale ?? "", m.lang ?? "");
+        booted = await boot(
+          (p) => self.postMessage({ type: "progress", ...p }),
+          m.locale ?? "",
+          m.lang ?? "",
+          m.sharedLang ?? "",
+        );
         // Before the reply, and so before any layout op can be answered: measurement
         // must see the real metrics of the chosen face.
         const w0 = performance.now();
@@ -880,7 +894,13 @@ self.onmessage = async (ev: MessageEvent) => {
         // Resolved against the reader's setting and the device's locale by the core
         // (i18n::resolve). Here rather than as its own call for the palettes' reason:
         // this thread answers one thing at a time and no screen paints without it.
-        const i18n = i18nCatalog(booted.wasm, typeof cfg.language === "string" ? cfg.language : "", m.locale ?? "");
+        // `|| m.sharedLang` for the SAME reason `boot()` has it, and it has to be
+        // the same expression: the engine's own language and the shell's catalogue
+        // are two halves of one answer, and a boot that resolves them differently
+        // paints English chrome over a German Bible (or the reverse). The core
+        // resolves and validates both; this only has to ask the same question.
+        const chosenLang = typeof cfg.language === "string" && cfg.language ? cfg.language : (m.sharedLang ?? "");
+        const i18n = i18nCatalog(booted.wasm, chosenLang, m.locale ?? "");
         booted.trace.push(["boot reply extras (palettes + toc + i18n)", Math.round(performance.now() - x0)]);
         void backgroundLoad(machineOn, m.deferRnd === true);
         reply({

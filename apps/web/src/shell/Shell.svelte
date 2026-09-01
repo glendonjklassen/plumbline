@@ -34,7 +34,7 @@
   import TagWeave from "../study/TagWeave.svelte";
   import ShareScreen from "./ShareScreen.svelte";
   import SearchScreen from "./SearchScreen.svelte";
-  import { hasNativeIntros, t } from "../lib/i18n.svelte";
+  import { t } from "../lib/i18n.svelte";
   import { uiScale } from "../lib/uiScale";
   import { DEFAULT_FONT, FONT_SCALE } from "../engine/fonts.generated";
   import { getSession } from "../state/session.svelte";
@@ -427,17 +427,10 @@
 {#if s.menuOpen}
   <!-- The ≡ utilities, raised from the header OR any destination's ScreenBar,
        fixed to the top-right so it works over every screen. Utilities only — the
-       roles live in the bottom bar / browse row. Welcome is here for every
-       reader: an established believer never had `intro` set, so it falls back to
-       the new-believer welcome rather than disappearing. -->
+       roles live in the bottom bar / browse row. -->
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={() => (s.menuOpen = false)}></div>
   <div class="menu" role="menu" aria-label={t("common.menu")}>
-    <!-- Only where the welcome exists in this language, or a German menu reopens
-         English paragraphs. See i18n::Lang::has_native_intros. -->
-    {#if hasNativeIntros()}
-      <button onclick={go(() => (s.reopenIntro = s.intro ?? "new"))}>{t("shell.welcome")}</button>
-    {/if}
     <button onclick={go(() => (s.showHistory = true))}>{t("shell.history")}</button>
     <button onclick={go(() => (s.panel = { kind: "guide" }))}>{t("shell.guideAndAbout")}</button>
     <button onclick={go(() => (s.showShortcuts = true))}>{t("shell.shortcuts")}</button>

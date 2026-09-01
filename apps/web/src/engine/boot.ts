@@ -80,7 +80,12 @@ function manifestHasCorpus(manifest: PackManifest, role: string): boolean {
   return manifest.files.some((f) => f.role === role);
 }
 
-export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = ""): Promise<BootResult> {
+export async function boot(
+  onPhase: (p: BootPhase) => void,
+  locale = "",
+  lang = "",
+  sharedLang = "",
+): Promise<BootResult> {
   const trace: [string, number][] = [];
   // Deliberately not PERF-gated: the trace is a flight recorder, not a measurement.
   // The e2e suite asserts against it and `settleBackground` polls it, so every trace
@@ -121,7 +126,10 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
   // from whichever this boot loads from — deciding up front against a manifest not yet
   // read is how a boot skips every corpus, English included. The corpus arrives through
   // `also` because stage 1 fetches `text`, and other Bibles are not on that stage.
-  const corpusFor = (m: PackManifest) => corpusRoleFor(lang, locale, (role) => manifestHasCorpus(m, role));
+  // `sharedLang` is last: it only decides for a reader who has none of their own,
+  // and `lang` (this device's last resolved code) is empty exactly then.
+  const corpusFor = (m: PackManifest) =>
+    corpusRoleFor(lang || sharedLang, locale, (role) => manifestHasCorpus(m, role));
   const stage1 = (m: PackManifest) => {
     const want = corpusFor(m);
     return {
@@ -186,7 +194,15 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
   // this point picks nothing. `configLoad` is engine-independent, so it can answer
   // before there is an engine.
   const cfg = configLoad(wasm) ?? {};
-  i18nSetLanguage(wasm, typeof cfg.language === "string" ? cfg.language : "", locale);
+  // A shared link's `?lang=` is a CHOICE made for this reader, so it is handed to
+  // the engine the way the reader's own setting is — but only when they have not
+  // made one themselves. Someone who has already chosen a language keeps it: a
+  // link is allowed to introduce the app in a language, not to re-language an
+  // app someone is already reading. (The church parameter's rule, for the same
+  // reason.) The engine resolves and validates; an unshipped code falls back
+  // exactly as an unshipped setting would.
+  const chosen = typeof cfg.language === "string" ? cfg.language : "";
+  i18nSetLanguage(wasm, chosen || sharedLang, locale);
 
   onPhase({ phase: "open" });
   // Yield so the "opening" progress message lands before the synchronous parse.

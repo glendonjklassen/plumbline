@@ -84,17 +84,56 @@ export function churchFromQuery(search: string): Church | null {
   return hasChurch(c) ? c : null;
 }
 
+/** The most presets kept — `core::config::PRESET_CAP`. The core enforces it on
+ *  every load and save; the shell checks it too so a reader is told "no room"
+ *  before they type a name, rather than watching a save vanish. */
+export const PRESET_CAP = 24;
+
+/** One saved share-link preset — the web mirror of `core::config::SharePreset`.
+ *  The reader's CHOICES, not a built URL: see the core type for why. */
+export interface SharePreset {
+  name: string;
+  thread?: string;
+  devotional?: string;
+  at?: string;
+  lang?: string;
+  /** Absent reads as TRUE, matching the core's `serde` default. */
+  church?: boolean;
+}
+
+/** What a shared link lands the recipient on. Not a wire value — the link says
+ *  which parameter it carries and the app infers the rest — but the palette needs
+ *  one name for "which of these four is the sender choosing". */
+export type ShareTarget = "app" | "thread" | "devotional" | "verse";
+
+/** The shape a refKey has ("Ps 23:1"), shared by the palette (which refuses to
+ *  put a half-typed verse in a link) and `sharedAtRef` (which refuses to open
+ *  one). Both are the same question asked at the two ends of the same link. */
+export const REF_SHAPE = /^[1-3]?[A-Za-z]{2,6} \d{1,3}:\d{1,3}$/;
+
+/** What a shared link says beyond the church itself — the core's
+ *  `church::ShareOpts`, field for field. */
+export interface ShareOpts {
+  at?: string | null;
+  /** The language the RECIPIENT reads in, which is the sender's choice and not
+   *  the sender's own language. */
+  lang?: string | null;
+  /** A thread the recipient lands on, by name. */
+  thread?: string | null;
+  /** A devotional booklet the recipient lands on, by id. */
+  devotional?: string | null;
+}
+
+/** The longest a thread name or devotional id may be in a link — the core's
+ *  `church::TARGET_MAX`. */
+const TARGET_MAX = 120;
+
 /** A share link for `base` carrying `church` (plain `base` when unset).
- *
- *  `startAsNewBeliever` marks the link as one handed to someone meeting the
- *  Bible — the recipient's welcome opens on the new-believer path instead of
- *  asking them to pick. ONLY the Present screen sets it: an ordinary share
- *  goes to whoever, often someone from the same church, and must stay an
- *  ordinary link. */
+ */
 export function shareUrl(
   base: string,
   church: Church | undefined | null,
-  opts: { startAsNewBeliever?: boolean; at?: string | null } = {},
+  opts: ShareOpts = {},
 ): string {
   const u = new URL(base);
   // Cleaned here, not left to the caller, so the web and the Kotlin `shareUrl`
@@ -108,17 +147,23 @@ export function shareUrl(
     if (c.service !== null) u.searchParams.set("churchService", String(c.service));
     if (c.url) u.searchParams.set("churchUrl", c.url);
   }
-  if (opts.startAsNewBeliever) u.searchParams.set("start", "new");
+  // The parameter order below is the core's order, because the vector table pins
+  // the whole URL string, not just its parts.
   // `at` opens the recipient straight at a verse — what a shared PASSAGE means.
   // A refKey ("Ps 23:1") is the frozen compact form, so it travels as-is.
   const at = (opts.at ?? "").trim();
   if (at) u.searchParams.set("at", at);
+  // The palette's destinations. Each is a name or code the RECIPIENT's app
+  // resolves against what it actually has, so a link asserts nothing about the
+  // install that opens it.
+  const lang = (opts.lang ?? "").trim();
+  if (lang) u.searchParams.set("lang", lang);
+  const thread = (opts.thread ?? "").trim();
+  if (thread) u.searchParams.set("thread", thread);
+  const devotional = (opts.devotional ?? "").trim();
+  if (devotional) u.searchParams.set("devotional", devotional);
   return u.href;
 }
-
-/** Whether this link asks the welcome to open on the new-believer path. */
-export const startsAsNewBeliever = (search: string): boolean =>
-  new URLSearchParams(search).get("start") === "new";
 
 /** The verse a link opens at (`?at=Ps 23:1`), or null. Shape-checked here so a
  *  stranger's query string can't send the reader somewhere absurd — the engine
@@ -126,7 +171,39 @@ export const startsAsNewBeliever = (search: string): boolean =>
 export function sharedAtRef(search: string): string | null {
   const raw = new URLSearchParams(search).get("at")?.trim();
   if (!raw) return null;
-  return /^[1-3]?[A-Za-z]{2,6} \d{1,3}:\d{1,3}$/.test(raw) ? raw : null;
+  return REF_SHAPE.test(raw) ? raw : null;
+}
+
+/** The language a link asks to be read in (`?lang=pa`), or null.
+ *
+ *  SHAPE-checked only, not checked against the registry: the shipped list lives
+ *  in the core, and `plumbline_i18n_set_language` already resolves a code (and
+ *  falls back) as the authority. Duplicating the nine codes here would be a
+ *  second list to keep in step for no gain — this only has to refuse the things
+ *  that are not language codes at all, so a stranger's value never reaches the
+ *  engine as a "choice" the reader is then stuck in. */
+export function sharedLang(search: string): string | null {
+  const raw = new URLSearchParams(search).get("lang")?.trim();
+  if (!raw) return null;
+  return /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/i.test(raw) ? raw : null;
+}
+
+/** The thread a link opens on (`?thread=Romans+Road`), or null. A NAME: the
+ *  caller resolves it against the threads their own install has, exactly as
+ *  `gospelThread` resolves a configured name. */
+export const sharedThread = (search: string): string | null => sharedTarget(search, "thread");
+
+/** The devotional booklet a link opens on (`?devotional=new-believer-30`), or
+ *  null. An id, resolved by the caller against the booklets they have. */
+export const sharedDevotional = (search: string): string | null => sharedTarget(search, "devotional");
+
+/** A named destination off a query string: trimmed, length-capped, non-empty.
+ *  Counted in CODE POINTS like `cleanChurch`, so the cap cannot split a
+ *  character and leave a lone surrogate on screen. */
+function sharedTarget(search: string, key: string): string | null {
+  const raw = new URLSearchParams(search).get(key)?.trim();
+  if (!raw || [...raw].length > TARGET_MAX) return null;
+  return raw;
 }
 
 /** The destination a launcher shortcut opens (`?open=review`), or null.
@@ -157,11 +234,34 @@ export function safeChurchUrl(url: string | null | undefined): string | null {
   if (!t || t.length > 800) return null;
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f]/.test(t)) return null;
-  const m = /^(https?):\/\/([^/?#]*)/i.exec(t);
+  // A scheme is SUPPLIED when the reader did not type one — a church writes its
+  // address the way it is on the sign. `https`, never `http`: guessing the
+  // insecure one on someone's behalf is a guess that can be downgraded. Twin of
+  // `church::safe_url`; the vector table pins the two together.
+  const scheme = schemeOf(t);
+  if (scheme !== null && !/^https?$/i.test(scheme)) return null;
+  // Only where there is none at all: prepending to `javascript:alert(1)` would
+  // turn a refusal into a link.
+  const full = scheme === null ? `https://${t}` : t;
+  const m = /^(https?):\/\/([^/?#]*)/i.exec(full);
   if (!m) return null;
   // Anything before an `@` in the authority is userinfo, not the host.
-  const host = m[2].split("@").pop();
-  return host ? t : null;
+  const host = (m[2].split("@").pop() ?? "").split(":")[0];
+  // A DOT and no spaces, which typing `http://` used to stand in for: without it
+  // the church NAME in the website field becomes `https://Grace Bible Church`.
+  if (!host || !host.includes(".") || host.includes(" ")) return null;
+  return full;
+}
+
+/** The scheme `t` names, or null when it names none. `host:8080` only looks like
+ *  one, so a numeric remainder is a port. Twin of `church::scheme_of`. */
+function schemeOf(t: string): string | null {
+  const i = t.indexOf(":");
+  if (i <= 0) return null;
+  const head = t.slice(0, i);
+  if (!/^[A-Za-z][A-Za-z0-9+.-]*$/.test(head)) return null;
+  if (/^[0-9]/.test(t.slice(i + 1))) return null;
+  return head;
 }
 
 /** What the reader sees on the Church button when there is no site to open:

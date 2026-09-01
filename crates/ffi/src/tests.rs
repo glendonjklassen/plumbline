@@ -7,8 +7,23 @@ use super::*;
 // The reading-map and plan endpoints are their own modules; `use super::*` does not reach them.
 use crate::plans::*;
 use crate::reading_map::*;
+use crate::share::*;
 use serde_json::Value;
 use std::ffi::{CStr, CString};
+
+/// Serializes the tests that flip the process-wide active language against the
+/// ones that assert English output.
+///
+/// `i18n::set_active` is a deliberate process global — one process serves one
+/// reader — but this binary runs its tests in parallel threads. While the plan
+/// card below was being read in German, the `copy_text` assertion in
+/// `tier0_endpoints_via_abi` read `i18n::active()` on another thread and got
+/// "Johannes 3:16" where it wanted "John 3:16": a ~1-in-8 flake in the test
+/// harness, not a defect in the product. A language mutator takes the WRITE side
+/// for exactly as long as the global is flipped; a test asserting a localized
+/// string in English takes the READ side. Poisoning is recovered from rather
+/// than propagated, so one failing test reports itself instead of cascading.
+static LANG: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
 const KJV: &str = concat!(
     r#"{"format":"x","tokenization":"kjv1769-tok2","verses":2}"#,
@@ -494,10 +509,14 @@ fn plans_and_concept_study_via_abi() {
         let de = plumbline_core::i18n::Lang::De;
         let want = plumbline_core::reference::VRef::new("John", 3, 1).chapter_display_in(de);
         assert_eq!(run["today"]["chapters"][0]["display"], "John 3", "English reads as it always did");
-        let before = plumbline_core::i18n::active();
-        plumbline_core::i18n::set_active(de);
-        let v_de: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
-        plumbline_core::i18n::set_active(before);
+        let v_de: Value = {
+            let _lang = LANG.write().unwrap_or_else(|e| e.into_inner());
+            let before = plumbline_core::i18n::active();
+            plumbline_core::i18n::set_active(de);
+            let v = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+            plumbline_core::i18n::set_active(before);
+            v
+        };
         let run_de = v_de["running"].as_array().unwrap().iter().find(|p| p["id"] == "chronological").unwrap();
         assert_eq!(run_de["today"]["chapters"][0]["display"], want);
         assert_eq!(run_de["today"]["chapters"][0]["book"], "John", "the OSIS id is storage and does not localize");
@@ -772,6 +791,10 @@ fn rnd_tier_via_abi() {
 #[test]
 fn parity_endpoints_via_abi() {
     use std::ffi::CString;
+    // Held for the whole test: the canon section labels below ("Law", "Gospels") come back in the active
+    // reader's language, so every
+    // assertion here reads the language global. See `LANG`.
+    let _lang = LANG.read().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let home = std::env::temp_dir().join(format!("plumbline-ffi-parity-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
@@ -1127,6 +1150,10 @@ fn route_link_via_abi() {
 #[test]
 fn tier0_endpoints_via_abi() {
     use std::ffi::CString;
+    // Held for the whole test: ref-suffixed copy and the verse-range card labels below render book names
+    // for the active reader, so every
+    // assertion here reads the language global. See `LANG`.
+    let _lang = LANG.read().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // Engine-independent endpoints first (no home needed).
         let c = |s: &str| CString::new(s).unwrap();
@@ -3146,5 +3173,186 @@ fn word_usage_reads_the_real_index() {
         assert_eq!(hits, ["loved"]);
 
         plumbline_engine_free(e);
+    }
+}
+
+/// A two-language devotional catalogue: one booklet written in English only, one
+/// in English AND German. Enough to tell "no booklets" from "this booklet is not
+/// translated yet", which is the distinction the palette exists to show.
+const DEVOTIONALS: &str = r#"{
+  "format":"devotional-v1",
+  "devotionals":[
+    {"id":"english-only","days":1,"newBeliever":true,"sections":[],
+     "texts":{"en":{"name":"First Steps","closing":["."]}},
+     "entries":[{"day":1,"scripture":[],"texts":{"en":{"title":"t","reflection":["r"],"activity":"a"}}}]},
+    {"id":"also-german","days":1,"newBeliever":false,"sections":[],
+     "texts":{"en":{"name":"Both","closing":["."]},"de":{"name":"Beide","closing":["."]}},
+     "entries":[{"day":1,"scripture":[],
+       "texts":{"en":{"title":"t","reflection":["r"],"activity":"a"},
+                "de":{"title":"t","reflection":["r"],"activity":"a"}}}]}
+  ]}"#;
+
+/// The share palette's two ABI calls: what a link may carry, and the link itself.
+///
+/// The availability half is the feature — a sender picking a language for someone
+/// else must be told what does not exist in it yet — so each answer is asserted
+/// per language rather than once. Fails against an options endpoint that filters
+/// unavailable rows out instead of marking them (the sender would silently lose
+/// the "coming soon" they were promised) and against one that answers about the
+/// SENDER's language rather than the chosen one.
+#[test]
+fn share_palette_options_and_link_via_abi() {
+    use std::ffi::CString;
+    // Reads no localized display, but `plumbline_i18n_set_language` in another
+    // test would change what `paths[].label` comes back as. See `LANG`.
+    let _lang = LANG.read().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let c = |s: &str| CString::new(s).unwrap();
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-share-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        std::fs::write(home.join("data").join("devotional.json"), DEVOTIONALS).unwrap();
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null());
+        assert!(!e.is_null());
+
+        // Aimed at `lang`, read by an English sender — the ordinary case, and the
+        // one where the two languages differ.
+        let options = |lang: &str| -> Value {
+            let raw = take(plumbline_engine_share_options_json(e, c(lang).as_ptr(), c("en").as_ptr())).unwrap();
+            serde_json::from_str(&raw).unwrap()
+        };
+        let find = |v: &Value, key: &str, id: &str| -> Value {
+            v[key].as_array().unwrap().iter().find(|o| o["id"] == id).unwrap_or_else(|| panic!("{key}/{id}")).clone()
+        };
+
+        // Every shipped language is offerable — a sender in English can pick
+        // Punjabi, which is the point.
+        let en = options("en");
+        assert_eq!(en["lang"], "en");
+        assert_eq!(en["languages"].as_array().unwrap().len(), 9);
+        let codes: Vec<&str> =
+            en["languages"].as_array().unwrap().iter().map(|l| l["code"].as_str().unwrap()).collect();
+        assert!(codes.contains(&"pa") && codes.contains(&"ar") && codes.contains(&"zht"), "{codes:?}");
+        // The endonym is what a picker shows: someone looking for German is
+        // looking for "Deutsch".
+        let de_row = en["languages"].as_array().unwrap().iter().find(|l| l["code"] == "de").unwrap();
+        assert_eq!(de_row["endonym"], "Deutsch");
+        assert_eq!(de_row["exonym"], "German");
+
+        // A region tag is canonicalized, so the shell can tell what it got.
+        assert_eq!(options("pa-IN")["lang"], "pa");
+        // An unknown code answers about English rather than returning nothing.
+        assert_eq!(options("xx")["lang"], "en");
+
+        // ── the threads ──────────────────────────────────────────────────────
+        // The stock set, available in every language: a thread is refs, and every
+        // corpus resolves them.
+        for lang in ["en", "ar", "zht"] {
+            let o = options(lang);
+            assert_eq!(o["threads"].as_array().unwrap().len(), 1, "{lang}");
+            assert_eq!(find(&o, "threads", "Romans Road")["available"], true, "Romans Road in {lang}");
+        }
+
+        // ── the devotionals ──────────────────────────────────────────────────
+        // Both booklets are always LISTED; only availability moves.
+        assert_eq!(en["devotionals"].as_array().unwrap().len(), 2);
+        assert_eq!(find(&en, "devotionals", "english-only")["available"], true);
+        assert_eq!(find(&en, "devotionals", "also-german")["available"], true);
+        let de = options("de");
+        assert_eq!(de["devotionals"].as_array().unwrap().len(), 2, "still listed, not filtered out");
+        assert_eq!(find(&de, "devotionals", "english-only")["available"], false, "not translated into German");
+        assert_eq!(find(&de, "devotionals", "also-german")["available"], true);
+        // Named for the SENDER, who is the one reading the list: an English sender
+        // aiming a link at German sees the English names, and their availability
+        // is still German's.
+        assert_eq!(find(&de, "devotionals", "also-german")["label"], "Both");
+        assert_eq!(find(&de, "devotionals", "english-only")["label"], "First Steps");
+
+        // ── the link the palette builds ──────────────────────────────────────
+        let req = serde_json::json!({
+            "lang": "pa",
+            "thread": "Romans Road",
+            "church": {"name": "Grace Bible Church"},
+        })
+        .to_string();
+        let built: Value = serde_json::from_str(&take(plumbline_share_url_json(c(&req).as_ptr())).unwrap()).unwrap();
+        let url = built["url"].as_str().unwrap();
+        assert!(url.contains("lang=pa"), "{url}");
+        assert!(url.contains("thread=Romans+Road"), "{url}");
+        assert!(url.contains("church=Grace+Bible+Church"), "{url}");
+        assert_eq!(built["hasChurch"], true);
+
+        // The plain app link is still what an empty request builds — the palette
+        // added parameters, it did not make every share carry them.
+        let plain: Value = serde_json::from_str(&take(plumbline_share_url_json(c("{}").as_ptr())).unwrap()).unwrap();
+        assert_eq!(plain["url"], "https://plumblinebible.org/");
+        assert_eq!(plain["hasChurch"], false);
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+/// A corpus with two forms of one word, and a second stamped as another
+/// language's. `ruler`/`rulers` are the maintainer's own example.
+const FORMS_KJV: &str = concat!(
+    r#"{"format":"x","tokenization":"kjv1769-tok2","verses":3}"#,
+    "\n",
+    r#"{"b":"John","c":3,"t":[["","The","",[],0],["","ruler","",["G758"],0]],"v":1}"#,
+    "\n",
+    r#"{"b":"John","c":3,"t":[["","The","",[],0],["","rulers","",["G758"],0]],"v":2}"#,
+    "\n",
+    r#"{"b":"John","c":3,"t":[["","A","",[],0],["","shepherd","",["H7462"],0]],"v":3}"#,
+);
+
+/// The word-usage card answers with the word's OTHER FORMS, not just the exact
+/// surface the reader tapped.
+///
+/// Fails against the exact-match card this replaced: tapping "rulers" found only
+/// "rulers", which is the whole defect. Asserted in three places that an
+/// exact-match implementation gets wrong differently — the total, the verse list,
+/// and the per-line HIGHLIGHTS — because a card that widened its postings but
+/// kept the old highlight predicate would show the right verses with the other
+/// form left un-marked in the line, which reads as a bug rather than a feature.
+#[test]
+fn the_word_card_answers_with_every_form_of_the_word() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-stem-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), FORMS_KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null());
+        let eng = &*e;
+
+        // From EITHER form: the card is opened by tapping a word, and both words
+        // are tappable.
+        for form in ["ruler", "rulers"] {
+            let u = panel::PanelSource::word_usage(eng, form, "all", 0).expect("index builds natively");
+            assert_eq!(u.total, 2, "{form}: both forms counted");
+            let refs: Vec<&str> = u.lines.iter().map(|l| l.refkey.as_str()).collect();
+            assert_eq!(refs, ["John 3:1", "John 3:2"], "{form}");
+            // Each line marks ITS OWN form as the hit.
+            let hits: Vec<Vec<&str>> =
+                u.lines.iter().map(|l| l.segs.iter().filter(|(_, h)| *h).map(|(t, _)| t.as_str()).collect()).collect();
+            assert_eq!(hits, vec![vec!["ruler"], vec!["rulers"]], "{form}: both forms highlight");
+        }
+
+        // A word with no other form is unchanged — widening must not sweep in
+        // neighbours that merely look similar.
+        let one = panel::PanelSource::word_usage(eng, "shepherd", "all", 0).unwrap();
+        assert_eq!(one.total, 1);
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

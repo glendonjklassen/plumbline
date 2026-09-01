@@ -8,6 +8,12 @@
   test: would the string look normal in a mainstream app's settings screen?
   Applies to every user-visible string in `crates/core/src/i18n/` (every
   language) and any hardcoded shell copy.
+- **No first run, and no personas.** The welcome screen, its four paths
+  (curious / new believer / sharing / established) and the `start=new` link
+  parameter were removed 2026-08-31: the reader is the first screen. A shared
+  link's destination opens straight away, because a person handed it over and
+  provides the context the welcome used to. The analysis tiers moved to
+  on-by-default (§Architecture #4) since nothing asks any more.
 - **One shell: the PWA (`apps/web`).** The GTK and WinUI desktop shells were
   retired 2026-07-25 and the Android/Compose one 2026-08-30 — git history has
   them all; ignore stale references to parity, "the two shells", or the
@@ -53,7 +59,7 @@ Decisions in force:
 | 1 | UI strategy | **Thin shell over a shared Rust core.** Today one shell: the PWA. The GTK/WinUI and Compose shells were built and retired; the C ABI is what makes another one cheap. |
 | 2 | Build order | Desktop first (GTK4) → Windows → Android → web; everything but the PWA then retired. |
 | 3 | Data delivery | **Bundle core, download R&D** — KJV + Strong's ship in-app; heavy analytics artifacts are optional packs. |
-| 4 | R&D default | **Guided first-run** — first launch picks the analysis tiers (scholars' / machine) with examples; the text and the reader's own data are always on. |
+| 4 | R&D default | **On by default** — both analysis tiers ship on and the pack downloads unasked (3 MB against 260 MB of Bibles); Settings turns them off. Superseded the guided first-run, which was removed with the welcome (2026-08-31). |
 | — | Patches / signed rules | Dropped — the Ed25519 point-patch/rule layer was not ported. |
 | — | Future | The paid sync SaaS was **cancelled** — the product is entirely free. Keep the data-model discipline it imposed anyway (stable ids, no host-local assumptions, exportable single-file JSON). |
 

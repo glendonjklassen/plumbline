@@ -118,12 +118,6 @@ function deployableOrigin(): Promise<{
  *  deploy below lands. */
 async function firstVisit(page: Page, url: string): Promise<void> {
   await page.goto(url);
-  const established = page.getByRole("button", { name: "Established believer" });
-  await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await established.isVisible().catch(() => false)) {
-    await established.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
   await expect
     .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 30_000 })

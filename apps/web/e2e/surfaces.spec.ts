@@ -19,12 +19,6 @@ const VIEWPORTS = [
 async function boot(page: Page, vp: { width: number; height: number }): Promise<void> {
   await page.setViewportSize(vp);
   await page.goto("/");
-  const established = page.getByRole("button", { name: "Established believer" });
-  await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await established.isVisible().catch(() => false)) {
-    await established.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("nav.bottom-nav")).toBeVisible();
 }
