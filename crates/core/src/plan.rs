@@ -1,30 +1,25 @@
-//! Reading plans + the concept study. [docs/READING-PLANS.md] is the contract; the
-//! decisions live there, this header only orients.
+//! Reading plans + the concept study. docs/READING-PLANS.md is the contract.
 //!
-//! A **schedule plan** is a word-weighted walk of a scope (whole canon, NT, a
-//! book list, or a curated chapter table) cut into days. Pacing is
-//! **sequence-anchored**: "today" is the lowest unfinished day, and absence
-//! accrues no backlog. Whether a day is done is **derived from the reading
-//! records** (`core::reading`) — a day completes when every chapter it names
-//! stands `Read` — and cached into the plan file's `done` list so a day
-//! honoured once stays honoured even if the reading record underneath it is
-//! later cleared.
+//! A **schedule plan** is a word-weighted walk of a scope (whole canon, NT, a book
+//! list, or a curated chapter table) cut into days. Pacing is
+//! **sequence-anchored**: "today" is the lowest unfinished day, and absence accrues
+//! no backlog. A day is done when every chapter it names stands `Read` in
+//! `core::reading` — derived, then cached into the plan file's `done` list so a day
+//! honoured once survives the reading record under it being cleared.
 //!
-//! A **concept study** is not a schedule at all: a non-linear concept sweep
-//! with a preset tag. It records which chapters have been swept (no dwell gate
-//! — the reading tracker is OFF in concept-study mode, shell-side) and its
-//! progress is swept-over-scope. Ending a concept study never touches the tag
-//! or its members — what was gathered is the point.
+//! A **concept study** is not a schedule: a non-linear sweep with a preset tag,
+//! recording swept chapters (no dwell gate — the reading tracker is off in that
+//! mode, shell-side), progress being swept-over-scope. Ending one never touches the
+//! tag or its members.
 //!
 //! Schedules are **generated, not stored**: the plan file keeps the generator's
 //! parameters (or a curated table's id) and the walk is deterministic given the
-//! corpus, so re-running it is cheaper and safer than trusting a materialized
-//! copy to stay in step with anything. One JSON file per running plan under
-//! `home/plans/` — personal study data, in the backup zip beside `reading/`.
+//! corpus. One JSON file per running plan under `home/plans/` — personal study
+//! data, in the backup zip beside `reading/`.
 //!
 //! **Class exclusivity** is a query, not a gate: [`class_conflict`] names the
-//! running plan that occupies a class, the shell confirms the replacement, and
-//! only then stops one and starts the other. The core never guesses at intent.
+//! running plan occupying a class and the shell confirms the replacement. The core
+//! never guesses at intent.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -40,9 +35,9 @@ use crate::Error;
 /// Serialized into every plan file. Frozen, like every on-disk format tag.
 pub const FORMAT: &str = "plumbline-plan-v1";
 
-/// The exclusivity classes of the built-in schedules. A reader runs at most one
-/// plan per class — two "get through the whole thing" plans at once is a
-/// contradiction, while NT-in-90 beside Psalms+Proverbs is the point.
+/// The exclusivity classes of the built-in schedules — at most one running plan
+/// per class, so NT-in-90 can sit beside Psalms+Proverbs but not beside a second
+/// whole-Bible plan.
 pub const CLASS_WHOLE_BIBLE: &str = "wholeBible";
 pub const CLASS_NEW_TESTAMENT: &str = "newTestament";
 pub const CLASS_DEVOTIONAL: &str = "devotional";
@@ -74,12 +69,10 @@ pub struct Generator {
     pub days: u32,
 }
 
-/// One running plan — the whole on-disk file.
-///
-/// Additive evolution only: unknown fields are read past (serde default) and
-/// dropped on the next write, the `overlay-tag-v1` stance. `done` holds
-/// **1-based day numbers**, sorted, deduped; days complete out of order and
-/// stay recorded. `swept` is the concept study's coverage, chapters sorted per book.
+/// One running plan — the whole on-disk file. Additive evolution only: unknown
+/// fields are read past and dropped on the next write (the `overlay-tag-v1`
+/// stance). `done` holds 1-based day numbers, sorted, deduped; days may complete
+/// out of order. `swept` is the concept study's coverage, chapters sorted per book.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Plan {
@@ -106,10 +99,9 @@ pub struct Plan {
     /// Concept study only: swept chapters, `book id → sorted chapter numbers`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub swept: BTreeMap<String, Vec<u16>>,
-    /// Set aside, kept whole. A paused schedule holds its place (its `done`
-    /// days, its class) but asks nothing: no chip, no today card. Additive —
-    /// absent in every file written before pause existed, and absent again the
-    /// moment a plan resumes, so old readers of the format never see it.
+    /// Set aside, kept whole: a paused schedule holds its `done` days and its class
+    /// but asks nothing — no chip, no today card. Additive, and absent again the
+    /// moment a plan resumes.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub paused: bool,
 }
@@ -125,12 +117,10 @@ pub struct Builtin {
     pub table: Option<&'static str>,
 }
 
-/// The lineup the picker offers. Every entry here must be START-ABLE into a
-/// non-empty schedule TODAY: a builtin that produces an empty schedule renders
-/// as instantly "finished". A generator plan always can; a TABLE plan can only
-/// where its table file is present, so the FFI offers a table row after
-/// [`load_table`] answers — a home missing `data/chronological.json` hides the
-/// row rather than offering a plan that starts finished.
+/// The lineup the picker offers. Every entry must be START-ABLE into a non-empty
+/// schedule today, or it renders as instantly "finished". A generator plan always
+/// is; a TABLE plan only where its table file is present, so the FFI offers a table
+/// row only after [`load_table`] answers.
 pub fn builtins() -> Vec<Builtin> {
     let gen = |scope: Scope, days: u32| Some(Generator { scope, days });
     vec![
@@ -190,21 +180,19 @@ pub fn builtins() -> Vec<Builtin> {
 /// Serialized into every table file (`data/<id>.json`). Frozen like the rest.
 pub const TABLE_FORMAT: &str = "plumbline-plan-table-v1";
 
-/// A curated plan table, loaded: the ordered chapter walk and the day count the
-/// schedule cuts it into. Chronological is the one shipped
-/// (`scripts/build-chronological.mjs` compiles it from
-/// `data-prep/chronological/order.json`, verifying exactly-once canon coverage).
+/// A curated plan table: the ordered chapter walk and the day count to cut it
+/// into. Chronological is the one shipped (`scripts/build-chronological.mjs`
+/// compiles it, verifying exactly-once canon coverage).
 pub struct PlanTable {
     pub days: u32,
     pub order: Vec<(String, u16)>,
 }
 
-/// Read a curated table from the pack (`data/<id>.json`). `None` for anything
-/// short of a well-formed table — absent file, wrong format tag, an unknown
-/// book, an inverted span — because a damaged table must hide its plan rather
-/// than offer one with a hole in it. Chapter numbers are checked against the
-/// CORPUS by the caller (chapter counts live there, not in the canon table);
-/// exactly-once canon coverage is the build script's guarantee.
+/// Read a curated table from the pack (`data/<id>.json`). `None` for anything short
+/// of well-formed — absent file, wrong format tag, unknown book, inverted span —
+/// so a damaged table hides its plan rather than offering one with a hole in it.
+/// Chapter numbers are checked against the CORPUS by the caller, since chapter
+/// counts live there and not in the canon table.
 pub fn load_table(home: impl AsRef<Path>, id: &str) -> Option<PlanTable> {
     #[derive(Deserialize)]
     struct WireTable {
@@ -232,10 +220,9 @@ pub fn load_table(home: impl AsRef<Path>, id: &str) -> Option<PlanTable> {
 
 // ── the schedule walk ─────────────────────────────────────────────────────────
 
-/// The chapters a scope names, in canon order (a `Books` list is re-ordered to
-/// canon order whatever order it was written in — a plan is read in reading
-/// order). Books the corpus does not know are skipped rather than erred: the
-/// German corpus shares the KJV's addresses, so in practice nothing skips.
+/// The chapters a scope names, in canon order — a `Books` list is re-ordered
+/// whatever order it was written in. Books the corpus does not know are skipped
+/// rather than erred.
 pub fn scope_chapters(scope: &Scope, words: &ChapterWords) -> Vec<(String, u16)> {
     let books: Vec<&str> = match scope {
         Scope::Canon => canon::BOOKS.iter().map(|b| b.id).collect(),
@@ -255,12 +242,11 @@ pub fn scope_chapters(scope: &Scope, words: &ChapterWords) -> Vec<(String, u16)>
 
 /// Cut an ordered chapter walk into `days` word-balanced days.
 ///
-/// Greedy against cumulative word boundaries, with two guarantees that matter
-/// more than perfect balance: every chapter appears exactly once (chapters are
-/// never split), and **no day is empty** — `days` clamps to the chapter count,
-/// and when the chapters left equal the days left, each remaining day takes
-/// exactly one. Deterministic given the corpus, which is what lets the plan
-/// file store parameters instead of the schedule.
+/// Greedy against cumulative word boundaries, with two guarantees that outrank
+/// perfect balance: every chapter appears exactly once (never split), and **no day
+/// is empty** — `days` clamps to the chapter count, and once chapters left equal
+/// days left each remaining day takes one. Deterministic given the corpus, which is
+/// what lets the plan file store parameters instead of the schedule.
 pub fn schedule(order: &[(String, u16)], words: &ChapterWords, days: u32) -> Vec<Vec<(String, u16)>> {
     let n = order.len();
     if n == 0 {
@@ -312,10 +298,9 @@ fn day_done(plan: &Plan, sched: &[Vec<(String, u16)>], day: u32, is_read: &impl 
     sched.get(day as usize - 1).is_some_and(|chs| !chs.is_empty() && chs.iter().all(|(b, c)| is_read(b, *c)))
 }
 
-/// Sequence-anchored "today": the lowest unfinished day, or `None` when the
-/// plan is complete. `is_read` is the reading store's answer for one chapter —
-/// the derivation IS the progress model (decision #2), so this takes the
-/// closure rather than duplicating any reading logic here.
+/// Sequence-anchored "today": the lowest unfinished day, or `None` when the plan is
+/// complete. `is_read` is the reading store's answer for one chapter — a closure,
+/// so no reading logic is duplicated here.
 pub fn next_day(plan: &Plan, sched: &[Vec<(String, u16)>], is_read: impl Fn(&str, u16) -> bool) -> Option<Today> {
     let total = sched.len() as u32;
     let mut days_done = 0;
@@ -330,23 +315,18 @@ pub fn next_day(plan: &Plan, sched: &[Vec<(String, u16)>], is_read: impl Fn(&str
     next.map(|day| Today { day, chapters: sched[day as usize - 1].clone(), days_done, days_total: total })
 }
 
-/// Whether a full plan-day was finished ON `today` (a `YYYY-MM-DD` day, the
-/// reading store's date grain) — the signal that retires the nav-strip chip
-/// for the rest of the calendar day.
+/// Whether a full plan-day was finished ON `today` (`YYYY-MM-DD`, the reading
+/// store's date grain) — the signal that retires the nav-strip chip for the rest of
+/// the calendar day.
 ///
-/// A day counts as "finished today" when every chapter it names reads back
-/// complete and the LATEST of their read dates is today: the day was still
-/// open this morning and the reader closed it. That covers finishing
-/// yesterday's leftovers ("Day 12" begun Tuesday, finished Wednesday — the
-/// chip retires Wednesday) without consulting any calendar the plan itself
-/// does not keep — pacing stays sequence-anchored, this is purely about not
-/// asking for more the day a day's worth was given.
+/// A day counts when every chapter it names reads back complete and the LATEST of
+/// their read dates is today, so finishing yesterday's leftovers retires the chip
+/// today. Pacing stays sequence-anchored; this is only about not asking for more
+/// the day a day's worth was given.
 ///
-/// `last_read_day` is the reading store's date for one chapter's last full
-/// pass, `None` when it has never had one — the same closure-shaped seam as
-/// [`next_day`]'s `is_read`, so no reading logic is duplicated here. Days
-/// honoured only by the `done` cache have no dates to consult and simply
-/// don't count as today.
+/// `last_read_day` is the reading store's date for one chapter's last full pass —
+/// the same closure seam as [`next_day`]'s `is_read`. Days honoured only by the
+/// `done` cache have no dates and never count as today.
 pub fn done_today(
     sched: &[Vec<(String, u16)>],
     last_read_day: impl Fn(&str, u16) -> Option<String>,
@@ -383,8 +363,8 @@ pub fn mark_done(plan: &mut Plan, day: u32) -> bool {
 
 // ── the concept study's coverage ──────────────────────────────────────────────
 
-/// Mark a chapter swept. Returns whether it was new. No dwell, no order — the
-/// generosity is the design (docs/READING-PLANS.md §Concept Study).
+/// Mark a chapter swept. Returns whether it was new. No dwell, no order (see
+/// docs/READING-PLANS.md §Concept Study).
 pub fn sweep(plan: &mut Plan, book: &str, chapter: u16) -> bool {
     let chs = plan.swept.entry(book.to_string()).or_default();
     match chs.binary_search(&chapter) {
@@ -448,9 +428,8 @@ pub fn load_plans(home: impl AsRef<Path>) -> (Vec<Plan>, Vec<String>) {
     (plans, errs)
 }
 
-/// The running plan that already occupies `class`, if any — the shell confirms
-/// the replacement before stopping it. A query, not a gate: the core never
-/// guesses at intent.
+/// The running plan that already occupies `class`, if any — a query, not a gate:
+/// the shell confirms the replacement before stopping it.
 pub fn class_conflict<'a>(loaded: &'a [Plan], class: &str) -> Option<&'a Plan> {
     loaded.iter().find(|p| p.class.as_deref() == Some(class))
 }
@@ -539,10 +518,9 @@ mod tests {
     fn the_walk_balances_by_words_not_chapters() {
         let c = toy();
         let w = ChapterWords::build(&c);
-        // 35 words over 2 days → the boundary sits at 17.5. Gen 1 (10) alone is
-        // short of it, Gen 1+2 (30) crosses it — so day 1 is two chapters and
-        // day 2 is one, where a chapter-count split would have put the heavier
-        // Gen 2 alone on either side.
+        // 35 words over 2 days → the boundary is 17.5. Gen 1 (10) is short of it,
+        // Gen 1+2 (30) crosses it, so day 1 is two chapters and day 2 is one —
+        // where a chapter-count split would have put the heavier Gen 2 alone.
         let s = schedule(&scope_chapters(&Scope::Canon, &w), &w, 2);
         assert_eq!(s[0].len(), 2, "day 1 runs to the word boundary");
         assert_eq!(s[1], vec![("Gen".to_string(), 3)]);
@@ -573,8 +551,8 @@ mod tests {
         let t = next_day(&p, &sched, |b, ch| (b, ch) == ("Gen", 1)).unwrap();
         assert_eq!((t.day, t.days_done), (2, 1));
 
-        // Days complete OUT OF ORDER: day 3 read while day 2 is not — today is
-        // still day 2 (sequence-anchored), and both ends count as done.
+        // Out of order: day 3 read while day 2 is not — today is still day 2
+        // (sequence-anchored), and both ends count as done.
         let t = next_day(&p, &sched, |b, ch| (b, ch) == ("Gen", 1) || (b, ch) == ("Gen", 3)).unwrap();
         assert_eq!((t.day, t.days_done), (2, 2));
 
@@ -586,8 +564,7 @@ mod tests {
     fn done_today_retires_the_day_a_days_worth_was_read() {
         let c = toy();
         let w = ChapterWords::build(&c);
-        // 3 days over Gen: day 1 = Gen 1+2 (word-weighted), day 2… — the shape
-        // does not matter, only that day 1 holds two chapters.
+        // Only the shape matters: day 1 must hold two chapters for the leftover case.
         let sched = schedule(&scope_chapters(&Scope::Canon, &w), &w, 2);
         assert_eq!(sched[0].len(), 2, "day 1 must span two chapters for the leftover case");
         let dates = |d1: Option<&'static str>, d2: Option<&'static str>| {
@@ -699,14 +676,11 @@ mod tests {
     #[test]
     fn builtins_are_wired_for_what_the_picker_needs() {
         let all = builtins();
-        // Every builtin has exactly one of generator/table, and the classes
-        // divide the lineup the way decision #3 says.
         for b in &all {
             assert!(b.generator.is_some() != b.table.is_some(), "{}: generator XOR table", b.id);
         }
         let whole: Vec<_> = all.iter().filter(|b| b.class == CLASS_WHOLE_BIBLE).map(|b| b.id).collect();
-        // Chronological joined the lineup with its shipped table (decision #4);
-        // the FFI still only OFFERS it where the table actually loads.
+        // Chronological is in the lineup; the FFI only OFFERS it where its table loads.
         assert_eq!(whole, vec!["bible-365", "bible-180", "bible-90", "chronological"]);
         let chrono = all.iter().find(|b| b.id == "chronological").unwrap();
         assert_eq!(chrono.table, Some("chronological"));

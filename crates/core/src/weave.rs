@@ -1,15 +1,9 @@
-//! Weaves: parallel passages as a graph of verse-to-verse links.
+//! Weaves: parallel passages as a graph of undirected verse↔verse links, one
+//! plain JSON file per weave (`overlay-weave-v2`). Combining two weaves is the
+//! union of their edges. Ported from overlay `Weave.hs`.
 //!
-//! Ported from overlay `Weave.hs`. A weave is a set of undirected links between
-//! single verses. The graph is the whole model: a drawn connector per edge is
-//! its faithful rendering, combining two weaves is the union of their edges
-//! (transitive join), and an unlinked verse still reads in place.
-//!
-//! Weaves are personal study data: plain unsigned JSON, one file per weave.
-//!
-//! **Not yet ported:** the `overlay-weave-v1` (grid) → v2 migration. New
-//! Plumbline data is v2; a v1 file currently surfaces as a parse error rather
-//! than being silently migrated. Port `migrateV1` when older data must load.
+//! The `overlay-weave-v1` (grid) → v2 migration is not ported: a v1 file is a
+//! parse error. Port `migrateV1` if older data must load.
 
 use crate::corpus::Corpus;
 use crate::reference::VRef;
@@ -26,11 +20,10 @@ pub type Span = (u16, u16);
 type LinkKey = (VRef, VRef, String, Option<Span>, Option<Span>);
 
 /// An undirected edge between two verses, stored canonically (`a <= b` in
-/// reading order) so equal links compare equal. `label` is the exact shared
-/// text the edge points at; `span_a`/`span_b` optionally narrow each endpoint
-/// to a word span. `approved` marks reviewer approval and is deliberately
-/// **excluded from identity** (`Eq`/`Ord`), so toggling it never duplicates an
-/// edge. Ported from `Link`.
+/// reading order) so equal links compare equal. `label` is the shared text the
+/// edge points at; `span_a`/`span_b` optionally narrow each endpoint to a word
+/// span. `approved` is excluded from identity (`Eq`/`Ord`), so toggling it never
+/// duplicates an edge.
 #[derive(Debug, Clone)]
 pub struct Link {
     pub a: VRef,
@@ -40,17 +33,16 @@ pub struct Link {
     pub span_a: Option<Span>,
     pub span_b: Option<Span>,
     /// Unknown keys on this link, kept — see [`Weave::extra`]. Excluded from
-    /// identity (`Eq`/`Ord`) for the same reason `approved` is: a link is the
-    /// edge it draws, and an unknown key must never make one edge into two.
+    /// identity for the same reason `approved` is: an unknown key must never
+    /// make one edge into two.
     pub extra: Map<String, Value>,
 }
 
 impl Link {
     /// Build a labelled link with optional per-endpoint spans, endpoints in
-    /// reading order. The label rides the edge; each span rides its endpoint,
-    /// so swapping endpoints swaps the spans in lockstep. This is the sole
-    /// structural constructor — every span-aware caller routes through it so
-    /// the endpoint/span pairing can never desync. Ported from `canonLinkSpan`.
+    /// reading order. Each span rides its endpoint, so swapping endpoints swaps
+    /// the spans in lockstep. The sole structural constructor — every span-aware
+    /// caller routes through it so the pairing cannot desync.
     pub fn canon_span(a: VRef, b: VRef, label: impl Into<String>, span_a: Option<Span>, span_b: Option<Span>) -> Link {
         let label = label.into();
         if a.reading_key() <= b.reading_key() {
@@ -104,8 +96,6 @@ impl Ord for Link {
     }
 }
 
-// ── weave kind ───────────────────────────────────────────────────────────────
-
 /// What sort of parallel a weave records. Stored as a frozen token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WeaveKind {
@@ -150,9 +140,7 @@ impl WeaveKind {
     }
 }
 
-/// Who wrote a weave's notes. Reverent prose reads the same whether a person or
-/// a machine produced it, so the reader is told which. Ported from
-/// `NotesSource`.
+/// Who wrote a weave's notes, so the reader can be told which. Frozen tokens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotesSource {
     Hand,
@@ -175,10 +163,7 @@ impl NotesSource {
     }
 }
 
-// ── weave ──────────────────────────────────────────────────────────────────
-
-/// A weave: named graph of verse↔verse links, plus metadata. Ported from
-/// `Weave`.
+/// A weave: named graph of verse↔verse links, plus metadata.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Weave {
     pub name: String,
@@ -189,34 +174,26 @@ pub struct Weave {
     pub created: String,
     pub links: Vec<Link>,
     pub approved: bool,
-    /// Stable identity — 32 hex chars, minted once, never derived from the name
-    /// (docs/STABLE-IDS.md). See [`crate::tag::Tag::id`]; the rules are
-    /// identical, and [`write_weave`] assigns one lazily.
-    ///
-    /// The LINKS need none: the undirected `(a, b)` pair is already their natural
-    /// key, which is what [`Link::key`] is.
+    /// Stable identity — 32 hex chars, minted once by [`write_weave`], never
+    /// derived from the name. Same rules as [`crate::tag::Tag::id`]. Links need
+    /// none: the undirected `(a, b)` pair is their natural key ([`Link::key`]).
     pub id: Option<String>,
     /// UTC stamp of the last mutating save. See [`crate::tag::Tag::updated`].
     pub updated: Option<String>,
-    /// Every key in the file this build has never heard of, carried back out
-    /// again on save.
+    /// Every key in the file this build has never heard of, carried back out on
+    /// save so a weave written by a later build survives a re-save whole, links
+    /// included ([`Link::extra`]) — the formats evolve additively (CLAUDE.md
+    /// §Data formats).
     ///
-    /// The on-disk formats evolve **additively** (CLAUDE.md §Data formats), and
-    /// a sideloaded APK never auto-updates: a build that drops the fields of a
-    /// later one drops them for good on that device. So a weave written by a v1.1
-    /// and re-saved here comes back whole, links included ([`Link::extra`]).
-    ///
-    /// Serde fills this with the leftovers after the known fields are matched, so
-    /// a known key can never be swallowed, and a key a later version promotes to
-    /// a real field stops arriving here the moment that field exists — it can
-    /// never be written twice. Empty for every weave on disk today, and an empty
-    /// flattened map writes no key at all, so those files are written exactly as
-    /// they were.
+    /// Serde fills this from the leftovers after the known fields match, so a
+    /// key later promoted to a real field stops arriving here and can never be
+    /// written twice. An empty flattened map writes no key, so files with
+    /// nothing unknown are written exactly as they were.
     pub extra: Map<String, Value>,
 }
 
 impl Weave {
-    /// A fresh, empty weave (no links yet). Ported from `emptyWeave`.
+    /// A fresh, empty weave (no links yet).
     pub fn empty(
         name: impl Into<String>,
         kind: WeaveKind,
@@ -232,29 +209,26 @@ impl Weave {
             created: created.into(),
             links: Vec::new(),
             approved: false,
-            // Both filled by [`write_weave`], so a new weave is stamped through
+            // Both filled by `write_weave`, so a new weave is stamped through
             // the same path an edited one is.
             id: None,
             updated: None,
-            // The one place a new file's provenance can honestly be recorded:
-            // its refKeys are being written NOW, in the language the reader is
-            // reading. A writer would be the wrong place — it also runs on
-            // re-save, where an unstamped older file would gain a confident
-            // wrong answer. See `i18n::stamp`.
+            // Provenance belongs here, not in the writer: the writer also runs
+            // on re-save, where an unstamped older file would gain a confident
+            // wrong language. See `i18n::stamp`.
             extra: crate::i18n::stamped_extra(),
         }
     }
 
     /// Add links, keeping the set deduplicated and sorted; later links win on
-    /// identity collision (their approval replaces the earlier edge's), then
-    /// the weave-level flag is recomputed. Ported from `addLinks`.
+    /// identity collision (their approval replaces the earlier edge's), then the
+    /// weave-level flag is recomputed.
     pub fn add_links(&mut self, new: impl IntoIterator<Item = Link>) {
         let mut m: BTreeMap<LinkKey, Link> = BTreeMap::new();
         for mut l in self.links.drain(..).chain(new) {
             let key = l.key();
             // A link added over one already here replaces it (that is how
-            // approval passes). It must not carry away the unknown keys of the
-            // edge it stands in for.
+            // approval passes), and must not carry away its unknown keys.
             if l.extra.is_empty() {
                 if let Some(prev) = m.get(&key) {
                     l.extra = prev.extra.clone();
@@ -273,13 +247,13 @@ impl Weave {
     }
 
     /// Recompute the weave-level approval flag: approved exactly when it has
-    /// links and every one is approved. Ported from `reapprove`.
+    /// links and every one is approved.
     pub fn reapprove(&mut self) {
         self.approved = !self.links.is_empty() && self.links.iter().all(|l| l.approved);
     }
 
     /// Set the approval of a single edge (matched by identity), then recompute
-    /// the weave flag. Ported from `setLinkApproval`.
+    /// the weave flag.
     pub fn set_link_approval(&mut self, target: &Link, val: bool) {
         for l in &mut self.links {
             if *l == *target {
@@ -289,7 +263,7 @@ impl Weave {
         self.reapprove();
     }
 
-    /// Approve or unapprove every edge at once. Ported from `setAllApproval`.
+    /// Approve or unapprove every edge at once.
     pub fn set_all_approval(&mut self, val: bool) {
         for l in &mut self.links {
             l.approved = val;
@@ -302,23 +276,20 @@ impl Weave {
         self.links.iter().filter(|l| l.approved).count()
     }
 
-    /// Union another weave's edges into this one (the transitive merge; shared
-    /// verses join their components). This weave's metadata is kept. Ported
-    /// from `combine`.
+    /// Union another weave's edges into this one (shared verses join their
+    /// components). This weave's metadata is kept.
     pub fn combine(&mut self, other: &Weave) {
         self.add_links(other.links.iter().cloned());
     }
 
-    /// The links with at least one endpoint among the given verses (for ambient
-    /// rendering). Ported from `linksTouching`.
+    /// The links with at least one endpoint among the given verses.
     pub fn links_touching<'a>(&'a self, verses: &'a HashSet<VRef>) -> impl Iterator<Item = &'a Link> {
         self.links.iter().filter(move |l| verses.contains(&l.a) || verses.contains(&l.b))
     }
 }
 
-/// Connected components of a link graph, each a set of verses (deterministic:
-/// components and their members come out in `VRef` order). Ported from
-/// `components`.
+/// Connected components of a link graph, each a set of verses. Deterministic:
+/// components and their members come out in `VRef` order.
 pub fn components(links: &[Link]) -> Vec<Vec<VRef>> {
     let mut adj: HashMap<&VRef, Vec<&VRef>> = HashMap::new();
     let mut verts: BTreeSet<&VRef> = BTreeSet::new();
@@ -350,15 +321,13 @@ pub fn components(links: &[Link]) -> Vec<Vec<VRef>> {
     out
 }
 
-/// All verses linked (transitively) to a verse, the verse included. Ported
-/// from `componentOf`.
+/// All verses linked (transitively) to a verse, the verse included.
 pub fn component_of(links: &[Link], v: &VRef) -> Vec<VRef> {
     components(links).into_iter().find(|c| c.contains(v)).unwrap_or_else(|| vec![v.clone()])
 }
 
 /// Build links from a per-pane selection. Two equal-length panes zip 1:1;
-/// anything else connects every selected verse to every selected verse in
-/// another pane (the many-to-many / convergent case). Ported from `smartLinks`.
+/// anything else is the cross product between panes.
 pub fn smart_links(panes: &[Vec<VRef>]) -> Vec<Link> {
     let non_empty: Vec<&Vec<VRef>> = panes.iter().filter(|p| !p.is_empty()).collect();
     if let [a, b] = non_empty.as_slice() {
@@ -381,6 +350,8 @@ pub fn smart_links(panes: &[Vec<VRef>]) -> Vec<Link> {
 
 // ── JSON codec ───────────────────────────────────────────────────────────────
 
+// The written shape is frozen (`overlay-weave-v2`): every default is omitted, so
+// a file with nothing set round-trips byte for byte.
 impl Serialize for Link {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;
@@ -428,8 +399,8 @@ impl<'de> Deserialize<'de> for Link {
         let w = LinkWire::deserialize(d)?;
         let a = VRef::parse_ref_key(&w.a).ok_or_else(|| D::Error::custom(format!("bad link ref: {}", w.a)))?;
         let b = VRef::parse_ref_key(&w.b).ok_or_else(|| D::Error::custom(format!("bad link ref: {}", w.b)))?;
-        // Route through the canonical constructor so the endpoint/span swap
-        // stays paired even for hand-edited, out-of-order on-disk links.
+        // Through the canonical constructor, so the endpoint/span swap stays
+        // paired even for a hand-edited, out-of-order on-disk link.
         let mut link = Link::canon_span(a, b, w.label, w.span_a, w.span_b);
         link.approved = w.approved;
         link.extra = w.extra;
@@ -525,7 +496,7 @@ impl<'de> Deserialize<'de> for Weave {
     }
 }
 
-/// A weave together with the file it loaded from. Ported from `LoadedWeave`.
+/// A weave together with the file it loaded from.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LoadedWeave {
     pub file: std::path::PathBuf,
@@ -533,15 +504,14 @@ pub struct LoadedWeave {
 }
 
 /// All weave links across the library as canonical, deduped verse pairs. Each
-/// stored link is already ordered `a <= b` in reading order (see
-/// [`Link::canon_span`]), so the pair is taken as-is and a `HashSet` drops the
-/// duplicates a verse pair linked by several weaves would produce.
+/// stored link is already ordered `a <= b` (see [`Link::canon_span`]), so the
+/// pair is taken as-is and a `HashSet` drops the duplicates several weaves
+/// linking the same pair would produce.
 ///
-/// This is the one derivation behind the ambient connector lines and the chord
-/// map, shared by every shell: GTK calls it directly; the non-Rust shells
-/// receive the same pairs (with each endpoint resolved and located) through
+/// The one derivation behind the ambient connector lines and the chord map; the
+/// shell gets the same pairs (endpoints resolved and located) through
 /// `plumbline_engine_link_pairs_json`. Resolvability against the corpus is a
-/// separate, drawing-time concern and is not filtered here.
+/// drawing-time concern and is not filtered here.
 pub fn link_pairs(weaves: &[LoadedWeave]) -> Vec<(VRef, VRef)> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
@@ -555,17 +525,12 @@ pub fn link_pairs(weaves: &[LoadedWeave]) -> Vec<(VRef, VRef)> {
     out
 }
 
-/// Book-to-book weave density: how strongly each canon-ordered book pair is
-/// woven together, over the deduped [`link_pairs`]. Each entry is
-/// `(book_a_index, book_b_index, count)` with `a <= b` (canon order, so the pair
-/// is orientation-free), plus the maximum count for normalising ribbon
-/// weight/alpha. A pair whose endpoint book isn't in the canon (unknown id) is
-/// skipped, matching the drawing code that has nowhere to place it.
-///
-/// The one derivation behind the chord/arc "Weave map": GTK calls it directly;
-/// the non-Rust shells receive the same folded counts through
-/// `plumbline_engine_chord_map_json`, so no shell re-folds the pairs or re-derives
-/// the max.
+/// Book-to-book weave density over the deduped [`link_pairs`]. Each entry is
+/// `(book_a_index, book_b_index, count)` with `a <= b` in canon order, plus the
+/// maximum count for normalising ribbon weight/alpha. A pair whose endpoint book
+/// isn't in the canon is skipped, matching the drawing code that has nowhere to
+/// place it. The shell gets these folded counts through
+/// `plumbline_engine_chord_map_json` and re-folds nothing.
 pub fn chord_pairs(weaves: &[LoadedWeave]) -> (Vec<(usize, usize, u32)>, u32) {
     let mut counts: HashMap<(usize, usize), u32> = HashMap::new();
     for (a, b) in link_pairs(weaves) {
@@ -577,48 +542,38 @@ pub fn chord_pairs(weaves: &[LoadedWeave]) -> (Vec<(usize, usize, u32)>, u32) {
     }
     let max = counts.values().copied().max().unwrap_or(1);
     let mut pairs: Vec<(usize, usize, u32)> = counts.into_iter().map(|((a, b), c)| (a, b, c)).collect();
-    // Deterministic order (HashMap iteration is not): by book pair. The shells
-    // re-sort by weight for painting, so this only fixes the wire/test output.
+    // Deterministic order (HashMap iteration is not); the shell re-sorts by
+    // weight for painting, so this only fixes the wire/test output.
     pairs.sort_unstable();
     (pairs, max)
 }
 
 // ── constellation (the weave-library overview) ────────────────────────────────
 //
-// Ported from overlay `Constellation.hs`: a scoped overview of the weave
-// library, one weave per labelled lane (largest first), nodes on the canon book
-// backbone, links as gentle curves. Pinned lanes stay put while paging cycles
-// the free lanes past them. This is the one derivation behind the popup (review
-// item 3): GTK calls it directly; the non-Rust shells get the same laid-out
-// page (as camelCase JSON) via `plumbline_engine_constellation_json`.
-//
-// Everything here is **fractions / logical units** — the shell maps them to
-// pixels, picks colours, and paints. `x` is a canon fraction 0..1 across the
-// book backbone; `lane_frac` is a fraction 0..1 within a lane's band (jitter
-// already applied, always strictly inside so nothing clips); `size` is the
-// node's witness degree normalised 0..1.
+// One weave per labelled lane (largest first), nodes on the canon book backbone,
+// links as curves; pinned lanes stay put while paging cycles the free lanes.
+// Everything below is fractions / logical units, never pixels — the shell maps
+// them and paints, over `plumbline_engine_constellation_json`.
 
-/// How many lanes the constellation shows at once. Both the paging arithmetic
-/// (here) and each shell's lane-height mapping key on it — served in the wire
-/// model so a shell never hardcodes a divisor that could drift from the paging.
+/// How many lanes the constellation shows at once. The paging arithmetic here
+/// and the shell's lane-height mapping both key on it, so it is served in the
+/// wire model rather than hardcoded as a divisor that could drift.
 pub const CONSTELLATION_LANES: usize = 18;
 
-/// A laid-out page of the constellation: the lanes shown (pinned first, then
-/// this page's slice of the free lanes) plus the paging arithmetic already
-/// resolved into a caption.
+/// A laid-out page of the constellation: pinned lanes first, then this page's
+/// slice of the free lanes, plus the paging state resolved into a caption.
 pub struct Constellation {
     pub lanes: Vec<ConstellationLane>,
-    /// How many lanes are pinned, the total free (unpinned) weaves, the page
-    /// actually shown (the requested page clamped into range), and the last
-    /// page index — the paging state a shell echoes into its controls.
+    /// Pinned lanes, total free (unpinned) weaves, the page actually shown (the
+    /// request clamped into range), and the last page index.
     pub n_pins: usize,
     pub free_total: usize,
     pub page: usize,
     pub max_page: usize,
-    /// The fully-composed paging caption ("N pinned · weaves lo–hi of total · …").
+    /// The composed paging caption ("N pinned · weaves lo–hi of total · …").
     pub caption: String,
-    /// The fixed lane capacity ([`CONSTELLATION_LANES`]) — the shell's
-    /// lane-height denominator, carried so it can't drift from the paging.
+    /// [`CONSTELLATION_LANES`] — the shell's lane-height denominator, carried so
+    /// it can't drift from the paging.
     pub lane_capacity: usize,
 }
 
@@ -638,14 +593,13 @@ pub struct ConstellationLane {
 
 /// A node on a lane: a verse on the canon backbone, sized by witness degree.
 pub struct ConstellationNode {
-    /// Canon fraction 0..1 across the book backbone (shell maps to plot x).
+    /// Canon fraction 0..1 across the book backbone.
     pub x: f32,
     /// Fraction 0..1 within the lane's band (jitter applied), strictly inside.
     pub lane_frac: f32,
-    /// Witness degree ÷ the library's max degree (0..1); the shell picks the
-    /// radius (both shells: `1.4 + 2.4 * size`).
+    /// Witness degree ÷ the library's max degree; the shell picks the radius.
     pub size: f32,
-    /// The verse — located + displayed, so a click navigates and the tooltip
+    /// The verse, located and displayed, so a click navigates and the tooltip
     /// names it without the shell parsing a ref key.
     pub ref_key: String,
     pub book: String,
@@ -662,24 +616,23 @@ pub struct ConstellationEdge {
     pub b_lane_frac: f32,
 }
 
-/// A verse's canon fraction 0..1: book position plus chapter progress within
-/// the book, over the 66 — the same backbone the canon strip uses.
+/// A verse's canon fraction 0..1: book position plus chapter progress within the
+/// book, over the 66 — the same backbone the canon strip uses.
 fn constellation_x(corpus: &Corpus, r: &VRef) -> f32 {
     let bi = crate::canon::book_order(&r.book).unwrap_or(0) as f32;
     let nc = corpus.chapter_count(&r.book).max(1) as f32;
     (bi + (r.chapter.saturating_sub(1)) as f32 / nc) / crate::canon::BOOKS.len() as f32
 }
 
-/// A node's fractional position within its lane band: centre plus a small
-/// deterministic jitter from the verse identity, so co-lane nodes don't fuse
-/// into one flat line. In `(0.14, 0.86)` for every verse, so it never clips
-/// regardless of lane height.
+/// A node's position within its lane band: centre plus a deterministic jitter
+/// from the verse identity, so co-lane nodes don't fuse into one flat line.
+/// Always in `(0.14, 0.86)`, so it never clips whatever the lane height.
 fn constellation_lane_frac(r: &VRef) -> f32 {
     let j = ((r.chapter as i64 * 3 + r.verse as i64) % 7 - 3) as f32;
     0.5 + j * 0.12
 }
 
-/// The paging caption: pins, the honest free-weave range, and the pin hint.
+/// The paging caption: pins, the free-weave range, and the pin hint.
 fn constellation_caption(n_pins: usize, free_total: usize, page: usize) -> String {
     let free_lanes = CONSTELLATION_LANES.saturating_sub(n_pins);
     let pins = if n_pins > 0 { format!("{n_pins} pinned · ") } else { String::new() };
@@ -700,12 +653,11 @@ fn constellation_caption(n_pins: usize, free_total: usize, page: usize) -> Strin
 
 /// Lay out one page of the constellation for the given `page` and `pins` (weave
 /// indices into `weaves`, the same handles the lanes carry). Pinned lanes come
-/// first and stay put; the free lanes page past them. Recomputed per event —
-/// the weave library is small.
+/// first and stay put; the free lanes page past them. Recomputed per event — the
+/// weave library is small.
 pub fn constellation(weaves: &[LoadedWeave], corpus: &Corpus, page: usize, pins: &[usize]) -> Constellation {
-    // Witness degree over the whole library: how many weave links touch each
-    // verse (both endpoints, every weave). The busiest verse sets the scale, so
-    // node size is stable across pages.
+    // Witness degree: how many links touch each verse, over the whole library so
+    // the busiest verse sets a scale that is stable across pages.
     let mut deg: HashMap<VRef, usize> = HashMap::new();
     for lw in weaves {
         for l in &lw.weave.links {
@@ -715,8 +667,8 @@ pub fn constellation(weaves: &[LoadedWeave], corpus: &Corpus, page: usize, pins:
     }
     let max_deg = deg.values().copied().max().unwrap_or(1) as f32;
 
-    // Usable weaves: those with at least one link whose both ends resolve in the
-    // corpus (drawable). Keep the original library index for pins + compare.
+    // Drawable weaves: at least one link with both ends in the corpus. The
+    // original library index is kept — pins and compare key on it.
     let mut usable: Vec<(usize, Vec<(VRef, VRef)>)> = weaves
         .iter()
         .enumerate()
@@ -794,16 +746,13 @@ pub fn constellation(weaves: &[LoadedWeave], corpus: &Corpus, page: usize, pins:
     }
 }
 
-/// Slug a weave name into a JSON filename under `dir`. Ported from
-/// `weaveFileIn`.
+/// Slug a weave name into a JSON filename under `dir`.
 pub fn weave_file_in(dir: impl AsRef<Path>, name: &str) -> std::path::PathBuf {
     dir.as_ref().join(format!("{}.json", crate::store::slug(name, "weave")))
 }
 
-/// Load every `*.json` weave under the two standard directories `home/weaves`
-/// and `home/weaves/suggested`. Returns the loaded weaves (sorted by
-/// lowercased name) and any per-file errors. Ported from `loadWeaves` (v1
-/// migration excluded — see the module note).
+/// Load every `*.json` weave under `home/weaves` and `home/weaves/suggested`,
+/// sorted by lowercased name, plus any per-file errors.
 pub fn load_weaves(home: impl AsRef<Path>) -> (Vec<LoadedWeave>, Vec<String>) {
     let home = home.as_ref();
     let dirs = [home.join("weaves"), home.join("weaves").join("suggested")];
@@ -835,9 +784,7 @@ pub fn load_weaves(home: impl AsRef<Path>) -> (Vec<LoadedWeave>, Vec<String>) {
     (loaded, errors)
 }
 
-/// Write a weave to a file as pretty-safe JSON (matching overlay's trailing
-/// newline). Ported from `writeWeave` (atomic write handled by the caller /
-/// `crate::store` later).
+/// A weave as its on-disk JSON, trailing newline included.
 pub fn to_json(weave: &Weave) -> Result<String, Error> {
     serde_json::to_string(weave).map(|s| s + "\n").map_err(|e| Error::Parse(e.to_string()))
 }
@@ -854,11 +801,10 @@ pub fn write_weave(path: impl AsRef<Path>, weave: &Weave, now: &str) -> Result<(
     crate::store::write_atomic(path, &to_json(&stamped)?)
 }
 
-/// Add `link` to the weave named `name` (case-insensitive match among
-/// `loaded`), creating its file on first use with `kind`. Links are deduped and
-/// canonicalized by [`Weave::add_links`]. Returns the file written; a file that
-/// exists but is absent from `loaded` (failed to parse) is refused rather than
-/// clobbered. The caller supplies the creation timestamp.
+/// Add `link` to the weave named `name` (case-insensitive match among `loaded`),
+/// creating its file on first use with `kind`. Returns the file written; a file
+/// that exists but is absent from `loaded` (failed to parse) is refused rather
+/// than clobbered.
 pub fn add_link(
     home: impl AsRef<Path>,
     loaded: &[LoadedWeave],
@@ -891,13 +837,11 @@ pub fn add_link(
     }
 }
 
-/// Weave a set of passages together as a **canon-ordered chain** — the
-/// tag→weave conversion: a reader accumulates a topic tag over time (Rapture,
-/// New Birth, …) and later turns it (or a chosen subset) into a weave they can
-/// read as one thread through the canon. Refs are reading-order sorted and
-/// deduped; consecutive pairs become links. Find-or-creates `name` like
-/// [`add_link`], so re-running after the tag grows just adds the new edges.
-/// Fewer than two distinct refs is an error — a weave is made of links.
+/// Weave a set of passages together as a canon-ordered chain (the tag→weave
+/// conversion). Refs are reading-order sorted and deduped; consecutive pairs
+/// become links. Find-or-creates `name` like [`add_link`], so re-running after
+/// the tag grows adds only the new edges. Fewer than two distinct refs is an
+/// error — a weave is made of links.
 pub fn add_chain(
     home: impl AsRef<Path>,
     loaded: &[LoadedWeave],
@@ -936,22 +880,16 @@ pub fn add_chain(
     }
 }
 
-/// Is this loaded weave a *suggestion* — i.e. it lives under
-/// `home/weaves/suggested` rather than `home/weaves`? Suggestions are proposed
-/// (often machine-generated) weaves awaiting the reader's review. Checked by
-/// the immediate parent directory name, so it is OS-path-separator agnostic.
+/// Whether this weave lives under `home/weaves/suggested` — a proposal awaiting
+/// review. Checked by the parent directory name, so it is separator-agnostic.
 pub fn is_suggested(lw: &LoadedWeave) -> bool {
     lw.file.parent().and_then(|p| p.file_name()).is_some_and(|n| n == "suggested")
 }
 
-/// **Approve** a weave: mark every link approved and land it in the canonical
-/// `home/weaves` directory. A suggestion is *promoted* — written into
-/// `home/weaves` and its `suggested` file removed; if a weave of the same name
-/// already lives there its edges are merged in (union) rather than clobbered.
-/// An already-canonical weave is simply rewritten in place with all links
-/// approved. Returns the canonical file written. Cross-platform: the write goes
-/// through [`crate::store`]'s atomic write and the old file (if any) is removed
-/// with `std::fs::remove_file`.
+/// Approve a weave: mark every link approved and land it in `home/weaves`. A
+/// suggestion is promoted (its `suggested` file removed); a weave of the same
+/// name already there has these edges merged in rather than clobbered. Returns
+/// the canonical file written.
 pub fn approve_weave(home: impl AsRef<Path>, lw: &LoadedWeave, now: &str) -> Result<std::path::PathBuf, Error> {
     let dest = weave_file_in(home.as_ref().join("weaves"), &lw.weave.name);
 
@@ -980,9 +918,8 @@ pub fn approve_weave(home: impl AsRef<Path>, lw: &LoadedWeave, now: &str) -> Res
     Ok(dest)
 }
 
-/// **Reject** a weave: delete its file. Intended for suggestions (removing a
-/// proposal the reader declined); it will delete a canonical weave too, so the
-/// caller decides what may be rejected. A missing file is treated as success.
+/// Reject a weave: delete its file. It will delete a canonical weave too, so the
+/// caller decides what may be rejected. A missing file is success.
 pub fn reject_weave(lw: &LoadedWeave) -> Result<(), Error> {
     match std::fs::remove_file(&lw.file) {
         Ok(()) => Ok(()),
@@ -1052,7 +989,6 @@ mod tests {
         let home = std::env::temp_dir().join(format!("plumbline-weave-approve-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
 
-        // Seed a suggestion under weaves/suggested.
         let sug_dir = home.join("weaves").join("suggested");
         let mut w = Weave::empty("Ransom", WeaveKind::Prophecy, "kjv1769-tok2", "2026-01-01T00:00:00Z");
         w.add_links([Link::canon(r("Isa", 53, 5), r("1Pet", 2, 24))]);
@@ -1064,7 +1000,6 @@ mod tests {
         assert_eq!(loaded.len(), 1);
         assert!(is_suggested(&loaded[0]));
 
-        // Approve → promoted into weaves/, all links approved, suggestion gone.
         let dest = approve_weave(&home, &loaded[0], "2026-07-30T00:00:00Z").unwrap();
         assert!(!loaded[0].file.exists(), "suggestion should be removed");
         assert!(dest.exists());
@@ -1074,7 +1009,6 @@ mod tests {
         assert!(loaded[0].weave.approved);
         assert_eq!(loaded[0].weave.approved_count(), 1);
 
-        // Reject the now-canonical weave → its file is deleted.
         reject_weave(&loaded[0]).unwrap();
         assert!(!loaded[0].file.exists());
         let (loaded, _) = load_weaves(&home);
@@ -1090,13 +1024,11 @@ mod tests {
         let home = std::env::temp_dir().join(format!("plumbline-weave-merge-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
 
-        // Canonical weave with one (approved) link.
         let mut canon = Weave::empty("Lamb", WeaveKind::Typological, "kjv1769-tok2", "c");
         canon.add_links([Link::canon(r("Gen", 22, 8), r("John", 1, 29))]);
         canon.set_all_approval(true);
         write_weave(weave_file_in(home.join("weaves"), "Lamb"), &canon, "2026-07-30T00:00:00Z").unwrap();
 
-        // Same-named suggestion with a different link.
         let mut sug = Weave::empty("Lamb", WeaveKind::Typological, "kjv1769-tok2", "s");
         sug.add_links([Link::canon(r("Exod", 12, 3), r("Rev", 5, 6))]);
         write_weave(weave_file_in(home.join("weaves").join("suggested"), "Lamb"), &sug, "2026-07-30T00:00:00Z")
@@ -1170,8 +1102,8 @@ mod tests {
         let home = std::env::temp_dir().join(format!("plumbline-chain-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
 
-        // Unordered, with a duplicate — the chain must come out canon-ordered
-        // and deduped: Gen 15:6 → Rom 4:3 → Gal 3:6 as two links.
+        // Unordered with a duplicate; the chain comes out canon-ordered and
+        // deduped: Gen 15:6 → Rom 4:3 → Gal 3:6, two links.
         let refs = [r("Rom", 4, 3), r("Gen", 15, 6), r("Gal", 3, 6), r("Gen", 15, 6)];
         let (loaded, _) = load_weaves(&home);
         add_chain(
@@ -1195,8 +1127,7 @@ mod tests {
         assert_eq!(links[1].a, r("Rom", 4, 3));
         assert_eq!(links[1].b, r("Gal", 3, 6));
 
-        // Re-running after the tag grew adds only the new edge (find-or-create
-        // + link dedup), so accumulate-then-weave is idempotent.
+        // Re-running after the tag grew adds only the new edge.
         let refs2 = [r("Gen", 15, 6), r("Rom", 4, 3), r("Gal", 3, 6), r("Jas", 2, 23)];
         add_chain(&home, &loaded, "faith counted", WeaveKind::Typological, "kjv1769-tok2", "x", &refs2).unwrap();
         let (loaded, _) = load_weaves(&home);
@@ -1252,8 +1183,7 @@ mod tests {
 
     #[test]
     fn link_pairs_dedupe_canonically_across_weaves() {
-        // Two weaves that share one link (Gen 1:1–John 1:1, endpoints given in
-        // opposite order) plus one unique link each.
+        // Two weaves sharing one link, endpoints given in opposite order.
         let mut w1 = Weave::empty("a", WeaveKind::Retelling, "kjv1769-tok2", "now");
         w1.add_links([Link::canon(r("Gen", 1, 1), r("John", 1, 1)), Link::canon(r("Gen", 2, 4), r("Matt", 19, 4))]);
         let mut w2 = Weave::empty("b", WeaveKind::Quotation, "kjv1769-tok2", "now");
@@ -1265,12 +1195,12 @@ mod tests {
             vec![LoadedWeave { file: "a.json".into(), weave: w1 }, LoadedWeave { file: "b.json".into(), weave: w2 }];
 
         let pairs = link_pairs(&loaded);
-        // The shared pair appears once → three pairs total.
+        // The shared pair appears once.
         assert_eq!(pairs.len(), 3);
         assert!(pairs.contains(&(r("Gen", 1, 1), r("John", 1, 1))));
         assert!(pairs.contains(&(r("Gen", 2, 4), r("Matt", 19, 4))));
         assert!(pairs.contains(&(r("Exod", 12, 3), r("Rev", 5, 6))));
-        // Every pair is stored canonically (a <= b in reading order).
+        // Every pair is canonical: a <= b in reading order.
         for (a, b) in &pairs {
             assert!(a.reading_key() <= b.reading_key());
         }
@@ -1278,8 +1208,8 @@ mod tests {
 
     #[test]
     fn chord_pairs_fold_book_density_over_deduped_links() {
-        // Two Gen↔John verse links (distinct verses) fold to one book pair with
-        // count 2; a Gen↔Gen link is a self-pair; a shared link counts once.
+        // Two distinct Gen↔John links fold to one book pair of count 2; Gen↔Gen
+        // is a self-pair; a link shared by two weaves counts once.
         let mut w1 = Weave::empty("a", WeaveKind::Retelling, "kjv1769-tok2", "now");
         w1.add_links([
             Link::canon(r("Gen", 1, 1), r("John", 1, 1)),
@@ -1294,9 +1224,7 @@ mod tests {
         let (pairs, max) = chord_pairs(&loaded);
         let gen = crate::canon::book_order("Gen").unwrap();
         let john = crate::canon::book_order("John").unwrap();
-        // Gen↔John woven by two distinct (deduped) verse links.
         assert_eq!(pairs.iter().find(|(a, b, _)| *a == gen && *b == john).unwrap().2, 2);
-        // Gen↔Gen self-pair, count 1.
         assert_eq!(pairs.iter().find(|(a, b, _)| *a == gen && *b == gen).unwrap().2, 1);
         assert_eq!(max, 2);
         // Deterministic (sorted) output.
@@ -1332,7 +1260,7 @@ mod tests {
         assert_eq!(c.lanes[0].name, "alpha");
         assert!(!c.lanes[0].pinned);
         assert_eq!(c.lanes[0].edges.len(), 2);
-        // Gen 1:1, John 3:16 (shared, deduped), Gen 1:2 → three nodes.
+        // John 3:16 is shared by both links, so three nodes, not four.
         assert_eq!(c.lanes[0].nodes.len(), 3);
         assert_eq!(c.n_pins, 0);
         assert_eq!(c.free_total, 2);
@@ -1408,11 +1336,10 @@ mod tests {
         assert_eq!(weave_file_in("weaves", "  "), std::path::Path::new("weaves/weave.json"));
     }
 
-    /// Forward compatibility: the on-disk formats evolve
-    /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
-    /// auto-updates — so a key this build drops is dropped for good on that
-    /// device. A weave written by a later build has to come back out whole, and
-    /// that includes its LINKS: adding one edge rewrites all of them.
+    /// Forward compatibility: the on-disk formats evolve additively (CLAUDE.md
+    /// §Data formats), so a key an older build drops is dropped for good. A
+    /// weave written by a later build must come back out whole, links included —
+    /// adding one edge rewrites all of them.
     #[test]
     fn a_weave_keeps_the_keys_of_a_later_build() {
         let home = std::env::temp_dir().join(format!("plumbline-weave-forward-{}", std::process::id()));
@@ -1481,10 +1408,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// A weave with nothing unknown in it is written byte for byte as it was
-    /// before any of that landed, plus the language stamp a NEW file gets
-    /// (`i18n::stamp`) — these files already ship inside backup zips, so the
-    /// exact bytes matter and the one addition is deliberate.
+    /// A weave with nothing unknown in it is written byte for byte as before,
+    /// plus the language stamp a new file gets (`i18n::stamp`). These files ship
+    /// inside backup zips, so the exact bytes matter.
     #[test]
     fn a_weave_with_no_unknown_keys_is_written_exactly_as_before() {
         let mut w = Weave::empty("Passover", WeaveKind::Typological, "kjv1769-tok2", "2026-07-01T00:00:00Z");
@@ -1501,17 +1427,12 @@ mod tests {
         );
     }
 
-    /// The other half of the stamp's contract, and the one that matters more: a
-    /// file that has NO stamp does not gain one by being re-saved.
+    /// The other half of the stamp's contract: an unstamped file must not gain a
+    /// stamp by being re-saved. If a save wrote the *current* language, a weave
+    /// written under English numbering and edited by a German-reading owner would
+    /// claim German numbering, and the versification migration would act on it.
     ///
-    /// A note or weave written last year was written under English numbering and
-    /// says nothing about it. If its German-reading owner edits it and the save
-    /// wrote the CURRENT language, that file would claim German numbering it was
-    /// never written in — a confident wrong answer where there was an honest
-    /// absence, and the versification migration would act on it.
-    ///
-    /// MUTATION: move `stamped_extra()` from `Weave::empty` into `write_weave`
-    /// (or make it an `or_insert` there). Red here; the test above stays green.
+    /// Fails if `stamped_extra()` moves from `Weave::empty` into `write_weave`.
     #[test]
     fn a_weave_from_an_older_build_does_not_gain_a_language_it_never_had() {
         let older = concat!(
@@ -1530,9 +1451,9 @@ mod review_tests {
     use super::*;
     use crate::VRef;
 
-    /// A name-matching *suggestion* must
-    /// never receive a user's link — rejecting the suggestion later would
-    /// delete it. add_link creates/extends a canonical weave instead.
+    /// A name-matching suggestion must never receive a user's link: rejecting the
+    /// suggestion later would delete it. `add_link` creates/extends a canonical
+    /// weave instead.
     #[test]
     fn add_link_never_appends_to_a_suggestion() {
         let home = std::env::temp_dir().join(format!("plumbline-weave-sugg-{}", std::process::id()));
@@ -1568,8 +1489,6 @@ mod review_tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    // ── stable ids (docs/STABLE-IDS.md) ──────────────────────────────────────
-
     /// A weave gains an id on its first save, keeps it through later edits, and
     /// carries `updated` forward from whichever stamp the mutation had.
     #[test]
@@ -1604,9 +1523,8 @@ mod review_tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// Approving a suggestion writes a canonical file — which is a save, so it is
-    /// stamped like any other. (The suggestion's own id rides across with it when
-    /// there is no canonical weave of that name to merge into.)
+    /// Approving a suggestion writes a canonical file, which is a save and so is
+    /// stamped like any other.
     #[test]
     fn approving_a_suggestion_stamps_the_file_it_writes() {
         let home = std::env::temp_dir().join(format!("plumbline-weave-approve-ids-{}", std::process::id()));
@@ -1626,9 +1544,8 @@ mod review_tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// Two files, one id — newer wins in memory, both files stay. Weaves load
-    /// from two directories (`weaves/` and `weaves/suggested/`), which is exactly
-    /// how a duplicate arrives.
+    /// Two files, one id: the newer wins in memory and both files stay. Loading
+    /// from two directories is exactly how a duplicate arrives.
     #[test]
     fn duplicate_weave_ids_keep_the_newer_and_load_deletes_nothing() {
         let home = std::env::temp_dir().join(format!("plumbline-weave-dup-{}", std::process::id()));

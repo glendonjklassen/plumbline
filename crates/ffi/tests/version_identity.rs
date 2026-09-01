@@ -1,19 +1,14 @@
 //! One release, one version number.
 //!
-//! Three things name the build a reader sees. `plumbline_version()` hands the
-//! shells `CARGO_PKG_VERSION` — the workspace version, shown under About as
-//! `engine ` + that number — while Android's `versionName` and the web shell's
-//! `PLUMBLINE_VERSION` are both derived from the release tag. They have drifted
-//! twice: the manifests sat at 0.1.0 through every 0.x release, so About read
-//! `engine 0.1.0` on a 0.3.x APK; and the release workflow stripped the tag's
-//! leading `v` for Android but not for the web, so one release called itself
-//! "v1.0.0" in the PWA and "1.0.0" on the phone.
+//! Two things name the build a reader sees: `plumbline_version()` reports
+//! `CARGO_PKG_VERSION` (About's `engine …`), while the web shell's
+//! `PLUMBLINE_VERSION` is derived from the release tag. These fail against the
+//! two ways they have drifted — manifests left unbumped behind the tag, and the
+//! workflow stripping the tag's leading `v` for one consumer but not another.
 //!
-//! These tests pin what a build can check with no tag in hand: the manifests
-//! agree with the engine, and the workflow derives ONE displayed version that
-//! both shells read. The other half — tag vs. manifests — is unknowable here,
-//! so the workflow's `version` job asserts it at release time and the last two
-//! tests pin that guard's wiring against quiet removal.
+//! Tag vs. manifests is unknowable with no tag in hand, so the workflow's
+//! `version` job asserts it at release time and the last two tests pin that
+//! guard's wiring against quiet removal.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -27,9 +22,9 @@ fn read(rel: &str) -> String {
     fs::read_to_string(&p).unwrap_or_else(|e| panic!("cannot read {}: {e}", p.display()))
 }
 
-/// The value of the first `version = "…"` anchored at column 0 — TOML's
-/// `[workspace.package]` version. Every dependency version in the root manifest
-/// is inline (`serde = { version = … }`), so none of them anchor there.
+/// The first `version = "…"` anchored at column 0 — TOML's `[workspace.package]`
+/// version. Dependency versions in the root manifest are all inline
+/// (`serde = { version = … }`), so none of them anchor there.
 fn manifest_version(toml: &str) -> &str {
     toml.lines()
         .find_map(|l| l.strip_prefix("version = \""))
@@ -38,8 +33,8 @@ fn manifest_version(toml: &str) -> &str {
 }
 
 /// The workflow's jobs as (name, body) pairs: a job starts at a two-space
-/// indented `key:` line after `jobs:` and runs to the next one. Enough structure
-/// for the checks below without pulling a YAML parser into the tree.
+/// indented `key:` line after `jobs:` and runs to the next one — enough
+/// structure for these checks without pulling a YAML parser into the tree.
 fn jobs(yml: &str) -> Vec<(&str, String)> {
     let body = &yml[yml.find("\njobs:\n").expect("release.yml has no `jobs:`") + 1..];
     let mut out: Vec<(&str, String)> = Vec::new();
@@ -72,8 +67,8 @@ fn the_engine_reports_the_workspace_version() {
         "the root Cargo.toml version and plumbline-ffi's disagree — `plumbline_version()` \
          is what About prints as `engine …`"
     );
-    // The inheritance is the whole point: a version pinned in the crate would
-    // let the workspace bump without the number the shells actually display.
+    // The inheritance matters: a version pinned in the crate lets the workspace bump
+    // without changing the number the shells display.
     assert!(
         read("crates/ffi/Cargo.toml").contains("version.workspace = true"),
         "crates/ffi no longer inherits the workspace version, so bumping the workspace \
@@ -95,37 +90,33 @@ fn the_web_package_version_matches_the_engine() {
 }
 
 #[test]
-fn both_shells_display_one_derived_version() {
+fn the_shell_displays_one_derived_version() {
     let yml = read(".github/workflows/release.yml");
 
-    // Every consumer of a displayed version reads the one job output. This is
-    // the exact bug: `PLUMBLINE_VERSION: ${{ github.ref_name }}` kept the tag's
-    // `v` while Android's own derivation dropped it.
-    for (key, want) in [
-        ("PLUMBLINE_VERSION:", "needs.version.outputs.name"),
-        ("-PplumblineVersionName=", "needs.version.outputs.name"),
-        ("-PplumblineVersionCode=", "needs.version.outputs.code"),
-    ] {
-        let uses: Vec<&str> = yml.lines().filter(|l| l.contains(key)).collect();
-        assert!(!uses.is_empty(), "release.yml no longer sets {key} at all");
-        for line in uses {
-            assert!(
-                line.contains(want),
-                "release.yml feeds {key} from something other than {want}, so the shells \
-                 can disagree about the same release again: {}",
-                line.trim()
-            );
-        }
+    // Every consumer of a displayed version reads the one job output. The bug:
+    // `PLUMBLINE_VERSION: ${{ github.ref_name }}` kept the tag's `v` while a second
+    // derivation dropped it.
+    let key = "PLUMBLINE_VERSION:";
+    let want = "needs.version.outputs.name";
+    let uses: Vec<&str> = yml.lines().filter(|l| l.contains(key)).collect();
+    assert!(!uses.is_empty(), "release.yml no longer sets {key} at all");
+    for line in uses {
+        assert!(
+            line.contains(want),
+            "release.yml feeds {key} from something other than {want}, so a future second \
+             consumer can disagree about the same release again: {}",
+            line.trim()
+        );
     }
 
-    // ...and there is exactly one place that turns the tag into that string.
-    // Two derivations is how the last one drifted.
+    // ...and exactly one place turns the tag into that string. Two derivations is how
+    // the last one drifted.
     let strips: Vec<&str> = yml.lines().filter(|l| !l.trim_start().starts_with('#') && l.contains("#v}")).collect();
     assert_eq!(
         strips.len(),
         1,
         "the tag's leading 'v' is stripped in {} places in release.yml — derive the \
-         displayed version once, in the `version` job, or the shells drift: {strips:?}",
+         displayed version once, in the `version` job: {strips:?}",
         strips.len()
     );
 
@@ -179,13 +170,9 @@ fn version_literals(s: &str) -> Vec<String> {
 
 #[test]
 fn the_readme_names_no_version_but_the_one_it_ships() {
-    // The README is the download page's instructions. It told readers to verify
-    // `plumbline-v1.0.0-android.apk` for a year in which no such release existed
-    // — the version-identity work above bumped three manifests and left the one
-    // file a sideloader actually reads. The durable fix is that the sideload
-    // block names no version at all (`releases/latest`, `plumbline-v*`), so this
-    // test's real job is to keep a literal from creeping back in: any version in
-    // the README has to be the one this tree builds.
+    // The README is the download page's instructions, and it once named a release that
+    // did not exist. It should name no version at all (`releases/latest`); this test
+    // keeps a literal from creeping back in, and any that does has to be this tree's.
     let want = env!("CARGO_PKG_VERSION");
     let readme = read("README.md");
     for (n, line) in readme.lines().enumerate() {
@@ -216,8 +203,8 @@ fn the_release_workflow_checks_the_tag_against_the_manifests() {
         .expect("the `version` job no longer has the `id: v` derivation step")
         .to_string();
 
-    // About prints the engine version from Cargo.toml, not from the tag, so a
-    // tag off an unbumped tree ships "Plumbline 1.1.0 · engine 1.0.0".
+    // About prints the engine version from Cargo.toml, not from the tag, so a tag off an
+    // unbumped tree ships "Plumbline 1.1.0 · engine 1.0.0".
     for want in ["Cargo.toml", "apps/web/package.json", "exit 1"] {
         assert!(
             guard.contains(want),

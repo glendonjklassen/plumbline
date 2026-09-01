@@ -1,43 +1,23 @@
 //! The home church a shared link carries — the clamps, the link, and the checks.
 //!
-//! The point: one QR hands over both the Bible and the people who
-//! sent it. Whoever shares sets their church in Settings; the link they share
-//! carries it; whoever opens that link has it saved locally and sees it in the
-//! welcome, so a card handed out at a service leads back to that service.
+//! One QR hands over both the Bible and the people who sent it: whoever shares
+//! sets their church in Settings, the link they share carries it, and whoever
+//! opens that link has it saved locally and sees it in the welcome.
 //!
-//! Carried as READABLE query parameters rather than an encoded blob: someone
-//! deciding whether to open a link should be able to see what is in it, and a
-//! church that mistypes its own details can fix them by reading the URL.
+//! Carried as readable query parameters rather than an encoded blob, so someone
+//! deciding whether to open a link can see what is in it, and a church that
+//! mistyped its own details can fix them by reading the URL.
 //!
-//! ## Why this is in the core
+//! This module is the one implementation of the share-URL builder, written
+//! because separate copies drifted. The encoding follows the web: what opens a
+//! shared link is always the web app and it parses with `URLSearchParams`, so
+//! form encoding is what round-trips a literal `+`.
 //!
-//! It was written twice — `apps/web/src/shell/church.ts` and Kotlin's
-//! `ui/Church.kt` — and the two copies had drifted:
-//!
-//! * The web built the link with `URLSearchParams`, which form-encodes (a space
-//!   becomes `+`); Android built it with `Uri.appendQueryParameter`, which
-//!   percent-encodes (a space becomes `%20`). Both decode back to the same
-//!   church, so the links worked, but they were not the same link — and a
-//!   church whose name contains a literal `+` came out of the Android build as
-//!   a SPACE on the recipient's device, because `Uri` leaves `+` alone and the
-//!   receiving `URLSearchParams` reads it as a space.
-//! * The web's `shareUrl` never cleaned its argument; Android's did. A church
-//!   longer than the caps could reach a shared URL from the web and not from
-//!   the phone.
-//! * `churchTitle` and `visitChurch` existed in Kotlin and, separately, inline
-//!   in the web's `Shell.svelte`.
-//!
-//! This module is now the one implementation. The encoding follows the WEB,
-//! because the thing that opens a shared link is always the web app and it
-//! parses with `URLSearchParams` — which means form encoding is what round-trips
-//! a literal `+`.
-//!
-//! `church_vectors.json` beside this file is the shared expectation table: the
-//! tests below check the core against it, and `apps/web/e2e/church-parity.spec.ts`
-//! checks the TypeScript against the same rows. The web shell still needs its own
-//! copy because a share link is read synchronously out of derived state and the
-//! engine lives in a worker, so parity is held by that table rather than by there
-//! being only one body of code.
+//! The web shell still keeps a twin, because a share link is read synchronously
+//! out of derived state and the engine lives in a worker. Parity is held by
+//! `church_vectors.json` beside this file: the tests below check the core
+//! against it, and `apps/web/e2e/church-parity.spec.ts` checks the TypeScript
+//! against the same rows.
 
 use crate::config::Church;
 
@@ -50,18 +30,24 @@ pub const NAME_MAX: usize = 80;
 /// See [`NAME_MAX`].
 pub const URL_MAX: usize = 200;
 
+/// The longest a thread name or devotional id may be in a link. Generous for a
+/// name someone typed, short enough that a stranger cannot pad a QR with it.
+pub const TARGET_MAX: usize = 120;
+
 /// What a shared link says beyond the church itself.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ShareOpts<'a> {
-    /// Mark the link as one handed to someone meeting the Bible — the
-    /// recipient's welcome opens on the new-believer path instead of asking
-    /// them to pick. ONLY the Present screen sets it: an ordinary share goes to
-    /// whoever, often someone from the same church, and must stay an ordinary
-    /// link.
-    pub start_as_new_believer: bool,
-    /// The verse the recipient opens at, as a refKey (`"Ps 23:1"`). That is the
-    /// frozen compact form, so it travels as-is.
+    /// The verse the recipient opens at, as a refKey (`"Ps 23:1"`) — the frozen
+    /// compact form, so it travels as-is.
     pub at: Option<&'a str>,
+    /// The language the recipient reads in (`?lang=pa`), whatever the sender
+    /// reads in. A code, validated on the way back out by [`shared_lang`].
+    pub lang: Option<&'a str>,
+    /// A thread the recipient lands on (`?thread=Romans+Road`), by name. Only
+    /// a name every install has is worth sharing — see [`shared_thread`].
+    pub thread: Option<&'a str>,
+    /// A devotional booklet the recipient lands on (`?devotional=new-believer-30`).
+    pub devotional: Option<&'a str>,
 }
 
 /// Whether a church has been set at all — a name is the minimum.
@@ -71,32 +57,28 @@ pub fn has(c: &Church) -> bool {
 
 /// Normalize whatever came off a query string or a settings field.
 ///
-/// Truncation counts CHARACTERS, not bytes and not UTF-16 code units: the
-/// shells' `String.slice`/`take` cut in the middle of a surrogate pair and put a
-/// lone surrogate in the URL, which the recipient reads as `\u{FFFD}`.
+/// Truncation counts CHARACTERS, not bytes and not UTF-16 code units: a
+/// `String.slice` cuts in the middle of a surrogate pair and puts a lone
+/// surrogate in the URL, which the recipient reads as `\u{FFFD}`.
 pub fn clean(c: &Church) -> Church {
     fn cut(v: &str, max: usize) -> String {
         v.trim().chars().take(max).collect()
     }
     Church {
         name: cut(&c.name, NAME_MAX),
-        // A minute outside a day is not a truncation problem, it is nonsense —
-        // dropped, so "never said" is what a bad link produces.
+        // A minute outside a day is nonsense, not a truncation problem: dropped,
+        // so a bad link produces "never said".
         service: c.service.filter(|m| *m < 24 * 60),
         url: cut(&c.url, URL_MAX),
     }
 }
 
-/// What the reader sees on the Church button when there is no site to open:
-/// who and when, which is all we were given.
+/// What the reader sees on the Church button when there is no site to open: who
+/// and when, joined with a colon — a label, not an aside.
 ///
-/// Joined with a COLON, because that is what the two parts are: a name, then
-/// what it tells you about it — a label, not an aside (an em dash would read as
-/// an aside).
-///
-/// English. The parity vectors (`church_vectors.json`) are English by
-/// construction and both shells' twins are checked against them, so this is the
-/// form that contract names; [`title_in`] is what a reader actually sees.
+/// English, because the parity vectors (`church_vectors.json`) are English by
+/// construction and that is the form the contract names; [`title_in`] is what a
+/// reader actually sees.
 pub fn title(c: &Church) -> String {
     title_in(crate::i18n::Lang::En, c)
 }
@@ -118,15 +100,12 @@ pub fn title_in(lang: crate::i18n::Lang, c: &Church) -> String {
     }
 }
 
-/// "Sundays 10:00 AM" — when the church meets, written the reader's way.
+/// "Sundays 10:00 AM" — when the church meets, written the reader's way. The
+/// surrounding words come from the catalogue (`church.meets`); only the clock
+/// is built here.
 ///
-/// The CLOCK is the part that differs: English-speaking readers expect 10:00 AM
-/// and German and Spanish ones expect 10:00 on a 24-hour clock. The surrounding
-/// words come from the catalogue (`church.meets`), so the whole line localizes
-/// and nothing here is a sentence.
-///
-/// Minutes outside a day never reach this — [`clean`] drops them — but the
-/// arithmetic is total anyway rather than relying on that.
+/// Minutes outside a day never reach this ([`clean`] drops them), but the
+/// arithmetic is total rather than relying on that.
 pub fn service_line(lang: crate::i18n::Lang, minutes: u16) -> String {
     crate::i18n::t(lang, "church.meets", &[("time", &clock(lang, minutes))])
 }
@@ -147,31 +126,66 @@ pub fn clock(lang: crate::i18n::Lang, minutes: u16) -> String {
     }
 }
 
-/// The church's own site, if it is one we are willing to open. `None` when it
-/// is not, and a `None` is the shell's cue to fall back to [`title`].
+/// The church's own site, if it is one we are willing to open; `None` is the
+/// shell's cue to fall back to [`title`].
 ///
-/// Only http(s) survives: a church URL is typed by hand on the phone and
-/// arrives from a stranger's query string on the web, and `javascript:` must
-/// never reach an `href` or an `Intent`. ASCII control characters are refused
-/// for the same reason — a newline inside an href is not something a church
-/// typed.
-///
-/// The string comes back TRIMMED BUT OTHERWISE UNTOUCHED. The reader typed it;
-/// the address bar should show what they typed.
+/// Only http(s) survives: the URL arrives from a stranger's query string, and
+/// `javascript:` must never reach an `href`. ASCII control characters are
+/// refused for the same reason — a newline inside an href is not something a
+/// church typed. The string comes back trimmed but otherwise untouched, so the
+/// address bar shows what the reader typed.
 pub fn safe_url(url: &str) -> Option<String> {
     let t = url.trim();
     if t.is_empty() || t.len() > URL_MAX * 4 || t.chars().any(|c| c.is_ascii_control()) {
         return None;
     }
-    let (scheme, rest) = t.split_once("://")?;
-    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
-        return None;
-    }
+    // A scheme is SUPPLIED when the reader did not type one. Churches write their
+    // address the way it is on their sign — "gracebible.org", "www.gracebible.org"
+    // — and refusing that made the field look broken to the person least likely
+    // to know why. `https`, not `http`: guessing the insecure one on a reader's
+    // behalf is a guess that can be downgraded, and every host worth linking has
+    // had TLS for years.
+    //
+    // Only where there is no scheme at all. A scheme we do not allow is still
+    // refused rather than repaired — prepending to `javascript:alert(1)` would
+    // turn a refusal into a link.
+    let full = match scheme_of(t) {
+        Some(scheme) if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") => t.to_string(),
+        Some(_) => return None,
+        None => format!("https://{t}"),
+    };
+    let rest = full.split_once("://")?.1;
     // Authority runs to the first path/query/fragment delimiter; anything before
     // an `@` in it is userinfo, not the host.
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     let host = authority.rsplit('@').next().unwrap_or("");
-    (!host.is_empty()).then(|| t.to_string())
+    // A DOT and no spaces, which `http://` never had to check because typing the
+    // scheme was itself the statement that this is an address. Without it the
+    // church NAME typed into the website field ("Grace Bible Church") becomes
+    // `https://Grace Bible Church` and is offered to the recipient as a link.
+    let host = host.split(':').next().unwrap_or("");
+    if host.is_empty() || !host.contains('.') || host.contains(' ') {
+        return None;
+    }
+    Some(full)
+}
+
+/// The scheme of `t` if it names one — `Some("https")` for `https://x`, and for
+/// an opaque one like `mailto:a@b`. `None` when there is no scheme to speak of,
+/// including for a bare `host:port`, which only looks like one.
+fn scheme_of(t: &str) -> Option<&str> {
+    let (head, rest) = t.split_once(':')?;
+    if head.is_empty() || !head.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    if !head.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')) {
+        return None;
+    }
+    // `example.org:8080` is a host and a port, not a scheme and a path.
+    if rest.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(head)
 }
 
 /// A share link for `base` carrying `church` (plain `base` when unset).
@@ -181,10 +195,9 @@ pub fn share_url(base: &str, church: &Church, opts: &ShareOpts) -> String {
     let service: String;
     if has(&c) {
         pairs.push(("church", &c.name));
-        // The meeting time travels as a NUMBER (minutes since midnight), so the
-        // recipient's app writes it their way rather than reading someone
-        // else's formatting. Rendered into a String here because `pairs` holds
-        // borrows; kept alive for the call below.
+        // The meeting time travels as a number (minutes since midnight) so the
+        // recipient's app writes it their way. Rendered into a String kept alive
+        // for the call below, because `pairs` holds borrows.
         if let Some(m) = c.service {
             service = m.to_string();
             pairs.push(("churchService", &service));
@@ -193,12 +206,24 @@ pub fn share_url(base: &str, church: &Church, opts: &ShareOpts) -> String {
             pairs.push(("churchUrl", &c.url));
         }
     }
-    if opts.start_as_new_believer {
-        pairs.push(("start", "new"));
-    }
     let at = opts.at.map(str::trim).unwrap_or("");
     if !at.is_empty() {
         pairs.push(("at", at));
+    }
+    // The palette's three destinations. Each is a name/code the recipient's app
+    // resolves against what it actually has — the link asserts nothing about the
+    // recipient's install, so a thread they lack falls through to a plain boot.
+    let lang = opts.lang.map(str::trim).unwrap_or("");
+    if !lang.is_empty() {
+        pairs.push(("lang", lang));
+    }
+    let thread = opts.thread.map(str::trim).unwrap_or("");
+    if !thread.is_empty() {
+        pairs.push(("thread", thread));
+    }
+    let devotional = opts.devotional.map(str::trim).unwrap_or("");
+    if !devotional.is_empty() {
+        pairs.push(("devotional", devotional));
     }
     set_query(base, &pairs)
 }
@@ -219,17 +244,12 @@ pub fn with_at(link: &str, ref_key: &str) -> String {
 pub fn from_query(search: &str) -> Option<Church> {
     let c = clean(&Church {
         name: query_get(search, "church").unwrap_or_default(),
-        // A time that is not a number, or not a time, reads as "never said" —
-        // a stranger's query string is not allowed to produce a bad one.
+        // A time that is not a time reads as "never said": a stranger's query
+        // string is not allowed to produce a bad one.
         service: query_get(search, "churchService").and_then(|v| v.trim().parse::<u16>().ok()),
         url: query_get(search, "churchUrl").unwrap_or_default(),
     });
     has(&c).then_some(c)
-}
-
-/// Whether this link asks the welcome to open on the new-believer path.
-pub fn starts_as_new_believer(search: &str) -> bool {
-    query_get(search, "start").as_deref() == Some("new")
 }
 
 /// The verse a link opens at (`?at=Ps 23:1`), or `None`. Shape-checked here so a
@@ -239,6 +259,43 @@ pub fn shared_at_ref(search: &str) -> Option<String> {
     let raw = query_get(search, "at")?;
     let raw = raw.trim();
     is_ref_shaped(raw).then(|| raw.to_string())
+}
+
+/// The language a link asks to be read in (`?lang=pa`), or `None`.
+///
+/// Validated against the shipped registry rather than passed through: an
+/// unknown code must leave the reader in the language they already had, not
+/// strand them in a half-applied one. Returns the CANONICAL code, so `?lang=PA`
+/// and `?lang=pa-IN` both land on `pa`.
+pub fn shared_lang(search: &str) -> Option<&'static str> {
+    let raw = query_get(search, "lang")?;
+    crate::i18n::Lang::shipped(raw.trim()).map(|l| l.code())
+}
+
+/// The thread a link opens on (`?thread=Romans+Road`), or `None`.
+///
+/// A NAME, not content: the recipient's own install is what has to have it, and
+/// the caller resolves it against their loaded threads exactly as
+/// `gospelThread` already resolves a configured name. Length-capped here so a
+/// stranger's query string cannot pad the address bar.
+pub fn shared_thread(search: &str) -> Option<String> {
+    shared_target(search, "thread")
+}
+
+/// The devotional booklet a link opens on (`?devotional=new-believer-30`), or
+/// `None`. An id, resolved by the caller against the booklets they have —
+/// including whether it has been translated into the language they read.
+pub fn shared_devotional(search: &str) -> Option<String> {
+    shared_target(search, "devotional")
+}
+
+/// A named destination off a query string: trimmed, length-capped, non-empty.
+fn shared_target(search: &str, key: &str) -> Option<String> {
+    let raw = query_get(search, key)?;
+    let t = raw.trim();
+    // Counted in CODE POINTS, like `clean` — a cap that splits a character puts
+    // a lone surrogate on screen.
+    (!t.is_empty() && t.chars().count() <= TARGET_MAX).then(|| t.to_string())
 }
 
 // ── query strings ────────────────────────────────────────────────────────────
@@ -386,7 +443,7 @@ mod tests {
     }
 
     /// The shared expectation table. `apps/web/e2e/church-parity.spec.ts` reads
-    /// the same rows and holds the TypeScript copy to them, so the two shells
+    /// the same rows and holds the TypeScript twin to them, so the two copies
     /// cannot drift apart.
     #[test]
     fn matches_the_shared_vector_table() {
@@ -400,8 +457,12 @@ mod tests {
                 row["church"]["url"].as_str().unwrap_or(""),
             );
             let opts = ShareOpts {
-                start_as_new_believer: row["startAsNewBeliever"].as_bool().unwrap_or(false),
                 at: row["at"].as_str(),
+                // Absent columns are the default, so the rows that predate the
+                // share palette keep asserting exactly what they always did.
+                lang: row["lang"].as_str(),
+                thread: row["thread"].as_str(),
+                devotional: row["devotional"].as_str(),
             };
             let cleaned = clean(&c);
             assert_eq!(cleaned.name, row["cleaned"]["name"].as_str().unwrap(), "cleaned name [{name}]");
@@ -409,8 +470,8 @@ mod tests {
             assert_eq!(cleaned.url, row["cleaned"]["url"].as_str().unwrap(), "cleaned url [{name}]");
             assert_eq!(share_url(PWA_URL, &c, &opts), row["url"].as_str().unwrap(), "url [{name}]");
             assert_eq!(title(&c), row["title"].as_str().unwrap(), "title [{name}]");
-            // Against the CLEANED url: that is the only form a shell ever holds
-            // (a church arrives from the config or a query string, both cleaned).
+            // Against the cleaned url: the only form a shell holds, since a
+            // church arrives from the config or a query string, both cleaned.
             assert_eq!(safe_url(&cleaned.url), row["safeUrl"].as_str().map(str::to_string), "safeUrl [{name}]");
         }
     }
@@ -423,9 +484,8 @@ mod tests {
         assert_eq!(c.url.chars().count(), URL_MAX);
     }
 
-    /// The web's `.slice(80)` and Kotlin's `.take(80)` both cut UTF-16 code
-    /// units, so an emoji straddling the cap lost half of itself and the URL
-    /// carried a lone surrogate.
+    /// A `.slice(80)` cuts UTF-16 code units, so an emoji straddling the cap
+    /// loses half of itself and the URL carries a lone surrogate.
     #[test]
     fn clean_never_splits_a_character() {
         let c = clean(&church(&"😀".repeat(NAME_MAX + 10), None, ""));
@@ -441,9 +501,9 @@ mod tests {
         assert_eq!(share_url(PWA_URL, &church("   ", Some(600), "y"), &ShareOpts::default()), PWA_URL);
     }
 
-    /// The Android bug this module was written to end: `Uri.appendQueryParameter`
-    /// leaves `+` alone, and the recipient's `URLSearchParams` reads a bare `+`
-    /// as a space.
+    /// A builder that percent-encodes leaves `+` alone, and the recipient's
+    /// `URLSearchParams` then reads a bare `+` as a space. Form encoding is what
+    /// round-trips it.
     #[test]
     fn a_literal_plus_survives_the_round_trip() {
         let c = church("Faith + Hope Chapel", None, "");
@@ -456,22 +516,65 @@ mod tests {
     #[test]
     fn everything_the_link_carries_comes_back_out() {
         let c = church("Iglesia Bíblica", Some(600), "https://ejemplo.org/a?b=c");
-        let url = share_url(PWA_URL, &c, &ShareOpts { start_as_new_believer: true, at: Some("Ps 23:1") });
+        let url = share_url(PWA_URL, &c, &ShareOpts { at: Some("Ps 23:1"), ..Default::default() });
         let q = url.split_once('?').unwrap().1;
         assert_eq!(from_query(q), Some(c));
-        assert!(starts_as_new_believer(q));
         assert_eq!(shared_at_ref(q).as_deref(), Some("Ps 23:1"));
 
-        // Only "new" opens the new-believer welcome. Anything else in `start`
-        // is a link we did not write, and an ordinary share must stay ordinary.
-        assert!(!starts_as_new_believer("?start=newish"));
-        assert!(!starts_as_new_believer("?start="));
-        assert!(!starts_as_new_believer("?church=Grace"));
-
-        // What a stranger sent goes through the same clamps a settings field
-        // does — a query string is the least trusted input the app has.
+        // A query string is the least trusted input the app has, and goes
+        // through the same clamps a settings field does.
         let long = from_query(&format!("?church=%20%20{}", "n".repeat(200))).expect("a name is a church");
         assert_eq!(long.name, "n".repeat(NAME_MAX));
+    }
+
+    /// The share palette's own parameters, out and back.
+    ///
+    /// Fails against a builder that drops any of them, and against a parser that
+    /// passes a stranger's value through: each half is asserted separately, so
+    /// "it round-trips" cannot mean "both ends are wrong the same way".
+    #[test]
+    fn the_palette_parameters_round_trip() {
+        let c = church("Grace", None, "");
+        let url = share_url(
+            PWA_URL,
+            &c,
+            &ShareOpts {
+                lang: Some("pa"),
+                thread: Some("Romans Road"),
+                devotional: Some("new-believer-30"),
+                ..Default::default()
+            },
+        );
+        let q = url.split_once('?').unwrap().1;
+        assert_eq!(shared_lang(q), Some("pa"));
+        assert_eq!(shared_thread(q).as_deref(), Some("Romans Road"));
+        assert_eq!(shared_devotional(q).as_deref(), Some("new-believer-30"));
+        // A space in a thread name survives the trip — the form encoding that
+        // rescued "Faith + Hope Chapel" is what carries "Romans Road" too.
+        assert!(url.contains("thread=Romans+Road"), "{url}");
+    }
+
+    /// A stranger's query string cannot strand the reader.
+    ///
+    /// Every one of these is a value the app must IGNORE rather than half-apply:
+    /// an unknown language would leave the reader between two catalogues, and an
+    /// unbounded name would pad the address bar of a link someone is deciding
+    /// whether to trust.
+    #[test]
+    fn a_strangers_palette_parameters_are_refused() {
+        assert_eq!(shared_lang("?lang=xx"), None);
+        assert_eq!(shared_lang("?lang="), None);
+        assert_eq!(shared_lang("?church=Grace"), None);
+        // Canonicalized, not passed through: the registry's code is what the
+        // rest of the app switches on.
+        assert_eq!(shared_lang("?lang=PA"), Some("pa"));
+        assert_eq!(shared_lang("?lang=pa-IN"), Some("pa"));
+        assert_eq!(shared_lang("?lang=de-AT"), Some("de"));
+
+        assert_eq!(shared_thread("?thread=%20%20"), None);
+        assert_eq!(shared_thread(&format!("?thread={}", "t".repeat(TARGET_MAX + 1))), None);
+        assert_eq!(shared_thread(&format!("?thread={}", "t".repeat(TARGET_MAX))).map(|t| t.len()), Some(TARGET_MAX));
+        assert_eq!(shared_devotional("?devotional="), None);
     }
 
     #[test]
@@ -488,11 +591,11 @@ mod tests {
 
     #[test]
     fn with_at_leaves_the_rest_of_the_link_alone() {
-        let link = share_url(PWA_URL, &church("Grace", None, ""), &ShareOpts { start_as_new_believer: true, at: None });
+        let link = share_url(PWA_URL, &church("Grace", None, ""), &ShareOpts { at: None, ..Default::default() });
         assert_eq!(with_at(&link, "1John 4:8"), format!("{link}&at=1John+4%3A8"));
         assert_eq!(with_at(&link, "  "), link, "no verse, no change");
-        // Setting it twice sets it, rather than appending a second one that
-        // `URLSearchParams.get` would then ignore.
+        // Setting it twice sets it, rather than appending a second one
+        // `URLSearchParams.get` would ignore.
         assert_eq!(with_at(&with_at(&link, "Ps 1:1"), "Ps 2:2"), format!("{link}&at=Ps+2%3A2"));
     }
 
@@ -507,23 +610,42 @@ mod tests {
         assert_eq!(safe_url("https://gracebible.org"), Some("https://gracebible.org".to_string()));
         assert_eq!(safe_url("  http://gracebible.org/x?y#z  "), Some("http://gracebible.org/x?y#z".to_string()));
         assert_eq!(safe_url("HTTPS://GRACE.ORG"), Some("HTTPS://GRACE.ORG".to_string()));
+
+        // A church writes its address the way it is on the sign. Each of these
+        // gets `https://` supplied — the insecure one is never guessed on a
+        // reader's behalf — and `www` is just part of the host, not a case.
+        for (typed, want) in [
+            ("gracebible.org", "https://gracebible.org"),
+            ("www.gracebible.org", "https://www.gracebible.org"),
+            ("  gracebible.org/welcome  ", "https://gracebible.org/welcome"),
+            ("grace.org:8080/x", "https://grace.org:8080/x"),
+        ] {
+            assert_eq!(safe_url(typed), Some(want.to_string()), "{typed:?}");
+        }
+
         for bad in [
             "javascript:alert(1)",
             "JavaScript:alert(1)",
-            // `javascript://…` IS a valid javascript URL — everything after the
-            // newline runs, and the `//` makes the first line a comment. It is
-            // the case the scheme check exists for, since the others are caught
-            // by having no `://` at all.
+            // `javascript://…` is a valid javascript URL: the `//` comments out
+            // the first line and everything after the newline runs. The case the
+            // scheme check exists for — the others have no `://` at all.
             "javascript://grace.org/%0aalert(1)",
             "JAVASCRIPT://grace.org/\u{000a}alert(1)",
             "data:text/html,<script>",
             "ftp://files.grace.org",
-            "gracebible.org",
+            "mailto:pastor@grace.org",
             "https://",
             "https://@",
             "",
             "   ",
             "https://grace.org\njavascript:alert(1)",
+            // Supplying a scheme must not turn the church's NAME, typed into the
+            // website field, into a link the recipient is offered.
+            "Grace Bible Church",
+            "gracebible",
+            // Nor may it repair a scheme we refuse: `https://javascript:alert(1)`
+            // would be a link where a refusal belongs.
+            "javascript:void(0)",
         ] {
             assert_eq!(safe_url(bad), None, "{bad:?} must not be offered as a link");
         }

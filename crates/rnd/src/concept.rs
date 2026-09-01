@@ -1,16 +1,15 @@
 //! The symbolic concept engine: derived, era-neutral statistics over the
-//! Strong's-tagged corpus — counting and relating *lemmas*, never the 1769
-//! English surface, so it cannot drift with modern English.
+//! Strong's-tagged corpus — counting and relating lemmas, never the 1769 English
+//! surface, so it cannot drift with modern English.
 //!
-//! Ported from overlay `Concept.hs` (the reader-facing core: per-concept
+//! Ported from overlay `Concept.hs`, the reader-facing core only: per-concept
 //! occurrence stats, book distribution, and the co-occurrence → PPMI →
-//! mutual-kNN → label-propagation *community* graph that backs the concept
-//! neighbourhood diagram). The keyness / quotation-candidate / chain machinery
-//! is the offline-analysis side and is not ported here.
+//! mutual-kNN → label-propagation community graph behind the concept
+//! neighbourhood diagram.
 //!
-//! No ML data: everything is a fold over the corpus. To bound memory, only the
-//! mutual-kNN collocation edges are retained (the full PPMI matrix is dropped
-//! after the kNN filter).
+//! No ML data — everything is a fold over the corpus. To bound memory only the
+//! mutual-kNN collocation edges are retained; the full PPMI matrix is dropped
+//! after the kNN filter.
 
 use std::collections::{HashMap, HashSet};
 
@@ -18,9 +17,9 @@ use plumbline_core::canon;
 use plumbline_core::corpus::Corpus;
 use plumbline_core::reference::OT_NT_DIVIDE;
 
-/// How many of a concept's strongest cross-testament partners feed the
-/// dispersion strip's "bridge" row — kept small so the row shows the
-/// equivalents that matter (Christ↔Messiah), not every faint lexical echo.
+/// How many of a concept's strongest cross-testament partners feed the dispersion
+/// strip's "bridge" row. Small on purpose: the row should show the equivalents
+/// that matter (Christ↔Messiah), not every faint lexical echo.
 pub const BRIDGE_ROW_PARTNERS: usize = 6;
 
 /// A Strong's number's occurrence statistics.
@@ -79,14 +78,12 @@ fn is_nt(book: &str) -> bool {
 // ── co-occurrence graph ────────────────────────────────────────────────────────
 //
 // The pipeline (co-occurrence → PPMI → mutual-kNN → label propagation) runs
-// end-to-end over interned `u32` ids with unordered pairs packed into `u64`
-// keys: at corpus scale every stage visits ~600k distinct pairs, and carrying
-// `String` pair keys between stages made this warm-up the most expensive block
-// of a cold boot (890 ms native, several seconds on a phone — TODO #28). Ids
-// are assigned in **lexicographic order** of the code string, so id
-// comparisons and string comparisons agree everywhere: pair canonicalization
-// (`a < b`) and every ordering tie-break below match the String-keyed public
-// wrappers bit for bit.
+// end-to-end over interned `u32` ids with unordered pairs packed into `u64` keys:
+// every stage visits ~600k distinct pairs at corpus scale, and `String` pair keys
+// between stages made this the most expensive block of a cold boot. Ids are
+// assigned in lexicographic order of the code string, so id and string
+// comparisons agree everywhere — pair canonicalization (`a < b`) and every
+// tie-break below match the String-keyed public wrappers bit for bit.
 
 /// The interned corpus: sorted vocabulary + everything the pipeline consumes.
 struct IdGraph {
@@ -185,9 +182,8 @@ fn mutual_knn_ids(k: usize, n_ids: usize, edges: &HashMap<u64, f32>) -> HashMap<
         .into_iter()
         .map(|mut list| {
             // Weight first, then id: without the id tie-break the truncation
-            // depends on HashMap iteration order, so two runs over identical
-            // data could keep different neighbours. Id order is string order,
-            // so this matches the rest of the pipeline.
+            // depends on HashMap iteration order, so two runs over identical data
+            // could keep different neighbours.
             list.sort_by(|x, y| y.1.total_cmp(&x.1).then_with(|| x.0.cmp(&y.0)));
             list.truncate(k);
             list.into_iter().map(|(n, _)| n).collect()
@@ -226,8 +222,8 @@ fn communities_ids(max_rounds: usize, n_ids: usize, edges: &HashMap<u64, f32>) -
                 *pull.entry(labels[u as usize]).or_insert(0.0) += w;
             }
             let best = pull.values().copied().fold(f32::MIN, f32::max);
-            // Smallest label among the heaviest — order-independent, and id
-            // order == string order, so this matches the String tie-break.
+            // Smallest label among the heaviest: order-independent, and id order
+            // is string order, so this matches the String tie-break.
             let chosen = pull.iter().filter(|(_, w)| **w >= best).map(|(l, _)| *l).min().unwrap_or(labels[v]);
             if chosen != next[v] {
                 next[v] = chosen;
@@ -255,8 +251,8 @@ fn communities_ids(max_rounds: usize, n_ids: usize, edges: &HashMap<u64, f32>) -
 }
 
 /// Undirected co-occurrence counts: how many verses each unordered code pair
-/// shares. Pairs are stored canonically (`a < b`). (String-keyed wrapper over
-/// the id-space pipeline; [`Concept::build`] stays in id space throughout.)
+/// shares, stored canonically (`a < b`). String-keyed wrapper over the id-space
+/// pipeline; [`Concept::build`] stays in id space throughout.
 pub fn co_occurrence(corpus: &Corpus) -> HashMap<(String, String), u32> {
     let g = intern_corpus(corpus);
     g.co.iter().map(|(&key, &c)| (name_pair(&g.names, key), c)).collect()
@@ -300,8 +296,8 @@ pub fn communities(max_rounds: usize, edges: &HashMap<(String, String), f32>) ->
 
 // ── the assembled engine ───────────────────────────────────────────────────────
 
-/// The concept engine: per-concept stats plus the retained mutual-kNN
-/// collocation graph and its communities. Built once over the corpus.
+/// Per-concept stats plus the retained mutual-kNN collocation graph and its
+/// communities. Built once over the corpus.
 #[derive(Debug, Clone)]
 pub struct Concept {
     ix: ConceptIx,
@@ -318,8 +314,8 @@ const KNN: usize = 10;
 const COMMUNITY_ROUNDS: usize = 30;
 
 impl Concept {
-    /// Build the whole model in one call. Runs the resumable [`ConceptBuilder`]
-    /// to completion so there is exactly one implementation of the pipeline.
+    /// Build the whole model in one call, by running the resumable
+    /// [`ConceptBuilder`] to completion — one implementation of the pipeline.
     pub fn build(corpus: &Corpus) -> Concept {
         let mut b = ConceptBuilder::default();
         while b.step(corpus, usize::MAX) {}
@@ -331,10 +327,9 @@ impl Concept {
     }
 
     /// Union the per-book dispersion of several codes, summing counts book by
-    /// book. Codes with no stats contribute nothing; the keys are OSIS book ids
-    /// like [`ConceptStat::by_book`]. Used to lay a concept's cross-testament
-    /// partners' occurrences — the dispersion strip's "bridge" row — over its
-    /// own, so viewing *Christ* (G5547) reveals where *Messiah* (H4899) occurs.
+    /// book (OSIS book ids, as [`ConceptStat::by_book`]). Lays a concept's
+    /// cross-testament partners over its own for the dispersion strip's "bridge"
+    /// row, so viewing *Christ* (G5547) reveals where *Messiah* (H4899) occurs.
     pub fn union_by_book<'a>(&self, codes: impl IntoIterator<Item = &'a str>) -> HashMap<String, u32> {
         let mut acc: HashMap<String, u32> = HashMap::new();
         for code in codes {
@@ -385,16 +380,10 @@ impl Concept {
     }
 }
 
-/// The concept map's spokes: the embedding neighbours (`near`, semantic — drawn
-/// gold) unioned with the collocation `community` (green), each capped at `n`
-/// and deduped so a code that is both stays a single **semantic** spoke (near
-/// wins). `near`/`community` are the raw code lists the callers already hold
-/// (from the embedding + this engine); passing them in keeps this helper free
-/// of the embedding dependency.
-///
-/// The one spoke assembly behind the concept-map popup (review item 4): GTK
-/// calls it directly; the non-Rust shells get the same spokes (with labels
-/// pre-baked) through `plumbline_engine_concept_map_json`.
+/// The concept map's spokes: the semantic neighbours `near` (drawn gold) unioned
+/// with the collocation `community` (green), each capped at `n` and deduped so a
+/// code in both stays a single semantic spoke. Both are raw code lists the caller
+/// already holds, so this helper depends on neither source.
 pub fn radial_spokes(near: &[String], community: &[String], n: usize) -> Vec<(String, bool)> {
     let mut spokes: Vec<(String, bool)> = Vec::new();
     for c in near.iter().take(n) {
@@ -416,10 +405,10 @@ mod tests {
         pairs.iter().map(|(a, b, w)| ((a.to_string(), b.to_string()), *w)).collect()
     }
 
-    /// A corpus with enough shape to exercise every stage: shared codes across
-    /// verses (co-occurrence), a tie in edge weight (the kNN truncation rule),
-    /// an isolated code with no edges (must not join a community), and codes
-    /// spread over two books (dispersion).
+    /// Enough shape to exercise every stage: shared codes across verses
+    /// (co-occurrence), a tie in edge weight (the kNN truncation rule), an
+    /// isolated code with no edges (must not join a community), and codes spread
+    /// over two books (dispersion).
     const GRAPH: &str = concat!(
         r#"{"format":"x","tokenization":"kjv1769-tok2","verses":6}"#,
         "\n",
@@ -436,11 +425,10 @@ mod tests {
         r#"{"b":"John","c":1,"v":3,"t":[["","z","",["G9"],0]]}"#,
     );
 
-    /// Slicing must not change the model. The builder carries a cursor through
-    /// twelve stages — corpus folds, PPMI, kNN, label propagation — and a
-    /// boundary landing anywhere inside one would otherwise be free to produce
-    /// a different graph. Every budget from 1 upward is compared against the
-    /// one-shot build, field by field.
+    /// Slicing must not change the model: the builder carries a cursor through
+    /// twelve stages, and a boundary landing inside any one would otherwise be
+    /// free to produce a different graph. Every budget from 1 upward is compared
+    /// against the one-shot build, field by field.
     #[test]
     fn sliced_concept_build_matches_the_one_shot_build() {
         let corpus = plumbline_core::corpus::from_str(GRAPH).unwrap();
@@ -470,8 +458,8 @@ mod tests {
         }
     }
 
-    /// The builder must be usable more than once and yield nothing before it is
-    /// finished — the warm loop relies on both.
+    /// The warm loop relies on both halves: nothing before the end, and the
+    /// result only once.
     #[test]
     fn a_builder_yields_nothing_until_it_is_done() {
         let corpus = plumbline_core::corpus::from_str(GRAPH).unwrap();
@@ -531,8 +519,7 @@ mod tests {
     #[test]
     fn radial_spokes_union_semantic_wins_and_caps() {
         let near = vec!["G1".to_string(), "G2".to_string(), "G3".to_string()];
-        // G2 is in both — it must stay a single semantic spoke; extra community
-        // members past the cap are dropped.
+        // G2 is in both: it must stay a single semantic spoke.
         let community = vec!["G2".to_string(), "G4".to_string(), "G5".to_string(), "G6".to_string()];
         let spokes = radial_spokes(&near, &community, 3);
         assert_eq!(
@@ -553,11 +540,10 @@ mod tests {
 
     #[test]
     fn co_occurrence_pairs_are_canonical_and_counted_per_verse() {
-        // Verse 1 introduces H5 then H9 (interner ids 0, 1); verse 2 introduces
-        // H1 (id 2), which sorts *before* H5 as a string — so id order and
-        // string order disagree, and a pair canonicalized by id instead of by
-        // string would come out as ("H5","H1"). Verse 2 also repeats H5 across
-        // tokens to exercise the per-verse dedup (one increment, not two).
+        // Verse 1 introduces H5 then H9; verse 2 introduces H1, which sorts
+        // before H5 as a string, so a pair canonicalized by arrival order rather
+        // than by string would come out as ("H5","H1"). Verse 2 also repeats H5
+        // across tokens, to exercise the per-verse dedup.
         let jsonl = concat!(
             "{\"tokenization\":\"t\",\"verses\":3}\n",
             "{\"b\":\"Gen\",\"c\":1,\"v\":1,\"t\":[[\"\",\"w\",\"\",[\"H9\",\"H5\"],0]]}\n",
@@ -581,7 +567,7 @@ mod tests {
             .map(|((a, b), c)| ((a.to_string(), b.to_string()), *c))
             .collect();
         let p = ppmi(100, &df, &co);
-        // A·C are rare + co-occur → positive; A·B common but weak → check A·C kept.
+        // A·C are rare and co-occur → positive association, so it is kept.
         assert!(p.contains_key(&("A".to_string(), "C".to_string())));
     }
 
@@ -606,16 +592,15 @@ mod tests {
 
 // ── the resumable build ────────────────────────────────────────────────────────
 //
-// The whole model used to be one synchronous call. On the web that call runs on
-// the ONE worker thread that also answers layout and taps, and it is the single
-// heaviest thing the boot warm does — ~640ms in wasm, during which a tap waits.
-// Nothing here is slower than it was; it is the same pipeline with a cursor at
-// every expensive step, so the shell can come back between slices.
+// The same pipeline with a cursor at every expensive step, so a shell can come
+// back between slices: on the web this runs on the one worker thread that also
+// answers layout and taps, and as a single call it is the heaviest thing the boot
+// warm does (~640ms in wasm, during which a tap waits).
 //
-// Every stage that costs real time walks an INDEXABLE collection: the corpus by
-// verse ordinal, and the intermediate maps materialised into vectors at the
-// stage boundary that produces them. That keeps a cursor meaningful across
-// calls, which a HashMap's iteration order cannot promise.
+// Every stage that costs real time walks an indexable collection — the corpus by
+// verse ordinal, the intermediate maps materialised into vectors at the stage
+// boundary that produces them — because a HashMap's iteration order cannot keep
+// a cursor meaningful across calls.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Stage {
@@ -753,12 +738,9 @@ impl ConceptBuilder {
             }
             Stage::CoToVec => {
                 self.co_vec = std::mem::take(&mut self.co).into_iter().collect();
-                // NOT sorted: determinism comes from the explicit tie-breaks
-                // downstream (kNN truncation by weight-then-id, collocates by
-                // weight-then-code, communities by summed weight then smallest
-                // label), so edge order cannot reach the output. Sorting 600k
-                // pairs to get the same answer cost a 259ms chunk — the single
-                // worst thing the warm did.
+                // Deliberately not sorted: determinism comes from the explicit
+                // tie-breaks downstream, so edge order cannot reach the output.
+                // Sorting 600k pairs for the same answer cost a 259ms chunk.
                 self.enter_stage(Stage::Ppmi)
             }
             Stage::Ppmi => {
@@ -839,12 +821,12 @@ impl ConceptBuilder {
                 self.finish_span(end, len, Stage::CommRound)
             }
             Stage::CommRound => {
-                // Label propagation, sliced BY NODE rather than by round. A
-                // round over 14k nodes was the single worst chunk left in the
-                // warm (~256ms in wasm). The update stays synchronous — every
-                // node in a round reads the labels as they were when the round
-                // began, and `next_labels` is swapped in only at the end — so
-                // slicing cannot change the result.
+                // Label propagation, sliced by node rather than by round: a round
+                // over 14k nodes was the worst chunk left in the warm (~256ms in
+                // wasm). The update stays synchronous — every node reads the
+                // labels as they were when the round began, and `next_labels` is
+                // swapped in only at the end — so slicing cannot change the
+                // result.
                 let n_ids = self.names.len();
                 if self.cursor == 0 {
                     self.next_labels = self.labels.clone();
@@ -891,8 +873,8 @@ impl ConceptBuilder {
                     collocates.entry(b.clone()).or_default().push((a.clone(), w));
                 }
                 for list in collocates.values_mut() {
-                    // Weight, then code: the same tie-break the rest of the
-                    // pipeline uses, so a tie cannot depend on arrival order.
+                    // Weight, then code — the pipeline's tie-break, so a tie
+                    // cannot depend on arrival order.
                     list.sort_by(|x, y| y.1.total_cmp(&x.1).then_with(|| x.0.cmp(&y.0)));
                 }
                 let mut grouped: HashMap<u32, Vec<u32>> = HashMap::new();
@@ -921,8 +903,8 @@ impl ConceptBuilder {
         }
     }
 
-    /// Which stage the cursor is in — for the warm's own diagnostics, and for
-    /// pinning down which slice is the expensive one.
+    /// Which stage the cursor is in — for the warm's diagnostics, and for pinning
+    /// down which slice is the expensive one.
     pub fn stage_label(&self) -> &'static str {
         match self.stage {
             Stage::Ix => "ix",

@@ -1,23 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
-// Arabic, end to end: the Van Dyck read right to left.
+// Arabic, end to end: the Van Dyck read right to left. Each test fails for a
+// different reason — the chrome does not mirror, the text does not mirror
+// (legible words in reversed order), punctuation lands on the wrong side of a
+// word, or search finds nothing because the reader cannot type what the index
+// holds.
 //
-// Every assertion here fails against the app as it was before Arabic landed,
-// and each fails for a DIFFERENT reason — which is the point, because the four
-// ways this feature can be broken look nothing alike on screen:
-//
-//   1. the chrome does not mirror       (dir stays ltr; menus on the wrong side)
-//   2. the text does not mirror         (legible words in reversed order — the
-//                                        one that is easiest to ship, because
-//                                        every individual word renders fine)
-//   3. punctuation lands on the wrong side of a word
-//   4. search finds nothing             (the reader types what they can type,
-//                                        the index holds what the Van Dyck
-//                                        prints, and the two never meet)
-//
-// The strings are read from the catalogue rather than typed, so this file does
-// not become a second place the Arabic copy lives.
+// Strings are read from the catalogues, so this file is not a second place the
+// Arabic copy lives.
 
 const EN: Record<string, string> = JSON.parse(
   readFileSync(new URL("../../../crates/core/src/i18n/en.json", import.meta.url), "utf8"),
@@ -37,25 +28,18 @@ interface Box {
 
 async function reader(page: Page, lang: Record<string, string>): Promise<void> {
   await page.goto("/");
-  const est = page.getByRole("button", { name: lang["intro.pathEstablished"] });
   const canvas = page.locator(".pane canvas").first();
-  await expect(est.or(canvas)).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: lang["intro.start"] }).click();
-  }
   await expect(canvas).toBeVisible({ timeout: 90_000 });
 }
 
-/** Pick a language the way a reader does — see language.spec.ts for why this
- *  drives the real picker instead of writing the config. */
+/** Pick a language through the real picker, not by writing config — see language.spec.ts. */
 async function pick(page: Page, now: Record<string, string>, want: string): Promise<void> {
   await page.getByLabel(now["common.menu"]).click();
   await page.locator(".menu").getByRole("button", { name: now["shell.settings"] }).click();
   const dialog = page.locator('[data-surface="settings"]');
   await expect(dialog).toBeVisible();
   await page.evaluate(() => ((globalThis as any).__beforeSwitch = true));
-  // By VALUE, not label — see the same helper in language.spec.ts.
+  // By value, not label — see the same helper in language.spec.ts.
   await dialog.getByLabel(now["settings.language"], { exact: true }).selectOption(want);
   await page.waitForFunction(
     () => !(globalThis as any).__beforeSwitch && !!(globalThis as any).__plumbline,
@@ -65,14 +49,10 @@ async function pick(page: Page, now: Record<string, string>, want: string): Prom
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 180_000 });
 }
 
-/** The display list the last frame painted, straight off the paint probe.
- *
- *  POLLED, the way reader-perf.spec.ts does it, and not read once: a visible
- *  canvas means the pane is mounted, not that a frame has been painted into it,
- *  and `paintProbe.items` is a WeakRef that is only written when a NEW list
- *  reaches the painter. Read eagerly it returns [] on a machine running four
- *  browsers at once — which reads exactly like "this device opened the wrong
- *  Bible", the failure these tests exist to report. */
+/** The display list the last frame painted, off the paint probe. Polled, not read once: a
+ *  visible canvas means the pane is mounted, not painted into, and `paintProbe.items` is a
+ *  WeakRef written only when a new list reaches the painter — read eagerly it returns [],
+ *  which looks exactly like "this device opened the wrong Bible". */
 async function boxes(page: Page): Promise<Box[]> {
   const read = () =>
     page.evaluate(() => {
@@ -92,8 +72,8 @@ test("the Arabic reader runs right to left, in the chrome and in the text", asyn
   await reader(page, EN);
   await pick(page, EN, "ar");
 
-  // 1. THE DOCUMENT MIRRORS. `dir` is what flips every logical margin, the
-  //    order of a flex row, and which side the menus open on.
+  // 1. The document mirrors: `dir` flips every logical margin, the order of a
+  //    flex row, and which side the menus open on.
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");
 
@@ -104,11 +84,9 @@ test("the Arabic reader runs right to left, in the chrome and in the text", asyn
   expect(words.length).toBeGreaterThan(3);
   expect(words.some((w) => /[\u0600-\u06FF]/.test(w.text)), "no Arabic in the reader").toBe(true);
 
-  // 2. THE TEXT MIRRORS. Take the first line that holds several words and check
-  //    they descend from right to left — i.e. that the engine's mirror ran.
-  //    Without it every one of these words still renders perfectly, in exactly
-  //    the wrong order, which is why this is asserted on coordinates rather
-  //    than left to a screenshot.
+  // 2. The text mirrors: the first multi-word line descends right to left.
+  //    Without the mirror every word still renders perfectly, in the wrong
+  //    order, so this is asserted on coordinates rather than by screenshot.
   const firstY = Math.min(...words.map((w) => w.y));
   const line = words.filter((w) => w.y === firstY).sort((a, b) => list.indexOf(a) - list.indexOf(b));
   expect(line.length, "the first line has too few words to order").toBeGreaterThan(2);
@@ -119,7 +97,7 @@ test("the Arabic reader runs right to left, in the chrome and in the text", asyn
     ).toBeLessThan(line[i - 1].x);
   }
 
-  // 3. THE VERSE NUMBER LEADS AT THE RIGHT EDGE, where an Arabic reader's eye
+  // 3. The verse number leads at the right edge, where an Arabic reader's eye
   //    starts, and outboard of the verse's first word.
   const num = list.find((b) => b.kind === "verseNumber" && b.y === firstY);
   expect(num, "no verse number on the first line").toBeTruthy();
@@ -131,19 +109,12 @@ test("the Arabic reader runs right to left, in the chrome and in the text", asyn
 test.describe("an Arabic device, cold", () => {
   test.use({ locale: "ar-EG" });
 
-  // THE WHOLE FEATURE, from the one angle the tests above cannot see: they all
-  // reach Arabic through the language picker, which means they prove the app
-  // can BE Arabic, not that it arrives that way.
-  //
-  // It did not. An Arabic phone opened this app in fluent Arabic and showed the
-  // reader the English KJV — the Van Dyck was an `optional` download gated on
-  // whether the reader had installed it, and on a first visit nobody has
-  // installed anything. Nothing errored. The chrome was correct. The app simply
-  // told someone, in their own language, that its Bible was in another one.
-  //
-  // Asserted on the SCRIPTURE, because the chrome was already right when this
-  // was broken. See the block in language.spec.ts for the German and Spanish
-  // halves and the three separate regressions this shape catches.
+  // The angle the tests above cannot see: they reach Arabic through the picker,
+  // proving the app can be Arabic, not that it arrives that way. It once did
+  // not — the Van Dyck was an `optional` download nobody has on a first visit,
+  // so an Arabic phone got a fluent Arabic chrome over the English KJV, with
+  // nothing errored. Asserted on the scripture, because the chrome was already
+  // right. language.spec.ts holds the German and Spanish halves.
   test("opens the Van Dyck, in Arabic, with nobody having chosen anything", async ({ page }) => {
     await reader(page, AR);
 
@@ -156,7 +127,7 @@ test.describe("an Arabic device, cold", () => {
       words.some((w) => /[\u0600-\u06FF]/.test(w.text)),
       `an Arabic device is reading ${JSON.stringify(words.slice(0, 8).map((w) => w.text))} — that is not its Bible`,
     ).toBe(true);
-    // Not "some Arabic is on screen": the chrome is Arabic too. This is the
+    // Not "some Arabic is on screen" — the chrome is Arabic too. This is the
     // canvas display list, which only the corpus feeds.
     expect(words.slice(0, 6).map((w) => w.text).join(" ")).not.toContain("There was a man");
   });
@@ -166,14 +137,11 @@ test("Arabic search finds a word the reader can actually type", async ({ page })
   await reader(page, EN);
   await pick(page, EN, "ar");
 
-  // The Van Dyck prints "ٱلْبَدْءِ" — an alef wasla nobody has a key for, under
-  // full vowelling nobody types. A reader searches for "البدء".
-  //
-  // WHAT FAILS WITHOUT THE FOLD: nothing errors. The search runs, the index is
-  // intact, and it returns zero results — because `char::is_alphanumeric` is
-  // TRUE for every Arabic mark (they carry Other_Alphabetic), so the index kept
-  // the whole vowelling and the query never matches it. A silent empty result
-  // is why this is a test and not a spot-check.
+  // The Van Dyck prints "ٱلْبَدْءِ" — an alef wasla nobody has a key for, under full
+  // vowelling nobody types; a reader searches for "البدء". Without the fold nothing
+  // errors and the search returns zero rows: `char::is_alphanumeric` is true for every
+  // Arabic mark (they carry Other_Alphabetic), so the index keeps the whole vowelling
+  // and the query never matches it.
   await page.getByLabel(AR["common.openSearch"]).click();
   const box = page.getByRole("searchbox");
   await expect(box).toBeVisible();
@@ -181,11 +149,9 @@ test("Arabic search finds a word the reader can actually type", async ({ page })
 
   const results = page.locator('[data-surface="search results"]');
   await expect(results).toBeVisible({ timeout: 60_000 });
-  // NOT "some Arabic appears in the results box". Both of the empty states —
-  // "searching…" and the hint — are Arabic prose in this locale, and 297 of the
-  // catalogue's strings carry tashkeel, so neither a script test nor a
-  // diacritic test can tell chrome from scripture here. Two assertions that
-  // only a real hit can satisfy:
+  // Not "some Arabic appears in the results box": both empty states are Arabic prose in
+  // this locale and 297 catalogue strings carry tashkeel, so neither a script nor a
+  // diacritic test can tell chrome from scripture. Two assertions only a real hit satisfies:
   await expect(results.locator("p.hint"), "the results box is still an empty state").toHaveCount(0, {
     timeout: 60_000,
   });
@@ -218,18 +184,14 @@ test("a language one face can render gets that face, not a font menu", async ({ 
   await page.locator(".menu").getByRole("button", { name: AR["shell.settings"] }).click();
   dialog = page.locator('[data-surface="settings"]');
   await expect(dialog).toBeVisible();
-  // NO pickers at all. Only one face can render Arabic, and a dropdown holding
-  // a single row is a control that cannot do anything — it reads as broken,
-  // not restrained (maintainer, 2026-08-28). Both axes go: scripture face and
-  // chrome face are equally choiceless here.
+  // No pickers at all: only one face can render Arabic, and a one-row dropdown reads as
+  // broken rather than restrained. Scripture face and chrome face are equally choiceless.
   await expect(dialog.getByLabel(AR["settings.textFont"], { exact: true })).toHaveCount(0);
   await expect(dialog.getByLabel(AR["settings.chromeFont"], { exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  // Hiding the choice is only honest if the app makes it: the face actually
-  // painting the scripture must BE Amiri — resolved by `readerFace`, not left
-  // to CSS fallback, which renders Amiri glyphs at the LATIN face's optical
-  // scale so the text comes out smaller than any face is calibrated to.
+  // The face painting the scripture must be Amiri, resolved by `readerFace` rather than
+  // left to CSS fallback, which renders Amiri glyphs at the Latin face's optical scale.
   // `bodyFont` is what the last frame really set on the canvas.
   await expect
     .poll(async () => page.evaluate(() => (globalThis as any).__plumblinePaint?.bodyFont ?? ""), {
@@ -238,12 +200,10 @@ test("a language one face can render gets that face, not a font menu", async ({ 
     })
     .toContain("Amiri");
 
-  // And the round trip: back in English the pickers return with a NON-BLANK
-  // selection. A config that holds the script token (an earlier build's
-  // one-row picker allowed selecting it) used to leave the select showing
-  // nothing at all — the value was a token the filtered list doesn't carry
-  // (maintainer's phone, 2026-08-28). `readerFace` resolves off-list tokens to
-  // the language's default, and the select binds to the RESOLVED face.
+  // The round trip: back in English the pickers return with a non-blank selection. A
+  // config holding an off-list token would otherwise leave the select showing nothing;
+  // `readerFace` resolves such tokens to the language default, and the select binds to
+  // the resolved face.
   await pick(page, AR, "en");
   await page.getByLabel(EN["common.menu"]).click();
   await page.locator(".menu").getByRole("button", { name: EN["shell.settings"] }).click();

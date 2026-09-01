@@ -68,9 +68,9 @@ module id `engKJV2006eb` itself no longer resolves there (checked 2026-07-29).
 ## Self-trained artifacts
 
 **No longer shipped, as of 2026-07-30.** The one entry in this section left the
-product that day: nothing in the app reads it any more, so it is not in the APK
-and not in the web data pack. The provenance record stays here because the file
-is still an output of the offline pipeline and still lives in `data/`.
+product that day: nothing in the app reads it any more, so it is not in the web
+data pack. The provenance record stays here because the file is still an output
+of the offline pipeline and still lives in `data/`.
 
 | File | Contents | Provenance |
 |---|---|---|
@@ -89,7 +89,7 @@ the overlay project's BIBLIOGRAPHY; the Rust ports implement the same recipes
 
 ## Study content
 
-The bundled study set is `apps/android/app/src/main/assets/stock/`, seeded once
+The bundled study set is `stock/`, seeded once
 into the reader's own files, after which their copies rule: **28 weaves** in the
 library (386 links, every one marked `approved`), **194 more under
 `weaves/suggested/`** (none approved), and one thread — the Romans Road. The

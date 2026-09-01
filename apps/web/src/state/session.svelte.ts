@@ -1,10 +1,9 @@
-// The shell's shared state — now over the ENGINE WORKER (TODO #28): the
-// engine lives in engine.worker.ts and never blocks this thread. Components
-// keep their synchronous `$derived` graphs by reading through `q()`, a
-// reactive read-through cache: a miss returns null and fires the async fill;
-// the reply bumps `cacheEpoch`, deriveds re-run, and the value is there.
-// Panels already tolerate a null block list, so "loading" is just a frame or
-// two of empty — never a frozen UI.
+// The shell's shared state, over the engine worker: the engine lives in
+// engine.worker.ts and never blocks this thread. Components keep synchronous
+// `$derived` graphs by reading through `q()`, a reactive read-through cache — a
+// miss returns null and fires the async fill; the reply bumps `cacheEpoch`,
+// deriveds re-run, and the value is there. Panels tolerate a null block list, so
+// "loading" is a frame or two of empty rather than a frozen UI.
 
 import { precacheShell } from "../engine/precache";
 import { updateAvailable } from "../engine/update";
@@ -12,29 +11,36 @@ import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "../engine/fonts.gener
 import { EngineRpc, type BootInfo } from "../engine/worker-client";
 import { dayStamp, localDay, nowStamp } from "../engine/StudyEngine";
 import { fontStackFor, setReaderFont } from "../reader/measure";
-import { cleanChurch, clockLabel, PWA_URL, shareUrl, type Church } from "../shell/church";
+import {
+  cleanChurch,
+  clockLabel,
+  PWA_URL,
+  REF_SHAPE,
+  shareUrl,
+  type Church,
+  type SharePreset,
+  type ShareTarget,
+} from "../shell/church";
 import { lang, t, readerFace } from "../lib/i18n.svelte";
 
 export interface PaneState {
   book: string;
   chapter: number;
-  /** Band verse — persists until this pane next navigates (manifest §Reader). */
+  /** Band verse — persists until this pane next navigates. */
   targetVerse: number | null;
   /** One-shot: scroll targetVerse into view once the fresh layout lands. */
   pendingScroll: boolean;
   scrollY: number;
   back: { book: string; chapter: number }[];
   fwd: { book: string; chapter: number }[];
-  /** Deepest verse the reader has scrolled to in THIS chapter — the reading
+  /** Deepest verse the reader has scrolled to in this chapter — the reading
    *  map's high-water mark (core::reading). Monotonic within a chapter: reading
    *  back up does not un-read anything. Reset on navigate. */
   reached?: number;
   /**
-   * The TEXT this pane reads, as a language code. Empty/absent = the reader's
-   * own language, which is every pane until one is changed.
-   *
-   * NOT the UI language: German beside English without the interface moving is
-   * the point (docs/PER-PANE-LANGUAGE.md). It persists per pane.
+   * The text this pane reads, as a language code. Empty/absent = the reader's own
+   * language, which is every pane until one is changed. Not the UI language:
+   * German beside English without the interface moving. Persists per pane.
    */
   lang?: string;
   /** This pane's text is being fetched/opened (0..1 while downloading, or true
@@ -46,15 +52,14 @@ export interface PaneState {
 
 /** Descriptor of what the study surface is showing (sidebar or sheet). */
 export type PanelView =
-  // The four views whose content IS scripture carry the text language they were
-  // opened from, so a word tapped in a German pane gives German study — and the
-  // concordance opened from THAT study still lists German verses. Absent = the
-  // reader's own text, which is every study opened from an ordinary pane.
+  // The views whose content is scripture carry the text language they were opened
+  // from, so a word tapped in a German pane gives German study, and a concordance
+  // opened from that study still lists German verses. Absent = the reader's text.
   | { kind: "wordStudy"; refKey: string; tokenIndex: number; lang?: string }
-  // The word-usage card (word-first study candidate): opened from a tap with
-  // refKey+tokenIndex (the engine resolves the word), or from a wusage: link
-  // with the word alone. `code` set = the original-word lens (lusage: links).
-  // `scope` is a SearchScope token; `page` counts from 0.
+  // The word-usage card: opened from a tap with refKey+tokenIndex (the engine
+  // resolves the word), or from a wusage: link with the word alone. `code` set =
+  // the original-word lens (lusage: links). `scope` is a SearchScope token;
+  // `page` counts from 0.
   | {
       kind: "wordUsage";
       word: string;
@@ -88,13 +93,9 @@ const HISTORY_CAP = 50; // mirrors core config::HISTORY_CAP
 /**
  * The delimiter between an engine method name and its arguments in a cache key.
  *
- * Spelled ONCE, on purpose: every key builder and every prefix-exemption must
- * use this exact separator. When `invalidate()` hand-wrote its exempt prefix as
- * `"toc "` — with a SPACE — while `q()` built keys with a NUL, the exemption
- * matched no key, so every core-ready, warm-ready, rnd-ready and authored event
- * dropped the TOC and the canon segments: mid-refill the canon strip painted
- * nothing, a click on it did nothing, and stepping across a book boundary had no
- * book list to step into.
+ * Spelled once: every key builder and every prefix-exemption must use this exact
+ * separator, or an exemption silently matches no key and the pinned reads below
+ * get dropped by every invalidation.
  */
 const KEY_SEP = "\0";
 /** Namespace for `qs()` keys — engine-independent statics, never invalidated. */
@@ -106,14 +107,12 @@ function cacheKey(method: string, args: unknown[]): string {
 }
 
 /**
- * Reads that are pinned in the cache: no invalidation drops them and no
- * eviction may take them.
+ * Reads pinned in the cache: no invalidation drops them, no eviction takes them.
  *
- * They are corpus-derived — the TOC and the canon shape cannot change while a
- * session runs, because the text does not. Keeping them is not an optimisation:
- * `navigate()` clamps the chapter against `chapterCount()` and `stepChapter()`
- * finds the adjacent book in the TOC, so a session that momentarily has no TOC
- * clamps against nothing and steps nowhere.
+ * They are corpus-derived and cannot change while a session runs. Not an
+ * optimisation: `navigate()` clamps the chapter against `chapterCount()` and
+ * `stepChapter()` finds the adjacent book in the TOC, so a session momentarily
+ * without a TOC clamps against nothing and steps nowhere.
  */
 const PINNED_READS = ["toc", "canonSegments"];
 
@@ -122,27 +121,22 @@ function isPinned(key: string): boolean {
 }
 
 /**
- * How many chapters' gutter marks are remembered (per kind).
- *
- * Six are live at the very most — three panes × weave dots + note marks — and
- * the rest are chapters the reader has walked away from. Sixteen lets a pane
- * step through several chapters without evicting another pane's marks; going
- * deeper would only remember chapters nobody is looking at, and the cost of an
- * eviction is one extra repaint of a chapter being reopened.
+ * How many chapters' gutter marks are remembered (per kind). At most six are
+ * live (three panes × weave dots + note marks); sixteen lets a pane step through
+ * several chapters without evicting another pane's marks. An eviction costs one
+ * extra repaint when that chapter is reopened.
  */
 const MARKS_CAP = 16;
 
 /**
- * The "sunlight" paper Present and Sing are fixed to — the one colour in this
- * file that is NOT read from the palette, because those two screens are not
- * themed: they are the ones handed across or held up in daylight, so they are
- * hard-coded light on purpose.
+ * The "sunlight" paper Present and Sing are fixed to — the one colour here not
+ * read from the palette, because those two screens are deliberately unthemed
+ * (they are handed across or held up in daylight).
  *
- * Restated here because [[Session.applyChrome]] has to name what is painted
- * under the status bar and cannot read it out of a stylesheet. The literal lives
+ * Restated because [[Session.applyChrome]] must name what is painted under the
+ * status bar and cannot read it from a stylesheet. Keep in step with the literal
  * in `present/PresentHost.svelte` (`.present`) and `hymnal/HymnalScreen.svelte`
- * (`.sing-host`); `e2e/theme-color.spec.ts` reads the computed background off
- * the live element rather than trusting this comment to have kept up.
+ * (`.sing-host`).
  */
 const SUNLIT_CHROME = "#fcf9f4";
 
@@ -154,22 +148,20 @@ export class Session {
 
   config = $state<any>({});
 
-  /** The DEVICE's scheme, mirrored into reactive state so the theme can be
+  /** The device's scheme, mirrored into reactive state so the theme can be
    *  derived from it. `matchMedia` is not reactive, so a derivation reading
    *  `#systemDark.matches` would never re-run; the constructor's listener is
    *  this field's only writer. */
   systemDark = $state(false);
 
-  /** The theme token the palette table ACTUALLY carries — never one it does not.
+  /** A theme token the palette table actually carries — never one it does not.
    *
-   *  A miss used to paint an EMPTY palette: every `--*` var kept its previous
-   *  value, so the page stayed on the old theme, while the chrome read
-   *  `palette.dark` off `{}` and wrote cream with `color-scheme: light` — a dark
-   *  page under a light bar, which is the washout. And a miss is reachable: the
-   *  boot reconcile copies `plumbline:themeChoice` out of localStorage, which
-   *  anything on this origin can write. So an unknown token resolves to the
-   *  device's scheme, exactly as core's `ThemeChoice::parse` does — including
-   *  the one legacy alias that still has to land somewhere real. */
+   *  A miss is reachable (the boot reconcile copies `plumbline:themeChoice` out
+   *  of localStorage, which anything on this origin can write) and would paint an
+   *  empty palette: every `--*` var keeps its old value while the chrome reads
+   *  `palette.dark` off `{}`, leaving a dark page under a light bar. So an unknown
+   *  token resolves to the device's scheme, as core's `ThemeChoice::parse` does,
+   *  including the one legacy alias. */
   readonly resolvedTheme = $derived.by((): string => {
     const raw = String(this.config.theme ?? "system");
     const t = raw === "darcula" ? "one-dark" : raw;
@@ -178,27 +170,22 @@ export class Session {
     return Object.hasOwn(this.#palettes, t) ? t : system;
   });
 
-  /** The resolved palette. DERIVED, and the reason [[applyTheme]] has no say in
-   *  it: that function PAINTS this onto the document, it does not decide it. */
+  /** The resolved palette. Derived, so [[applyTheme]] paints it rather than
+   *  deciding it. */
   readonly palette = $derived.by((): any => this.#palettes[this.resolvedTheme] ?? {});
 
-  /** THE chrome — the colour under the system bar and the icon polarity that
-   *  goes with it, as ONE value, so the two can never be written from different
-   *  answers. Light icons on a light bar is exactly that divergence.
+  /** The colour under the system bar and the icon polarity that goes with it, as
+   *  one value so the two can never be written from different answers.
    *
-   *  It names WHAT IS PAINTED UNDER THE BAR, which is not the reader's paper:
-   *  the header, the ScreenBar and the bottom nav are all `--paneNavBg`, and
-   *  Android paints `palette.paneNavBg` behind its system bars for the same
-   *  reason (StudyScreen.kt). Two surfaces cover the bar instead — Present and
-   *  Sing, both `position: fixed` past `--safeTop`. Sing and a RUNNING
-   *  presentation are deliberately fixed-light (they are handed across in
-   *  daylight); Present's PICKER paints the palette's own `--paper`.
+   *  It names what is painted under the bar, which is not the reader's paper: the
+   *  header, the ScreenBar and the bottom nav are all `--paneNavBg`. Two surfaces
+   *  cover the bar instead — Present and Sing, both `position: fixed` past
+   *  `--safeTop`. Sing and a running presentation are fixed-light; Present's
+   *  picker paints the palette's own `--paper`.
    *
-   *  EVERY input is read BEFORE the first branch. The old `applyChrome` chose
-   *  with `?:`, so while a presentation was up the palette was never read at
-   *  all and the effect that called it dropped the theme from its dependencies:
-   *  change theme behind Present, close it, and the bar kept the old answer
-   *  until something unrelated moved. */
+   *  Every input is read before the first branch: choosing with `?:` would leave
+   *  the palette unread while a presentation is up, dropping the theme from this
+   *  derivation's dependencies until something unrelated moved. */
   readonly chrome = $derived.by((): { color: string; dark: boolean } => {
     const present = this.showPresent;
     const presenting = this.presentingThread;
@@ -218,28 +205,21 @@ export class Session {
 
   // ── search: what is typed, and what the engine is asked ─────────────────────
   //
-  // Two fields, because they are two different things. The web shell searches
-  // LIVE, so without a debounce every keystroke is a full query: the four ranked
-  // tiers over the whole corpus, then a block list of up to 200 hits with their
-  // verse text, then JSON across the worker boundary — and the engine lives in
-  // ONE thread, so the eighth keystroke's answer queues behind seven answers
-  // nobody would ever read, in front of the layout and tap RPCs of the chapter
-  // underneath. Android has never had this: its search runs on the IME Search
-  // action, once (StudyScreen.kt). The debounce is the web coming closer to
-  // that, not away from it.
+  // Two fields, because search is live and the engine is one thread: without a
+  // debounce every keystroke is a full query (four ranked tiers over the corpus,
+  // then up to 200 hits with their verse text, then JSON across the worker
+  // boundary), and each answer queues in front of the layout and tap RPCs of the
+  // chapter underneath.
 
   /**
    * How long the field waits after the last keystroke before the engine hears
-   * about it.
-   *
-   * 180 ms. Above the ~120–160 ms a fast typist leaves between characters, so a
-   * word typed straight through is ONE query rather than eight; below the ~200 ms
-   * at which a pause starts to read as the app lagging. Ordinary typing therefore
-   * asks nothing at all until the reader stops.
+   * about it. Above the ~120–160 ms a fast typist leaves between characters, so a
+   * word typed straight through is one query; below the ~200 ms at which a pause
+   * starts to read as lag.
    */
   static readonly SEARCH_DEBOUNCE_MS = 180;
 
-  /** What the reader has typed. The field shows THIS, so it never lags a
+  /** What the reader has typed. The field shows this, so it never lags a
    *  keystroke behind the keyboard. */
   searchDraft = $state("");
   /** The query the study panel actually asks the engine for: [[searchDraft]]
@@ -254,9 +234,8 @@ export class Session {
     this.searchDraft = text;
     if (this.#searchTimer) clearTimeout(this.#searchTimer);
     this.#searchTimer = null;
-    // Emptying the field is a dismissal, not a query — nothing to wait for, and
-    // waiting would leave the old hits up for a fifth of a second after the
-    // reader wiped the field.
+    // Emptying the field is a dismissal, not a query: waiting would leave the old
+    // hits up for a fifth of a second after the reader wiped the field.
     if (!text.trim()) {
       this.searchQuery = text;
       return;
@@ -281,10 +260,9 @@ export class Session {
    * Where the search screen looks, as `core::search::SearchScope::token` spells
    * it — `all` | `ot` | `nt` | `book:<osis>` | `chapter:<osis>:<ch>`.
    *
-   * The two narrow chips are resolved against the ACTIVE PANE at the moment the
-   * reader picks them, and stored as the concrete book/chapter rather than as
-   * "this book": a search screen that silently re-aimed when the pane moved
-   * underneath it would change what a shown result list means without saying so.
+   * The two narrow chips resolve against the active pane when the reader picks
+   * them and store the concrete book/chapter, not "this book": a scope that
+   * re-aimed when the pane moved would change what a shown result list means.
    */
   searchScope = $state("all");
 
@@ -296,36 +274,32 @@ export class Session {
    *  fresh by each ReaderPane for the connectors overlay + canon pins. */
   paneVerseGeom = $state<Map<number, { y: number; h: number }>[]>([]);
   toast = $state<string | null>(null);
-  showFirstRun = $state(false);
   showShortcuts = $state(false);
   /** Open context menu (verse actions), positioned at client coords. */
   contextMenu = $state<{ x: number; y: number; refKey: string } | null>(null);
-  /** Tag-picker sheet target (refKey), Android TagPickerSheet parity. */
+  /** Tag-picker sheet target (refKey). */
   tagPickFor = $state<string | null>(null);
-  /** Thread-picker sheet target (refKey), Android ThreadPickerSheet parity. */
+  /** Thread-picker sheet target (refKey). */
   threadPickFor = $state<string | null>(null);
   /** Tag→weave sheet target (tag ordinal) — the makeweave: verb. */
   tagWeaveFor = $state<number | null>(null);
   /** Passage-memorize picker: the start verse, whose chapter's later verse
-   *  numbers the reader taps to set the end (§Memorization). */
+   *  numbers the reader taps to set the end. */
   memorizePassageFrom = $state<string | null>(null);
   /** Memorization surface (hub / review drill / coverage+activity stats). */
   memorize = $state<{ view: "hub" } | { view: "review"; only?: string } | { view: "stats" } | null>(null);
   /** Reading-history sheet (recents from the shared config). */
   showHistory = $state(false);
-  /** The one Settings dialog (Android IA). */
+  /** The one Settings dialog. */
   showSettings = $state(false);
   /** The ≡ utilities menu (History · Guide & about · shortcuts · Settings).
-   *  Session state, not Shell-local, so every destination's ScreenBar can
-   *  raise the same menu — Settings must not cost a trip back to Read. */
+   *  Session state, not Shell-local, so every destination's ScreenBar can raise
+   *  the same menu — Settings must not cost a trip back to Read. */
   menuOpen = $state(false);
   /**
-   * Which DESTINATION is on screen — the web twin of Android's `Dest`.
-   *
-   * A destination replaces the reader; it does not hover over it — Explore and
-   * Memorize are full screens, not a bottom sheet or modal over the verse you
-   * were reading. `"read"` is the absence of a destination rather than one of
-   * its own.
+   * Which destination is on screen. A destination replaces the reader rather than
+   * hovering over it: Explore and Memorize are full screens, not sheets over the
+   * verse you were reading. `"read"` is the absence of a destination.
    */
   screen = $state<
     | "read"
@@ -344,18 +318,17 @@ export class Session {
 
   // ── devotionals ─────────────────────────────────────────────────────────────
 
-  /** Which devotional day is open, when `screen === "devotional"`. A FULL PAGE
-   *  and not a study-panel block (maintainer, 2026-08-26): a devotional is a
-   *  place you go to read, like a hymn, not an annotation on the verse you were
-   *  already looking at.
+  /** Which devotional day is open, when `screen === "devotional"`. A full page,
+   *  not a study-panel block: a devotional is a place you go to read, like a
+   *  hymn.
    *
    *  `day` is held explicitly rather than always meaning "the open one", so
    *  browsing back to day 3 is the same screen with a different number — and so
    *  the page a reader left survives a re-render that lands mid-refetch. */
   devotionalAt = $state<{ id: string; day: number } | null>(null);
 
-  /** The reader's booklets and the catalogue, keyed by the LOCAL day — the key
-   *  that has to change at midnight, because that is when the answer does. */
+  /** The reader's booklets and the catalogue, keyed by the local day, so the
+   *  cache key changes at midnight when the answer does. */
   devotionals(): any {
     return this.q("devotionals", lang(), localDay());
   }
@@ -370,23 +343,15 @@ export class Session {
   // ── the hymnal ──────────────────────────────────────────────────────────────
 
   /** The hymn being read, and how far its chords are transposed. `semis` lives
-   *  with the id because it is about THIS hymn: a singer who dropped one hymn a
-   *  tone has said nothing about the next one, and carrying the offset across
-   *  would silently rewrite a chart they never asked to change. */
+   *  with the id because it is about this hymn: a singer who dropped one hymn a
+   *  tone has said nothing about the next one. */
   hymn = $state<{ id: string; semis: number } | null>(null);
   /** Which language the hymnal shows where a hymn has more than one. A
-   *  PREFERENCE, not a promise — a German-only hymn still shows German.
+   *  preference, not a promise — a German-only hymn still shows German.
    *
-   *  IT STARTS AS THE APP'S LANGUAGE, and that is the whole point of seeding it
-   *  from `lang()` rather than from `"en"`. This field predates i18n and was a
-   *  hard-coded English default, so a German reader would have opened a German
-   *  interface onto English hymn texts and had to say "Deutsch" again on every
-   *  hymn. Two ideas of what language this reader wants is exactly the drift
-   *  there is no reason to have.
-   *
-   *  It is still its OWN field, because the chips do a different job from the
-   *  language setting: a bilingual singer picking the German text of one hymn
-   *  has not asked for a German interface, and must not get one. */
+   *  Seeded from `lang()`, not `"en"`, so a German interface does not open onto
+   *  English hymn texts. Still its own field, because a bilingual singer picking
+   *  the German text of one hymn has not asked for a German interface. */
   hymnLang = $state(lang());
   /** Whether chords are drawn above the words. Off by default: most people
    *  singing are not playing, and a chart over every line is noise to them. */
@@ -398,19 +363,16 @@ export class Session {
 
   /** Whether Present has a thread actually up, as opposed to its picker.
    *
-   *  The two halves of that screen are painted differently and only
-   *  [[applyChrome]] cares: the PICKER is theme-aware (`.present.picking`
-   *  restates the palette — "dark mode was jarringly white"), while the
-   *  presentation itself keeps the fixed sunlight paper. So `showPresent` alone
-   *  is too coarse to say what is under the status bar.
+   *  The two halves of that screen paint differently: the picker is theme-aware
+   *  (`.present.picking` restates the palette), the presentation keeps the fixed
+   *  sunlight paper. So `showPresent` alone is too coarse to say what is under
+   *  the status bar.
    *
-   *  PresentHost's effect is its ONLY writer, and deliberately: it is a
-   *  PROJECTION of that component's `thread`, so it is never set from anywhere
-   *  else and it is NOT in [[Session.TRANSIENT]]. A back-peel closes Present
-   *  without the component's own `close()` running, and the surface that has to
-   *  answer for that is `thread` itself — PresentHost resets it when
-   *  `showPresent` goes false, and this flag follows. Two writers here would be
-   *  two owners of the same pixels again. Always read with `showPresent`. */
+   *  A projection of PresentHost's `thread`, and that component's effect is its
+   *  only writer — which is why it is not in [[Session.TRANSIENT]]: a back-peel
+   *  closes Present without the component's `close()` running, PresentHost resets
+   *  `thread` when `showPresent` goes false, and this flag follows. Always read
+   *  with `showPresent`. */
   presentingThread = $state(false);
 
   /** Back to the text from anywhere — what every screen's ‹ does. */
@@ -449,55 +411,42 @@ export class Session {
   bootTrace = $state<[string, number][]>([]);
   /** Cost split of the last chapter turn (same diagnostics section). */
   turnTrace = $state<[string, number][]>([]);
-  /** The church whose shared link opened this session, if it was opened from
-   *  one — the welcome names them. Not persisted: it describes THIS arrival,
-   *  while `config.church` is the reader's own (see shell/church.ts). */
+  /** The church whose shared link opened this session, if any — the welcome names
+   *  them. Not persisted: it describes this arrival, while `config.church` is the
+   *  reader's own (see shell/church.ts). */
   sharedByChurch = $state<Church | null>(null);
-  /** Narrow (phone-shaped) viewport — mirrors the CSS 700px breakpoint. ONE
-   *  pane only there: splits are hidden and links never open "beside" (two panes
-   *  on a phone is jank). */
+  /** Narrow (phone-shaped) viewport — mirrors the CSS 700px breakpoint. One pane
+   *  only there: splits are hidden and links never open "beside". */
   narrow = $state(matchMedia("(max-width: 700px)").matches);
-  /** Wide enough for a THIRD reading pane. Between this and `narrow` sits the
+  /** Wide enough for a third reading pane. Between this and `narrow` sits the
    *  foldable/small-laptop band, where the shell is the desktop one but there is
-   *  only room for two: an unfolded Pixel Fold is ~840 px, which three panes cut
-   *  into 280px columns — and that is before the 380px study sidebar, which is
-   *  now allowed to sit beside the text at these widths. */
+   *  room for two: an unfolded Pixel Fold is ~840px, which three panes cut into
+   *  280px columns — before the 380px study sidebar beside them. */
   roomy = $state(matchMedia("(min-width: 1100px)").matches);
   /** Active text prompt (rendered by PromptDialog); resolves null on cancel. */
   promptReq = $state<{
     title: string;
     initial: string;
     multiline: boolean;
-    /** Ask for a NUMBER: the field carries `inputmode="numeric"`, which is what
-     *  raises a phone's numpad instead of its full keyboard. Still a text field
-     *  — `type="number"` brings spinners and a browser's own validation UI to a
-     *  dialog that already has an OK button. */
+    /** Ask for a number: the field carries `inputmode="numeric"`, which raises a
+     *  phone's numpad. Still a text field — `type="number"` brings spinners and
+     *  the browser's own validation UI to a dialog that has an OK button. */
     numeric?: boolean;
     resolve: (v: string | null) => void;
   } | null>(null);
 
   /**
-   * Every transient surface, as field → the value that means CLOSED.
+   * Every transient surface, as field → the value that means closed. Add a
+   * `$state` surface above without adding it here and it becomes a modal the
+   * Read tab cannot dismiss.
    *
-   * This lives HERE, next to the declarations, and not in the shell, because the
-   * shell's version was a hand-kept list of five and there are thirteen of these.
-   * Every surface added since that list was written inherited the same trap: its
-   * modal covered the screen and the Read tab could not dismiss it. Adding a
-   * `$state` surface above
-   * without adding it here is now a one-file omission a reviewer can see, rather
-   * than a bug in a different file that nobody thinks to look at.
-   *
-   * A TABLE rather than a run of assignments, because there are now two questions
-   * to ask about this set and not one: [[dismissTransient]] closes them all, and
-   * [[transientOpen]] asks whether any is open — which is what the phone's Back
-   * button needs to know. Two hand-kept lists of sixteen fields is the same trap
-   * one level up.
+   * A table rather than a run of assignments because two questions are asked of
+   * this set: [[dismissTransient]] closes them all, [[transientOpen]] asks
+   * whether any is open (what the phone's Back button needs).
    *
    * `keyof Session` is the point of the `satisfies`: a typo'd field name would
    * otherwise assign a brand-new property and silently stop closing a surface.
    *
-   * NOT showFirstRun: a reader who has never chosen a path must not be able to
-   * tab past the question. It closes by being answered.
    */
   static readonly TRANSIENT = [
     ["screen", "read"],
@@ -513,7 +462,6 @@ export class Session {
     ["memorizePassageFrom", null],
     ["markReadFor", null],
     ["bookNavFor", null],
-    ["reopenIntro", null],
     ["showHistory", false],
     ["showSettings", false],
     ["showShortcuts", false],
@@ -526,15 +474,14 @@ export class Session {
    * panel. What a destination tap does before it opens anything, and what the
    * Back button does on a phone.
    *
-   * `promptReq` is RESOLVED, not just nulled: `askText` handed a promise to a
-   * caller that is still awaiting it, and dropping the request on the floor would
-   * leave that caller hanging forever.
+   * `promptReq` is resolved, not just nulled: `askText` handed a promise to a
+   * caller that is still awaiting it.
    */
   dismissTransient(): void {
     this.cancelPrompt();
-    // A pending confirmation resolves NO. Anything else would leave a caller
-    // awaiting a promise that never settles, or worse, destroy something because
-    // the reader navigated away.
+    // A pending confirmation resolves no — anything else leaves a caller awaiting
+    // a promise that never settles, or destroys something because the reader
+    // navigated away.
     this.cancelConfirm();
     for (const [field, closed] of Session.TRANSIENT) {
       (this as unknown as Record<string, unknown>)[field] = closed;
@@ -542,27 +489,19 @@ export class Session {
   }
 
   /**
-   * Peel ONE transient layer, outermost first — the ladder Escape has always
-   * climbed, moved into the session so the phone's Back button climbs the SAME
-   * one ([[installRouter]]). Back used to run [[dismissTransient]], which
-   * collapsed the whole stack in a single press: Study hub → Tags page → menu,
-   * one Back, and the reader was staring at Genesis — while Escape on the same
-   * screen, and Android's per-surface BackHandlers, both peeled one layer.
-   * Three affordances, two answers, and the phone's was the wrong one.
+   * Peel one transient layer, outermost first — the ladder Escape climbs, in the
+   * session so the phone's Back button climbs the same one ([[installRouter]]).
+   * Not [[dismissTransient]], which would collapse the whole stack in one press.
    *
    * Returns whether anything was peeled: Back re-arms its history entry when
    * layers remain, and stops spending presses when nothing is left.
    *
-   * The ORDER is containment, outermost first. Dialogs answer before anything
-   * else (they are modal, so they are on top by construction — and while one is
-   * open, `use:modal` stops Escape at the dialog, leaving these rungs as the
-   * fallback for Back and for a press that arrives with focus elsewhere). Then
-   * popups and pickers; then the surfaces that nest — Sing mode lives inside a
-   * hymn, a drill inside the Memorize hub; then the study panel; and last the
-   * screens, each up to the SAME parent its own ‹ names: a sub-page of the
-   * Study hub returns to the hub, a hub returns to the text. One press, one
-   * layer — Escape out of a study panel opened from Explore lands back in
-   * Explore, not in Genesis.
+   * The order is containment. Dialogs first (modal, so on top by construction —
+   * and while one is open `use:modal` stops Escape at the dialog, leaving these
+   * rungs as the fallback for Back and for a press with focus elsewhere); then
+   * popups and pickers; then the surfaces that nest (Sing inside a hymn, a drill
+   * inside the Memorize hub); then the study panel; last the screens, each up to
+   * the same parent its own ‹ names.
    */
   popOneLayer(): boolean {
     if (this.menuOpen) this.menuOpen = false;
@@ -579,7 +518,6 @@ export class Session {
     else if (this.tagPickFor) this.tagPickFor = null;
     else if (this.tagWeaveFor !== null) this.tagWeaveFor = null;
     else if (this.memorizePassageFrom) this.memorizePassageFrom = null;
-    else if (this.reopenIntro) this.reopenIntro = null;
     else if (this.showSettings) this.showSettings = false;
     else if (this.showHistory) this.showHistory = false;
     else if (this.showShortcuts) this.showShortcuts = false;
@@ -614,10 +552,8 @@ export class Session {
     );
   }
 
-  /** An open confirmation. One mechanism for every destructive action, so that
-   *  "does this ask first?" is answered in one place instead of per button —
-   *  deleting a memorize card asked nothing at all while deleting a thread had its
-   *  own bespoke inline prompt. */
+  /** An open confirmation. One mechanism for every destructive action, so "does
+   *  this ask first?" is answered in one place instead of per button. */
   confirmReq = $state<{
     title: string;
     body: string;
@@ -633,15 +569,13 @@ export class Session {
   } | null>(null);
 
   /**
-   * Ask the reader to choose one of `options`.
-   *
-   * A picker rather than a text field: every caller so far is choosing among
-   * things that already exist (tags), and asking somebody to retype a name they
-   * are looking at is how you get a typo that creates a second tag.
+   * Ask the reader to choose one of `options`. A picker rather than a text field:
+   * callers are choosing among things that already exist (tags), and retyping a
+   * name is how a typo creates a second tag.
    */
   askPick(title: string, options: string[]): Promise<string | null> {
-    // One question at a time, like `askConfirm` — a second ask while one is open
-    // answers the first with a cancel rather than leaving it forever pending.
+    // One question at a time: a second ask while one is open cancels the first
+    // rather than leaving it forever pending.
     this.pickReq?.resolve(null);
     return new Promise((resolve) => {
       this.pickReq = { title, options, resolve };
@@ -651,14 +585,13 @@ export class Session {
   /**
    * Ask before destroying something. Resolves true only if the reader says so.
    *
-   * `verb` is the button's label, and it should name the ACT rather than say
-   * "OK" — "Delete thread", "Remove card". A reader who half-read the sentence
-   * still knows what the button does.
+   * `verb` is the button's label and should name the act rather than say "OK" —
+   * "Delete thread", "Remove card" — so a reader who half-read the sentence still
+   * knows what the button does.
    */
   askConfirm(title: string, body: string, verb?: string): Promise<boolean> {
     // One question at a time: a second ask while one is open answers the first
-    // with "no". Overwriting it silently left the first caller awaiting a
-    // promise nothing could ever settle.
+    // with "no", rather than leaving that caller awaiting forever.
     this.confirmReq?.resolve(false);
     return new Promise((resolve) => {
       this.confirmReq = { title, body, verb: verb ?? t("common.delete"), resolve };
@@ -680,7 +613,7 @@ export class Session {
     this.pickReq = null;
   }
 
-  /** Ask the user for text — the web twin of the desktops' native prompts. */
+  /** Ask the user for text. */
   askText(title: string, initial = "", multiline = false): Promise<string | null> {
     return new Promise((resolve) => {
       this.promptReq = { title, initial, multiline, resolve };
@@ -716,7 +649,7 @@ export class Session {
   #systemDark = matchMedia("(prefers-color-scheme: dark)");
   /** Palettes per theme, prefetched at boot (applyTheme stays synchronous). */
   #palettes: Record<string, any>;
-  /** The `--*` roles currently written INLINE on `<html>` — this session's, and
+  /** The `--*` roles currently written inline on `<html>` — this session's, and
    *  on the first call the pre-paint script's, seeded from the same cache it
    *  read. [[applyTheme]] clears whatever the next palette does not carry. */
   #paletteKeysApplied: Set<string> | null = null;
@@ -727,44 +660,34 @@ export class Session {
   #pending = new Set<string>();
 
   /**
-   * How many engine reads the cache may hold at once.
+   * How many engine reads the cache may hold at once. Several call sites mint a
+   * key per interaction rather than per screen (`verse` by refKey — the
+   * passage-memorize preview asks one per verse, 176 for Psalm 119 — and
+   * `memoryDue`/`memoryCoverage` by a second-granularity stamp), so without a
+   * bound the cache grows for the life of the tab.
    *
-   * It held everything, for the life of the tab, and several call sites mint a
-   * key per interaction rather than per screen: `searchBlocks` is keyed by the
-   * query string (one entry per keystroke), `wordStudyBlocks` by the tapped
-   * word, `verse` by refKey — the passage-memorize preview asks for one per
-   * verse, so Psalm 119 alone is 176 — and `memoryDue`/`memoryCoverage` by a
-   * second-granularity stamp taken afresh each time the hub opens.
+   * 512 sits above the largest working set that can legitimately be live at once
+   * (that preview, the navigator's day-keyed reading map, three panes and a study
+   * panel — under 300), so eviction cannot take an answer out from under
+   * something on screen and cost a null frame.
    *
-   * The bound is derived from the largest working set the app can legitimately
-   * have LIVE: that 176-verse preview, plus the navigator's day-keyed reading
-   * map (1 books read + up to 66 chapter reads), plus three panes and an open
-   * study panel — under 300. 512 is that with room, so eviction cannot take an
-   * answer out from under something on screen, which would cost a null frame.
-   *
-   * Honest limit: this bounds the COUNT, not the bytes. One `concordanceBlocks`
-   * for a common Strong's code is orders of magnitude bigger than one `verse`,
-   * and a byte bound would need a per-entry size estimate. Capping the count is
-   * what stops the unbounded growth; it is not a memory budget.
+   * It bounds the count, not the bytes: one `concordanceBlocks` for a common
+   * Strong's code dwarfs one `verse`. This stops unbounded growth; it is not a
+   * memory budget.
    */
   static readonly CACHE_CAP = 512;
 
   /**
    * Reads whose answers are too big to keep more than a few of, method → how
-   * many.
+   * many — the exemption for entries [[CACHE_CAP]]'s count bound cannot hold.
    *
-   * [[CACHE_CAP]] bounds the COUNT and says so; this is the exemption for the
-   * entries where that is not enough. A search answer is up to 200 hits
-   * carrying their verse text — the largest single thing this cache holds — and
-   * its key is the query string (now the query AND the scope), so a reader
-   * typing a word left one behind per keystroke. Only the query on screen can be
-   * read, so only the query on screen is kept; the rest were evicting other
-   * panels\' answers to hold results for fragments of a word nobody will type
-   * again.
+   * A search answer is up to 200 hits carrying their verse text, the largest
+   * single thing this cache holds, and its key is the query and scope, so typing
+   * a word leaves one behind per keystroke. Only the query on screen is readable,
+   * so only it is kept.
    *
-   * BOTH names are capped. `searchBlocksScoped` is what the search screen calls;
-   * `searchBlocks` is the unscoped endpoint, still on the engine and still the
-   * one an older cached answer would sit under.
+   * Both names are capped: `searchBlocksScoped` is what the search screen calls,
+   * `searchBlocks` the unscoped endpoint an older cached answer sits under.
    */
   static readonly PER_METHOD_CAP: Record<string, number> = { searchBlocks: 1, searchBlocksScoped: 1 };
 
@@ -785,8 +708,8 @@ export class Session {
     for (const k of mine.slice(0, Math.max(mine.length - cap, 0))) this.#cache.delete(k);
   }
 
-  /** Read a hit and move it to the young end of the LRU order. A Map iterates
-   *  in insertion order, so re-inserting IS the reordering. */
+  /** Read a hit and move it to the young end of the LRU order. A Map iterates in
+   *  insertion order, so re-inserting is the reordering. */
   #touch(key: string): any {
     const v = this.#cache.get(key);
     this.#cache.delete(key);
@@ -794,13 +717,13 @@ export class Session {
     return v;
   }
 
-  /** The last REAL answer per key, surviving `invalidate()` — the stale side of
+  /** The last real answer per key, surviving `invalidate()` — the stale side of
    *  [[qStale]]'s stale-while-revalidate. Same LRU discipline as the cache. */
   #lastKnown = new Map<string, any>();
 
   /** Store a fresh answer, then evict from the old end until the cache is back
    *  inside [[CACHE_CAP]]. Pinned reads are skipped: evicting the TOC breaks
-   *  navigation exactly the way dropping it in `invalidate()` did. */
+   *  navigation (see [[PINNED_READS]]). */
   #store(key: string, value: any): void {
     this.#lastKnown.delete(key);
     this.#lastKnown.set(key, value);
@@ -842,19 +765,17 @@ export class Session {
   }
 
   /**
-   * [[q]], except a cache miss serves the LAST REAL ANSWER while the refetch is
+   * [[q]], except a cache miss serves the last real answer while the refetch is
    * in flight — stale-while-revalidate.
    *
-   * For surfaces that show COUNTS AND SUMMARIES (the Study hub's band and card
+   * For surfaces showing counts and summaries (the Study hub's band and card
    * counts): `invalidate()` runs on every authoring write and `q` answers null
-   * until the refetch lands, so those surfaces redrew empty and then popped
-   * back one answer at a time — the grid shifting under the reader's thumb
-   * ("widgets are spazzy on load", UAT 2026-08-18). A stale count self-corrects
-   * the moment the fresh answer bumps `cacheEpoch`.
+   * until the refetch lands, so those surfaces would redraw empty and pop back
+   * one answer at a time, shifting the grid under the reader's thumb.
    *
-   * OPT-IN, never a change to `q`: a stale LIST whose ordinals aim taps
-   * (threads / tags / weaves panels — "ordinals shift after every write") must
-   * keep using `q`, or a tap during the refetch window acts on the wrong row.
+   * Opt-in, never a change to `q`: a stale list whose ordinals aim taps (threads
+   * / tags / weaves panels) must keep using `q`, or a tap during the refetch
+   * window acts on the wrong row.
    */
   qStale(method: string, ...args: unknown[]): any {
     const fresh = this.q(method, ...args);
@@ -863,13 +784,13 @@ export class Session {
   }
 
   /**
-   * [[q]] against another LANGUAGE's text — a German pane's word study, its
-   * verse text, its chapter counts.
+   * [[q]] against another language's text — a German pane's word study, verse
+   * text, chapter counts.
    *
-   * The language is part of the CACHE KEY, not just of the call: two panes on
-   * John 3 in two languages ask the same method with the same arguments and
-   * must not answer each other. A falsy language is the reader's own text and
-   * shares the ordinary key, so nothing that never sets one pays for this.
+   * The language is part of the cache key, not just the call: two panes on John 3
+   * in two languages ask the same method with the same arguments and must not
+   * answer each other. A falsy language is the reader's own text and shares the
+   * ordinary key.
    */
   qIn(lang: string | null | undefined, method: string, ...args: unknown[]): any {
     if (!lang) return this.q(method, ...args);
@@ -897,10 +818,9 @@ export class Session {
    * Point a pane at a language's text, fetching and opening it if this device
    * has not got it yet.
    *
-   * The pane shows its own progress and the panes beside it keep reading —
-   * there is no reload here, which is the whole difference from the settings
-   * language switch. An empty code puts the pane back on the reader's own text,
-   * which never needs downloading.
+   * No reload — the pane shows its own progress and the panes beside it keep
+   * reading, unlike the settings language switch. An empty code puts the pane
+   * back on the reader's own text, which never needs downloading.
    */
   async setPaneLang(index: number, code: string): Promise<void> {
     const pane = this.panes[index];
@@ -917,8 +837,8 @@ export class Session {
     try {
       await this.rpc.openPaneLang(code);
       pane.lang = code;
-      // The pane's own chapter has to be laid out again in the new text, and
-      // the marks/geometry it cached belong to the old one.
+      // The chapter is laid out again in the new text; the marks and geometry
+      // the pane cached belong to the old one.
       pane.scrollY = 0;
       this.saveConfig();
     } catch (e) {
@@ -931,9 +851,8 @@ export class Session {
     }
   }
 
-  /** Hand back the Bibles no pane is reading. Each open text costs its cache
-   *  in the engine's heap, so a reader who tried German and went back to
-   *  English should not keep paying for it. */
+  /** Hand back the Bibles no pane is reading. Each open text costs its cache in
+   *  the engine's heap. */
   releaseUnusedLangs(): Promise<number> {
     const keep = [...new Set(this.panes.map((p) => p.lang).filter((l): l is string => !!l))];
     return this.rpc.releaseLangs(keep);
@@ -979,14 +898,14 @@ export class Session {
     return v;
   }
 
-  /** Chained panes scroll TOGETHER, verse-aligned rather than offset-copied:
-   *  the same chapter in two languages runs to different heights, so the only
-   *  sync that stays true down the column is "the verse under your eye is the
-   *  verse under theirs". Geometry is what each pane already publishes for the
-   *  connectors overlay (verse number → line box). Partners get their `scrollY`
-   *  written — each pane's own mirror effect moves the real scroller with its
-   *  programmatic flag up, so a linked move never echoes back as a user scroll.
-   *  Only panes on the SAME book+chapter follow; everything else is left alone. */
+  /** Chained panes scroll together, verse-aligned rather than offset-copied: the
+   *  same chapter in two languages runs to different heights, so the only sync
+   *  that stays true down the column is "the verse under your eye is the verse
+   *  under theirs". Geometry is what each pane publishes for the connectors
+   *  overlay (verse number → line box). Partners get their `scrollY` written —
+   *  each pane's mirror effect moves the real scroller with its programmatic flag
+   *  up, so a linked move never echoes back as a user scroll. Only panes on the
+   *  same book+chapter follow. */
   syncLinkedScroll(fromIdx: number): void {
     if (!this.scrollLinked) return;
     const from = this.panes[fromIdx];
@@ -1029,40 +948,21 @@ export class Session {
     );
   }
 
-  /** Mirror the due-card count onto the installed icon (the Badging API).
-   *
-   *  Feature-detected: browsers without `setAppBadge` — and every un-installed
-   *  tab, where the call resolves but paints nothing — skip out or no-op.
-   *  Fire-and-forget, errors swallowed: a badge the OS refuses is not a state
-   *  the reader can act on. The count can only move while the app is running
-   *  (a card falling due at midnight badges on the next launch or resume —
-   *  there is no server to push from), so the call sites are boot, resume and
-   *  every authoring write. */
   /**
-   * The Study hub's reads, warmed in the background so opening the hub paints
-   * its numbers instead of a skeleton.
+   * The Study hub's eight reads, warmed in the background so opening the hub
+   * paints its numbers instead of a placeholder. The answers land in the ordinary
+   * read-through cache under the ordinary keys, so the hub asks for nothing.
    *
-   * The hub's progress band asks four questions (plans, cards due, suggested
-   * weaves, the reading map) and the cards below it four more (notes, threads,
-   * tags, weaves). Every one is a `q()` that fires on FIRST RENDER, so they all
-   * started when the reader tapped Study and the band held a placeholder until
-   * they landed — the wait this removes. The answers go into the ordinary
-   * read-through cache under the ordinary keys, so the hub finds them already
-   * there and asks for nothing.
+   * Sequentially, not in parallel: the engine is one worker thread, so eight
+   * reads fired at once sit in front of whatever the reader does next. Awaiting
+   * each in turn leaves gaps for a chapter turn or a tap to be answered in.
    *
-   * SEQUENTIALLY, and this is the point rather than a detail: the engine lives
-   * in ONE worker thread, so eight reads fired at once would sit in front of
-   * whatever the reader does next — a chapter turn, a tap on a word. Awaiting
-   * each in turn leaves a gap between them for those to be answered in.
-   *
-   * Failures are ignored on purpose: a warm that cannot answer costs the reader
-   * nothing, because the hub still asks for itself when it opens.
+   * Failures are ignored — the hub still asks for itself when it opens.
    */
   async warmStudyHub(): Promise<void> {
     const day = dayStamp();
     const reads: [string, ...unknown[]][] = [
-      // The progress band first — it is the part that used to draw as a
-      // placeholder and then grow.
+      // The progress band first: it is what the reader sees drawn.
       ["plans", ""],
       ["memoryDue", day],
       ["suggestedWeaves"],
@@ -1083,33 +983,15 @@ export class Session {
   }
 
   /**
-   * WHY THERE IS NO WARM AT BOOT.
-   *
-   * The obvious place for this was the idle block in `App.svelte`, beside the
-   * cache sweep and the badge. It was there first, and it broke cold starts:
-   * eight engine reads queued on the ONE worker thread that was still opening
-   * the corpus, running stage 2 and laying out the first chapter, so the text
-   * and the launch-shortcut screens arrived late enough for their tests to give
-   * up. Measured on the same machine minutes apart: the launch-shortcut,
-   * offline-shell and app specs took 50 s with no warm and 3.7 min with a warm
-   * at boot, four of them failing.
-   *
-   * The reads themselves are cheap — 31 ms for all eight on a settled engine —
-   * which is exactly why the boot version looked harmless. WHEN they run is the
-   * whole question, so the warm is hung off `onWarmReady`, the moment the
-   * background pipeline says it is done, and off authoring writes after that.
-   * A reader who reaches the Study tab before the pipeline settles gets the
-   * placeholder, which is the behaviour that already existed.
-   *
    * The floor between two warms.
    *
-   * NOT a nicety. The triggers include `onReadingWrote`, and a dwell report
-   * lands about once a SECOND while someone is reading — so an un-throttled
-   * warm re-ran eight engine reads every second, on the one thread that also
-   * answers chapter turns and taps. It doubled the e2e suite's wall-clock
-   * (3.4 min → 6.8 min) and made cold-start tests miss their screens: a storm,
-   * not a warm. Fifteen seconds is far longer than a burst of writes and far
-   * shorter than a reader's trip to the Study tab.
+   * The reads are cheap on a settled engine, so the constraint is when they run,
+   * not what they cost. Never at boot: eight reads queued on the one worker
+   * thread that is still opening the corpus and laying out the first chapter
+   * delay the text itself. And the triggers include `onReadingWrote`, whose dwell
+   * reports land about once a second while somebody reads, so without a floor the
+   * warm re-runs every second in front of chapter turns and taps. Fifteen seconds
+   * is longer than a burst of writes and shorter than a trip to the Study tab.
    */
   static readonly STUDY_WARM_MIN_GAP_MS = 15_000;
 
@@ -1120,12 +1002,11 @@ export class Session {
    * Warm the Study hub when the thread is next free, and not more often than
    * [[STUDY_WARM_MIN_GAP_MS]].
    *
-   * COALESCED, because the callers are the moments that invalidate the cache —
-   * boot stages land in a burst (core, warm, R&D), a run of authoring writes is
-   * one gesture to the reader, and dwell reports never stop while the page is
-   * being read. Without this each would queue its own pass over eight reads.
+   * Coalesced, because the callers are the moments that invalidate the cache:
+   * boot stages land in a burst, a run of authoring writes is one gesture, and
+   * dwell reports never stop while the page is being read.
    *
-   * Skipped while the hub is ON SCREEN: it is fetching for itself, and a warm
+   * Skipped while the hub is on screen — it is fetching for itself, and a warm
    * racing it would ask the same questions twice.
    */
   scheduleStudyWarm(): void {
@@ -1143,6 +1024,12 @@ export class Session {
     else setTimeout(run, wait);
   }
 
+  /** Mirror the due-card count onto the installed icon (the Badging API).
+   *
+   *  Feature-detected, fire-and-forget, errors swallowed: a badge the OS refuses
+   *  is not a state the reader can act on, and an un-installed tab resolves the
+   *  call while painting nothing. The count can only move while the app runs (no
+   *  server pushes), so the call sites are boot, resume and authoring writes. */
   refreshAppBadge(): void {
     const nav = navigator as Navigator & {
       setAppBadge?: (n: number) => Promise<void>;
@@ -1159,41 +1046,35 @@ export class Session {
   }
 
   /** Drop cached study reads (authoring landed / R&D pack arrived). The
-   *  corpus-derived immutables (toc, canon shape, statics) survive — wiping
-   *  them made navigation clamp against an empty TOC mid-refill. Which reads
-   *  those are, and the delimiter that decides it, live in [[PINNED_READS]] and
-   *  [[KEY_SEP]]: hand-writing the prefix here is what broke it. */
+   *  corpus-derived immutables survive — wiping them makes navigation clamp
+   *  against an empty TOC mid-refill. Which reads those are, and the delimiter
+   *  that decides it, live in [[PINNED_READS]] and [[KEY_SEP]]; never hand-write
+   *  the prefix here. */
   invalidate(): void {
     for (const key of [...this.#cache.keys()]) if (!isPinned(key)) this.#cache.delete(key);
     this.cacheEpoch++;
   }
 
-  /** Drop cached reads for NAMED engine methods only.
+  /** Drop cached reads for named engine methods only.
    *
    *  `invalidate()` wipes everything but the immutables, which is right after an
    *  authoring write and wrong on a timer: the reading map reports dwell every 30
-   *  seconds while somebody reads, and throwing away their open word study and
-   *  every thread/tag read along with it would make the reader pay for a
-   *  bookkeeping tick they never asked for. */
+   *  seconds while somebody reads, and their open word study must not be thrown
+   *  away for a bookkeeping tick. */
   invalidateOnly(...methods: string[]): void {
     for (const key of [...this.#cache.keys()])
       if (methods.some((m) => key.startsWith(m + KEY_SEP))) this.#cache.delete(key);
     this.cacheEpoch++;
   }
 
-  // ── gutter marks, memoized by CONTENT ───────────────────────────────────────
+  // ── gutter marks, memoized by content ───────────────────────────────────────
   //
-  // The reader pane derives the weave dots and the note marks and its paint
-  // effect tracks them, so what it actually reacts to is the IDENTITY of those
-  // sets: a freshly built Set holding the same verse numbers repaints the whole
-  // canvas to draw the marks that were already on it. Study data is invalidated
-  // on core-ready, warm-ready, rnd-ready and every authoring write, and each of
-  // those bumps `studyEpoch` too — so a reader scrolling while the background
-  // pipeline settles paid a full repaint per event for nothing.
-  //
-  // Memoizing here rather than in the pane is deliberate: it is one memo for
-  // however many panes are open, and the epoch dependency travels with the
-  // mechanism instead of having to be remembered at each call site.
+  // A pane's paint effect tracks the identity of these sets, so a freshly built
+  // Set holding the same verse numbers repaints the whole canvas to draw marks
+  // already on it — once per invalidation, and study data is invalidated on every
+  // boot stage and authoring write. Memoized here rather than in the pane: one
+  // memo however many panes are open, and the epoch dependency travels with the
+  // mechanism rather than having to be remembered at each call site.
 
   /** Last set returned per (kind, book, chapter) — LRU, [[MARKS_CAP]] deep. */
   #marks = new Map<string, Set<number>>();
@@ -1240,13 +1121,12 @@ export class Session {
   /**
    * Verses in a chapter that have a weave partner — the gold gutter dot.
    *
-   * The SAME Set comes back while the content is unchanged, including across the
+   * The same Set comes back while the content is unchanged, including across the
    * gap where an invalidation has dropped `linkPairs` and the refetch has not
-   * landed: the marks last drawn are held rather than blinked off and drawn again
-   * a frame later.
+   * landed, so the marks are not blinked off and drawn again a frame later.
    *
-   * READ-ONLY. It is shared between callers and across frames; a mutation would
-   * be a mutation of every pane's dots at once.
+   * Read-only: it is shared between callers and across frames, so a mutation
+   * would be a mutation of every pane's dots at once.
    */
   weaveDots(book: string, chapter: number): Set<number> {
     void this.studyEpoch;
@@ -1279,10 +1159,9 @@ export class Session {
   /** The reader's home church — what their own shared links carry.
    *
    *  The meeting time is read from `config.sundayService` rather than stored a
-   *  second time on the church: there is ONE such number (maintainer,
-   *  2026-08-26), the one Settings and the Share pane both edit and the Sunday
-   *  bookmark already reads. A church that arrives from someone ELSE'S link
-   *  carries its own, which is why `Church` has the field at all. */
+   *  second time on the church: there is one such number, the one Settings and
+   *  the Share pane edit and the Sunday bookmark reads. A church arriving from
+   *  someone else's link carries its own, which is why `Church` has the field. */
   get church(): Church {
     return cleanChurch({ ...this.config.church, service: this.config.sundayService ?? null });
   }
@@ -1295,44 +1174,163 @@ export class Session {
     return c?.service == null ? "" : t("church.meets", { time: clockLabel(c.service, lang()) });
   }
 
-  /** THE link this reader hands over, wherever they share from — the app plus
-   *  their church. Every share surface reads this, so Present and the header
-   *  can't drift apart (they did: Present shared a bare link). */
+  /** The link this reader hands over, wherever they share from — the app plus
+   *  their church. Every share surface reads this, so they cannot drift apart. */
   get shareLink(): string {
     return shareUrl(PWA_URL, this.church);
   }
 
-  /** The link PRESENT hands over. Same as [[shareLink]] plus, by default, a
-   *  marker that opens the recipient's welcome on the new-believer path —
-   *  Present is the screen you show someone face to face. Settings can turn
-   *  that off; the ordinary Share never carries it. */
+  /** The link Present hands over — the same one Share does. Present used to mark
+   *  it "for a new believer"; personas are gone, so a link handed over face to
+   *  face is an ordinary link. */
   get presentShareLink(): string {
-    return shareUrl(PWA_URL, this.church, {
-      startAsNewBeliever: this.config.presentSharesAsNew !== false,
+    return shareUrl(PWA_URL, this.church);
+  }
+
+  /** The palette's live draft on the Share screen: what the custom link will
+   *  carry. Not persisted — a share is a thing you do once, and a remembered
+   *  half-built link is one you hand over by accident on the next visit.
+   *
+   *  `target` is single-valued because a recipient lands on ONE thing. The value
+   *  fields are kept alongside it rather than collapsed into one, so switching
+   *  from a thread to a verse and back does not make the sender re-pick the
+   *  thread; only the field `target` names reaches the link. */
+  shareDraft = $state<{
+    target: ShareTarget;
+    thread: string;
+    devotional: string;
+    at: string;
+    lang: string;
+    church: boolean;
+  }>({ target: "app", thread: "", devotional: "", at: "", lang: "", church: true });
+
+  /** What the palette's draft builds — the QR, the share sheet and the readout
+   *  all read this one derived value, so they cannot show three different links.
+   *  A default draft is exactly [[shareLink]]. */
+  get customShareLink(): string {
+    const d = this.shareDraft;
+    const at = d.at.trim();
+    return shareUrl(PWA_URL, d.church ? this.church : null, {
+      lang: d.lang || null,
+      thread: d.target === "thread" ? d.thread || null : null,
+      devotional: d.target === "devotional" ? d.devotional || null : null,
+      // A verse travels only once it is SHAPED like one: a half-typed "John 3"
+      // must not quietly become part of the link behind the QR.
+      at: d.target === "verse" && REF_SHAPE.test(at) ? at : null,
     });
   }
 
-  /** This session was opened from a link that said "for a new believer". */
-  startAsNewBeliever = false;
-
-  /** Re-showing the welcome a reader was given, from the top bar. Holds which
-   *  page to show; null when closed. The first-run flow is separate
-   *  (`showFirstRun`) — this one changes no settings, it just reads. */
-  reopenIntro = $state<"new" | "curious" | null>(null);
-  /** Which welcome this reader saw, if any (persisted, so the button is there
-   *  on every launch — not only the one where they chose it). */
-  get intro(): "new" | "curious" | null {
-    const v = this.config.intro;
-    return v === "new" || v === "curious" ? v : null;
+  /** What a shared link may carry, for the language the draft is aimed at.
+   *
+   *  Two languages: the draft's (what is AVAILABLE) and this reader's (what the
+   *  labels are IN). The sender is the one reading this list, so it comes back in
+   *  their language whatever language they are aiming the link at. */
+  shareOptions(): any {
+    return this.q("shareOptions", this.shareDraft.lang || lang(), lang());
   }
+
+  /** The reader's saved share-link presets, newest last. Stored in the config —
+   *  the same file the church and the gospel thread live in — so they survive a
+   *  relaunch and ride along in a backup. */
+  get sharePresets(): SharePreset[] {
+    return (this.config.sharePresets ?? []) as SharePreset[];
+  }
+
+  /** Save the current draft under `name`, replacing any preset of that name.
+   *
+   *  Stores the CHOICES, not the built link: a stored URL would freeze the church
+   *  as it read today, and freeze availability as it stands today. Only the
+   *  destination the draft is actually pointing at is kept — the draft holds the
+   *  other two so switching back and forth does not lose them, but a preset that
+   *  remembered all three would be a preset with no single answer. */
+  savePreset(name: string): Promise<void> {
+    const d = this.shareDraft;
+    const at = d.at.trim();
+    const preset: SharePreset = {
+      name,
+      thread: d.target === "thread" ? d.thread : "",
+      devotional: d.target === "devotional" ? d.devotional : "",
+      at: d.target === "verse" && REF_SHAPE.test(at) ? at : "",
+      lang: d.lang,
+      church: d.church,
+    };
+    // Replaced IN PLACE when the name already exists, so re-saving a preset does
+    // not shuffle the row the reader is looking at.
+    const next = [...this.sharePresets];
+    const i = next.findIndex((p) => p.name === name);
+    if (i >= 0) next[i] = preset;
+    else next.push(preset);
+    this.config.sharePresets = next;
+    return this.#writePresets();
+  }
+
+  /** Forget a preset by name. */
+  deletePreset(name: string): Promise<void> {
+    this.config.sharePresets = this.sharePresets.filter((p) => p.name !== name);
+    return this.#writePresets();
+  }
+
+  /** Persist a preset edit NOW, and answer when the worker has it.
+   *
+   *  Not the debounced [[saveConfig]]: the reader pressed a button called Save,
+   *  and a 300 ms window in which closing the tab loses it is not what that word
+   *  means. Awaited by the caller so the "saved" toast is the truth. */
+  async #writePresets(): Promise<void> {
+    this.flushConfig();
+    await this.rpc.flush();
+  }
+
+  /** Load a preset into the draft. The target is DERIVED from which destination
+   *  the preset carries rather than stored beside it: two fields that must agree
+   *  are one fact, and a preset whose stored target named an empty field would
+   *  restore a palette pointing at nothing. */
+  applyPreset(p: SharePreset): void {
+    this.shareDraft = {
+      target: p.thread ? "thread" : p.devotional ? "devotional" : p.at ? "verse" : "app",
+      thread: p.thread ?? "",
+      devotional: p.devotional ?? "",
+      at: p.at ?? "",
+      lang: p.lang ?? "",
+      church: p.church !== false,
+    };
+  }
+
+  /** Open a thread a shared link named, if this install has it.
+   *
+   *  Present, not the study screen: a shared thread is one someone meant to be
+   *  walked through a passage at a time. The name is resolved against the LOADED
+   *  threads exactly as [[gospelThread]] resolves a configured one, so a
+   *  stranger's `?thread=` cannot put the reader on an empty surface. */
+  async openSharedThread(name: string): Promise<void> {
+    const threads = (await this.fetchQ("threads").catch(() => null))?.threads ?? [];
+    if (!threads.some((t: { name: string }) => t.name === name)) return;
+    this.presentThreadName = name;
+    this.showPresent = true;
+  }
+
+  /** Open a devotional a shared link named, starting it if it is not running.
+   *
+   *  Handing someone a booklet STARTS it for them — this is what the welcome's
+   *  new-believer path used to do, and a shared link is now how a booklet is put
+   *  into someone's hands. Checked against the CATALOGUE, which the engine has
+   *  already filtered to the booklets written in this reader's language, so a
+   *  link naming an untranslated one lands them in the app rather than on pages
+   *  they cannot read. Already running is left alone: restarting would throw
+   *  away their banked days. */
+  async openSharedDevotional(id: string): Promise<void> {
+    const wire = await this.fetchQ("devotionals", lang(), localDay()).catch(() => null);
+    if (!(wire?.catalogue ?? []).some((b: { id: string }) => b.id === id)) return;
+    const running = ((wire?.running ?? []) as { id: string; day?: number }[]).find((r) => r.id === id);
+    if (!running) await this.author("devotionalStart", id, nowStamp());
+    this.openDevotional(id, typeof running?.day === "number" ? running.day : 1);
+  }
+
   setChurch(c: Church): void {
     const cleaned = cleanChurch(c);
-    // ONE stored number. The church's meeting time IS `config.sundayService` —
-    // the field Settings and the Share pane both edit and the Sunday bookmark
-    // already reads — so it is written THERE rather than kept a second time on
-    // the church, and [[church]] reads it back on the way out. Adopting a
-    // church from someone's link therefore adopts its time too, which is what
-    // adopting the rest of it already did.
+    // One stored number: the church's meeting time IS `config.sundayService`, so
+    // it is written there rather than kept a second time on the church, and
+    // [[church]] reads it back on the way out. Adopting a church from someone's
+    // link therefore adopts its time too.
     if (cleaned.service !== null) this.config.sundayService = cleaned.service;
     this.config.church = { ...cleaned, service: null };
     this.saveConfig();
@@ -1373,12 +1371,10 @@ export class Session {
     // backup's theme still wins over a stale cache.
     try {
       const cachedTheme = localStorage.getItem("plumbline:themeChoice");
-      // VALIDATED before it is trusted. This value comes off an origin-wide
-      // store, so it is the one input to the theme that nothing in this app
-      // necessarily wrote — and a token no palette answers to used to be copied
-      // straight into the config and saved, making the damage permanent. Now an
-      // unrecognised one is simply not adopted, and the config keeps whatever
-      // the home said. [[resolvedTheme]] is the second line of that defence.
+      // Validated before it is trusted: this comes off an origin-wide store, so
+      // it is the one theme input nothing in this app necessarily wrote, and
+      // adopting an unknown token would persist the damage. [[resolvedTheme]] is
+      // the second line of that defence.
       const known = cachedTheme === "system" || (!!cachedTheme && Object.hasOwn(palettes, cachedTheme));
       if (known && cachedTheme !== this.config.theme) {
         this.config.theme = cachedTheme;
@@ -1387,24 +1383,15 @@ export class Session {
     } catch {
       /* no storage: the home config stands as loaded */
     }
-    this.showFirstRun = !!loaded.firstRun;
 
-    // The new-believer booklet's RETRY. A first run finished before the pack's
-    // text stage landed leaves `devotionalSeeded` false with nothing running,
-    // and this is the boot that fixes it. A no-op for everyone else — including
-    // anyone who started it and then stopped it, because the flag is already
-    // set by then. Fire-and-forget: nothing below waits on it.
-    if (this.config.intro === "new" && !this.config.devotionalSeeded) void this.seedDevotional();
-
-    // WHICH SEATING is this? Asked of the engine with the reader's OWN local
-    // date and hour, then used to prefer that slot's saved position over the
-    // plain last one — so arriving at a Sunday service reopens last Sunday's
-    // service rather than Saturday night's study (maintainer, 2026-08-13).
+    // Which seating is this? Asked of the engine with the reader's own local date
+    // and hour, then used to prefer that slot's saved position over the plain
+    // last one, so arriving at a Sunday service reopens last Sunday's service
+    // rather than Saturday night's study.
     //
-    // Fire-and-forget rather than awaited: the answer is a few ms away and the
-    // panes below must be built NOW, so the restore is applied when it lands and
-    // only if the reader has not already navigated. A slot never used falls
-    // through to the plain last position, which is what every reader has today.
+    // Fire-and-forget rather than awaited: the panes below must be built now, so
+    // the restore applies when it lands and only if the reader has not already
+    // navigated. A slot never used falls through to the plain last position.
     const now = new Date();
     const localDate =
       `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -1423,14 +1410,12 @@ export class Session {
         // `#navigatedSinceBoot` guards the race: if the reader has already gone
         // somewhere in the few ms this took, their tap wins over the restore.
         //
-        // RESEED, never navigate(): this is boot-time seeding arriving with
-        // better data a few ms after the panes were built, not a move the
-        // reader made. navigate() also claims the SCREEN — it always lands in
-        // the reader — which stomps the destination a launch shortcut
-        // (?open=review, e2e/launch-shortcuts.spec.ts) chose on this very
-        // boot, and it would stamp history for a page nobody turned. The
-        // ACTIVE pane, because the seat was recorded from it: the pane being
-        // read, which the fold restore keeps (e2e/foldable.spec.ts).
+        // Reseed, never navigate(): this is boot-time seeding arriving with
+        // better data, not a move the reader made. navigate() also claims the
+        // screen — it always lands in the reader — which would stomp the
+        // destination a launch shortcut (?open=review) chose on this same boot,
+        // and would stamp history for a page nobody turned. The active pane,
+        // because that is the pane the seat was recorded from.
         if (seat?.book && !this.#navigatedSinceBoot) {
           const pane = this.panes[this.activePane] ?? this.panes[0];
           if (pane) {
@@ -1446,7 +1431,7 @@ export class Session {
         }
       })
       .catch(() => {
-        /* no slot: the plain last position stands, exactly as before */
+        /* no slot: the plain last position stands */
       });
 
     const saved = loaded.openPanes?.length ? loaded.openPanes : [{ book: "John", chapter: 3 }];
@@ -1469,11 +1454,10 @@ export class Session {
       scrollY: 0,
       back: [],
       fwd: [],
-      // A PHONE DROPS THE OVERRIDE. The chip that sets a pane's language lives
-      // on the pane's own strip, and that strip is `display: none` under 700px
-      // (Shell.svelte) — so a pane restored into German on a phone is a pane
-      // whose language the reader cannot reach to change. The app language in
-      // Settings is the phone-width control, and this puts them back on it.
+      // A phone drops the override: the chip that sets a pane's language is on
+      // the pane strip, which is `display: none` under 700px (Shell.svelte), so a
+      // pane restored into German there is one the reader cannot change. The app
+      // language in Settings is the phone-width control.
       lang: this.narrow ? undefined : p.lang || undefined,
       // A restored language pane holds its layout until its engine is open
       // again — see the reopen loop below.
@@ -1481,15 +1465,13 @@ export class Session {
     }));
     this.activePane = Math.min(Math.max(wasActive - from, 0), this.panes.length - 1);
 
-    // REOPEN the language engines the restored panes read
-    // (docs/PER-PANE-LANGUAGE.md). A pane's language survives in `openPanes`,
-    // but the engine it needs lives and dies with the worker: without this the
-    // first layout for a restored German pane threw "the de text is not open on
-    // this device" and the pane sat blank, its word study dead with it (UAT,
-    // 2026-08-18: "Strong's isn't working except for English"). The depot still
-    // holds the text, so this is normally an open, not a download; each pane
-    // holds its layout (`langLoading`, which the layout effect waits on) until
-    // the open lands.
+    // Reopen the language engines the restored panes read. A pane's language
+    // survives in `openPanes`, but the engine it needs lives and dies with the
+    // worker: without this the first layout for a restored German pane throws
+    // "the de text is not open on this device" and the pane sits blank. The depot
+    // still holds the text, so this is normally an open, not a download; each
+    // pane holds its layout (`langLoading`, which the layout effect waits on)
+    // until the open lands.
     for (const code of new Set(this.panes.map((p) => p.lang).filter((l): l is string => !!l))) {
       void this.rpc
         .openPaneLang(code)
@@ -1516,10 +1498,10 @@ export class Session {
     const wide = matchMedia("(min-width: 1100px)");
     wide.addEventListener("change", () => (this.roomy = wide.matches));
 
-    // The device's scheme, then every later change of it, UNCONDITIONALLY. The
-    // old listener re-applied only while the theme was "system", so a phone that
-    // flipped to dark under an explicit theme left this answer stale — and
-    // switching back to System afterwards resolved against the stale one.
+    // The device's scheme, then every later change of it, unconditionally —
+    // listening only while the theme is "system" leaves this stale when the phone
+    // flips to dark under an explicit theme, and switching back to System then
+    // resolves against the stale answer.
     this.systemDark = this.#systemDark.matches;
     this.#systemDark.addEventListener("change", (e) => (this.systemDark = e.matches));
     // First paint. Everything after this is the two $effects in App.svelte and
@@ -1538,15 +1520,10 @@ export class Session {
       this.refreshAppBadge();
     };
     // A dwell report changed the reading map and nothing else. Without this the
-    // navigator kept showing the map from whenever it was first asked — the
-    // per-day cache key meant a chapter finished mid-session did not appear until
-    // the next launch.
-    // "plans" rides along because PLAN COMPLETION IS DERIVED FROM THE READING
-    // STORE (READING-PLANS.md decision #2): a chapter finishing is exactly the
-    // event that moves a plan's day on. Without it the cached plans answer kept
-    // its stale `read` flags, so the chip and the today card still pointed at
-    // the chapter you had just finished — tap it and you were sent back to
-    // Genesis 1 all evening (the maintainer's UAT report, 2026-08-11).
+    // per-day cache key hides a chapter finished mid-session until the next
+    // launch. "plans" rides along because plan completion is derived from the
+    // reading store: a chapter finishing is the event that moves a plan's day on,
+    // and a stale `read` flag leaves the chip pointing at the chapter just read.
     rpc.onReadingWrote = () => {
       this.invalidateOnly("readingBooks", "readingChapters", "plans");
       // Finishing a chapter moves the map and the plans — the two numbers the
@@ -1557,9 +1534,9 @@ export class Session {
       // Strong's + margin notes just arrived — panels re-fetch.
       this.invalidate();
       this.studyEpoch++;
-      // The overlay rides in on the same stage. Only now can we say whether
-      // this home has one, and only now can the reader's saved preference be
-      // handed to the engine — it opens with the overlay off, always.
+      // The overlay rides in on the same stage: only now is it known whether this
+      // home has one, and only now can the reader's saved preference be handed to
+      // the engine, which always opens with the overlay off.
       void this.rpc.call("akjvAvailable").then((yes) => {
         this.akjvAvailable = !!yes;
         if (yes && this.config.akjvOverlay === true) {
@@ -1572,10 +1549,10 @@ export class Session {
       });
     };
     rpc.onWarmReady = () => {
-      // A study opened while the warm was still running answered with only the
+      // A study opened while the warm was still running answers with only the
       // sections whose indexes existed — the engine will not build one inside a
-      // tap any more, because doing so froze the worker for 22 seconds on a
-      // phone. They exist now; re-fetch so the panel fills in.
+      // tap, which froze the worker for 22 seconds on a phone. They exist now, so
+      // re-fetch and the panel fills in.
       this.invalidate();
       this.studyEpoch++;
       // This stage wipes the cache, so it is also where the hub's warm has to
@@ -1613,33 +1590,27 @@ export class Session {
     // than leaving the reader to wonder whether their note is safe.
     rpc.onPersistOk = () => (this.persistFailed = null);
 
-    // The web twin of Android's ON_PAUSE persist: flush the session (incl.
-    // the scroll verse) when the tab hides or unloads.
+    // Flush the session (including the scroll verse) when the tab hides or
+    // unloads.
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") this.flushSession();
     });
     addEventListener("pagehide", () => this.flushSession());
 
-    // THE MOMENTS A UA CAN HAVE RE-DERIVED THE BAR WITH NOTHING IN OUR DOM
-    // MOVING: a bfcache restore, a return to the foreground, and the activity
+    // The moments a UA can have re-derived the bar with nothing in our DOM
+    // moving: a bfcache restore, a return to the foreground, and the activity
     // re-creation a foldable performs when it is opened or closed. No state of
-    // ours changed, so no $effect re-runs, so nothing puts the tags back: a
-    // dark page under a light bar, and it STAYS there. That is the "persistent
-    // washed-out top", and why the three previous fixes each looked right and
-    // then came back (maintainer, 2026-08-27).
+    // ours changed, so no $effect re-runs and nothing puts the tags back — a dark
+    // page under a light bar, and it stays there.
     //
-    // AND THE MOMENT THESE CANNOT REACH (maintainer, 2026-08-28, Pixel Fold):
-    // when the fold's re-creation RELOADS the page and the bar is still wrong —
-    // sticky until reinstall — the UA has stopped consulting the DOM entirely
-    // and is on the theme colour baked into the WebAPK at install time. No
-    // listener helps, because writing tags nobody reads is not a fix. That half
-    // lives in the MANIFEST: it no longer declares a `theme_color` at all, so
-    // there is no baked, light-only answer to fall back to and these tags are
-    // the only claim in existence (see e2e/manifest.spec.ts).
+    // The moment these cannot reach: a re-creation that RELOADS the page with the
+    // bar still wrong, where the UA is on the theme colour baked into the WebAPK
+    // at install time and no longer consults the DOM. That half lives in the
+    // manifest, which declares no `theme_color` at all, so these tags are the only
+    // claim in existence.
     //
-    // A LIST on purpose. Every entry is a moment that can be named and tested
-    // (e2e/chrome-reassert.spec.ts); a fourth one gets added here rather than
-    // becoming a fourth mechanism.
+    // A list on purpose: a fourth moment gets added here rather than becoming a
+    // fourth mechanism.
     addEventListener("pageshow", () => this.applyChrome());
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") this.applyChrome();
@@ -1653,11 +1624,10 @@ export class Session {
     });
   }
 
-  /** A save to this device's storage failed. Sticky: the reader has to hear it,
-   *  and NOT from a toast that fades while they are looking away — their note
-   *  exists only in this tab until it lands. Deliberately absent from
-   *  `dismissTransient`: it is a warning about their data, not a surface they
-   *  navigated into, so switching destinations must not silence it. */
+  /** A save to this device's storage failed. Sticky rather than a toast that
+   *  fades while the reader looks away — their note exists only in this tab until
+   *  it lands. Deliberately absent from `dismissTransient`: it is a warning about
+   *  their data, not a surface they navigated into. */
   persistFailed = $state<{ detail: string; retrying: boolean } | null>(null);
 
   /** Try the failed save again — what the notice's button does. Resets the
@@ -1676,9 +1646,9 @@ export class Session {
    *  fire, and a discarded tab takes the note with it. */
   flushSession(): void {
     this.flushConfig();
-    // AFTER flushConfig, and it matters: the RPC is ordered, so the configSave
-    // message is already queued when the flush arrives, and the flush's persist
-    // carries it too.
+    // After flushConfig, and the order matters: the RPC is ordered, so the
+    // configSave message is already queued when the flush arrives and the flush's
+    // persist carries it too.
     if (!this.restoring) this.retryPersist();
   }
 
@@ -1695,12 +1665,11 @@ export class Session {
       ...(p.lang ? { lang: p.lang } : {}),
     }));
     this.config.activePane = this.activePane;
-    // This seating's slot carries the SAME live position as openPanes, verse
-    // included: the boot restore prefers the slot, so a chapter-only slot wins
-    // the restore with no verse in hand and reopens at the top of the chapter.
-    // The ACTIVE pane — the one being read, and the one a fold keeps — not
-    // pane 0, or folding a desktop's panes would reopen on the leftmost
-    // reference instead of the passage under the reader's eye.
+    // This seating's slot carries the same live position as openPanes, verse
+    // included: the boot restore prefers the slot, so a chapter-only slot would
+    // win the restore with no verse in hand and reopen at the top of the chapter.
+    // The active pane, not pane 0, or folding a desktop's panes reopens on the
+    // leftmost reference instead of the passage under the reader's eye.
     const active = this.panes[this.activePane] ?? this.panes[0];
     if (this.slot && active) {
       const verse = this.#firstVisibleVerse(this.panes.indexOf(active));
@@ -1725,11 +1694,11 @@ export class Session {
    * The thread the Share screen's gospel button (and the first-run path of the
    * same name) opens.
    *
-   * An empty setting means the default rather than "none", and a setting naming
-   * a thread that no longer exists falls back to it too — deleting the thread
-   * you chose should leave the button working, not dead. Checked against the
-   * loaded threads when they are known; before they load, the name is handed
-   * over as-is and PresentHost falls back to its picker on its own.
+   * An empty setting means the default rather than "none", and so does one naming
+   * a thread that no longer exists — deleting the thread you chose leaves the
+   * button working. Checked against the loaded threads when they are known;
+   * before they load the name is handed over as-is and PresentHost falls back to
+   * its picker.
    */
   gospelThread(): string {
     const chosen = String(this.config.gospelThread ?? "").trim();
@@ -1739,6 +1708,19 @@ export class Session {
       return Session.GOSPEL_THREAD_DEFAULT;
     }
     return chosen;
+  }
+
+  /** Write the reader's config once, on the boot that found none.
+   *
+   *  The welcome used to do this: choosing a path wrote the config on the way
+   *  out, so a fresh install always had one. With no first run nothing writes it
+   *  until the reader changes a setting, which left a brand-new install with no
+   *  config file at all — and with the analysis tiers now defaulting ON, no
+   *  record of that default either. Written once so the defaults this build
+   *  chose are the ones a later build reads back, instead of being re-derived
+   *  from whatever the defaults have become by then. */
+  writeConfigOnFirstBoot(firstRun: boolean): void {
+    if (firstRun) this.flushConfig();
   }
 
   /** Save immediately (tab hide/close) — no debounce. */
@@ -1755,15 +1737,15 @@ export class Session {
     }
   }
 
-  /** PAINT the resolved palette onto the document. One of the two writers at
-   *  the end of the pipeline (state → derived → writer); the other is
+  /** Paint the resolved palette onto the document. One of the two writers at the
+   *  end of the pipeline (state → derived → writer); the other is
    *  [[applyChrome]]. Neither decides anything — see [[palette]].
    *
-   *  Roles the NEXT palette does not carry are removed rather than left behind.
-   *  An inline `--*` on `<html>` outranks the stylesheet, so a var written once
-   *  and never cleared kept painting under every theme after it — including the
-   *  ones the pre-paint script wrote from last session's cache, which is why the
-   *  first set is seeded from that cache rather than from an empty set. */
+   *  Roles the next palette does not carry are removed rather than left behind:
+   *  an inline `--*` on `<html>` outranks the stylesheet, so a var written once
+   *  and never cleared keeps painting under every theme after it. That includes
+   *  the ones the pre-paint script wrote from last session's cache, which is why
+   *  the first set is seeded from that cache rather than from an empty set. */
   applyTheme(): void {
     const root = document.documentElement;
     const pal = this.palette;
@@ -2150,36 +2132,6 @@ export class Session {
     if (this.conceptStudyId === id) this.exitConceptStudy();
     const err = await this.author("planStop", id);
     this.showToast(err ?? t("plans.stopped", { name }));
-  }
-
-  /** Start the bundled new-believer booklet — EXACTLY ONCE, ever.
-   *
-   *  Called from two places on purpose. The welcome calls it as it hands over,
-   *  which is where it belongs; and boot calls it again for the reader whose
-   *  first run finished before the pack's text stage landed, because the engine
-   *  refuses a booklet its catalogue does not carry yet and that first attempt
-   *  simply fails.
-   *
-   *  `config.devotionalSeeded` is what makes the retry safe. It is set once the
-   *  start SUCCEEDS, and it is the difference between "never managed to start
-   *  it" and "started it, and the reader then stopped it" — without it, a
-   *  booklet someone deliberately threw away would come back on every launch,
-   *  which is the bug `meta:stockSeeded` exists to prevent for the stock set.
-   *
-   *  WHICH booklet comes off the catalogue's own `newBeliever` flag, never an
-   *  id written in here: a second booklet must not be able to become the one a
-   *  new believer is handed by shipping alphabetically earlier. */
-  async seedDevotional(): Promise<void> {
-    if (this.config.devotionalSeeded) return;
-    const wire = await this.rpc.call("devotionals", lang(), localDay()).catch(() => null);
-    const booklet = ((wire?.catalogue ?? []) as any[]).find((b) => b.newBeliever);
-    // No catalogue yet (the pack is still landing) — leave the flag unset so
-    // the next boot tries again.
-    if (!booklet) return;
-    const already = ((wire?.running ?? []) as any[]).some((r) => r.id === booklet.id);
-    if (!already && (await this.author("devotionalStart", booklet.id, nowStamp()))) return;
-    this.config.devotionalSeeded = true;
-    this.flushConfig();
   }
 
   /** Start a devotional. No class exclusivity and no confirm: booklets do not

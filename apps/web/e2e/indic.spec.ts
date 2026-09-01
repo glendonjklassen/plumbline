@@ -1,27 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
-// Punjabi and Hindi, end to end — and the reason they get a file of their own
-// rather than a row in language.spec.ts.
+// Punjabi and Hindi, end to end. Arabic is both the only non-Latin script and the only RTL
+// one, so "which faces can set this language" and "which way does the page run" had been
+// written as one condition; Gurmukhi and Devanagari split them. Each test below fails for a
+// reason the others cannot see: the page mirrors (an LTR language routed through the RTL
+// branch), the face is Garamond (`readerFace` asked `isRtl()`), the picker offers five faces,
+// search misses the nukta, or a cold device reads the KJV in fluent Punjabi.
 //
-// Every non-Latin question this app had ever answered, it had answered for
-// Arabic, and Arabic answers them all the same way: it is the only script that
-// is not Latin AND the only script that is not left to right, so "which faces
-// can set this language" and "which way does the page run" had one answer and
-// were written as one condition. Gurmukhi and Devanagari split them. Each test
-// below fails against the app as it was, for a reason the others cannot see:
-//
-//   1. the page mirrors        — an LTR language routed through the RTL branch
-//   2. the face is Garamond    — `readerFace` asked `isRtl()`, Punjabi is not,
-//                                so the reader is handed a face with no
-//                                Gurmukhi glyph in it and the Bible renders
-//                                from whatever the system happens to have
-//   3. the picker offers five  — same condition, other side
-//   4. search finds nothing    — the nukta a reader cannot reliably type
-//   5. a cold device reads the KJV in fluent Punjabi
-//
-// The strings are read from the catalogues rather than typed, so this file does
-// not become a second place the copy lives.
+// Strings are read from the catalogues, so this file is not a second place the copy lives.
 
 const cat = (code: string): Record<string, string> =>
   JSON.parse(readFileSync(new URL(`../../../crates/core/src/i18n/${code}.json`, import.meta.url), "utf8"));
@@ -43,13 +30,7 @@ interface Box {
 
 async function reader(page: Page, lang: Record<string, string>): Promise<void> {
   await page.goto("/");
-  const est = page.getByRole("button", { name: lang["intro.pathEstablished"] });
   const canvas = page.locator(".pane canvas").first();
-  await expect(est.or(canvas)).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: lang["intro.start"] }).click();
-  }
   await expect(canvas).toBeVisible({ timeout: 90_000 });
 }
 
@@ -59,7 +40,7 @@ async function pick(page: Page, now: Record<string, string>, want: string): Prom
   const dialog = page.locator('[data-surface="settings"]');
   await expect(dialog).toBeVisible();
   await page.evaluate(() => ((globalThis as any).__beforeSwitch = true));
-  // By VALUE, not label — see the same helper in language.spec.ts.
+  // By value, not label — see the same helper in language.spec.ts.
   await dialog.getByLabel(now["settings.language"], { exact: true }).selectOption(want);
   await page.waitForFunction(() => !(globalThis as any).__beforeSwitch && !!(globalThis as any).__plumbline, undefined, {
     timeout: 180_000,
@@ -97,10 +78,8 @@ for (const lang of [
     await reader(page, EN);
     await pick(page, EN, lang.code);
 
-    // 1. NOT MIRRORED. The converse of the Arabic test, and it is a real risk
-    //    rather than a formality: the change that taught this app about scripts
-    //    started from the one condition that conflated them, and the cheapest
-    //    wrong generalisation is "not Latin, therefore mirror".
+    // 1. Not mirrored. The converse of the Arabic test: the cheapest wrong
+    //    generalisation is "not Latin, therefore mirror".
     await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
     await expect(page.locator("html")).toHaveAttribute("lang", lang.code);
 
@@ -119,12 +98,11 @@ for (const lang of [
       );
     }
 
-    // 2. THE FACE. The headline regression: `readerFace` used to ask `isRtl()`,
-    //    which is FALSE here, so the reader was handed EB Garamond — a face
-    //    with no Gurmukhi or Devanagari glyph in it. Nothing errors; the text
-    //    renders through per-glyph fallback at a Latin face's optical scale, in
-    //    whatever the browser found, measured in the worker against something
-    //    else again. `bodyFont` is what the last frame really set on the canvas.
+    // 2. The face. `readerFace` used to ask `isRtl()`, false here, so the reader
+    //    got EB Garamond — no Gurmukhi or Devanagari glyph in it. Nothing errors:
+    //    the text renders through per-glyph fallback at a Latin face's optical
+    //    scale, measured in the worker against something else again. `bodyFont`
+    //    is what the last frame really set on the canvas.
     await expect
       .poll(async () => page.evaluate(() => (globalThis as any).__plumblinePaint?.bodyFont ?? ""), {
         timeout: 30_000,
@@ -132,8 +110,8 @@ for (const lang of [
       })
       .toContain(lang.face);
 
-    // 3. NO FONT PICKER. One face can set this script, and a dropdown with one
-    //    row is a control that cannot do anything.
+    // 3. No font picker: one face can set this script, and a one-row dropdown is
+    //    a control that cannot do anything.
     const dialog = await settings(page, lang.strings);
     await expect(dialog.getByLabel(lang.strings["settings.textFont"], { exact: true })).toHaveCount(0);
     await expect(dialog.getByLabel(lang.strings["settings.chromeFont"], { exact: true })).toHaveCount(0);
@@ -141,18 +119,12 @@ for (const lang of [
 }
 
 test("every picker names each language twice, in the reader's own words", async ({ page }) => {
-  // THE APP IS BUILT TO BE HANDED OVER, and the endonym alone only serves the
-  // person who already reads it: someone offering their phone to a Hindi
-  // speaker was looking at six scripts they cannot read with no way to tell
-  // which row was the one. So the endonym leads — the row belongs to the person
-  // being offered it — and the reader's own name for the language follows in
-  // brackets.
+  // The endonym leads, because the row belongs to the person being handed the phone, and the
+  // reader's own name for the language follows in brackets — the endonym alone leaves someone
+  // offering their phone looking at six scripts they cannot read.
   //
-  // THE ROWS ARE SPELLED OUT, which is the one place in this file where
-  // repeating the catalogue is the point — `each_variant_reaches_its_own_row`
-  // in core::i18n makes the same trade. A test that rebuilt the label from the
-  // same two lookups the code makes would pass on any format, including the
-  // endonym alone, which is the state this replaced.
+  // The rows are spelled out on purpose: a test that rebuilt the label from the same two
+  // lookups the code makes would pass on any format, including the endonym alone.
   await reader(page, EN);
   const options = async (lang: Record<string, string>) =>
     (await settings(page, lang))
@@ -170,16 +142,14 @@ test("every picker names each language twice, in the reader's own words", async 
   ]) {
     expect(en, `the English picker does not offer "${want}"`).toContain(want);
   }
-  // The reader's OWN language takes no bracket — "English (English)" is noise.
-  // Not a special case for English: it is the same comparison that silences
-  // "Deutsch (Deutsch)" in German and "हिन्दी (हिन्दी)" in Hindi below.
+  // The reader's own language takes no bracket. Not a special case for English: the same
+  // comparison silences "Deutsch (Deutsch)" in German and "हिन्दी (हिन्दी)" in Hindi below.
   expect(en).toContain("English");
   expect(en.join(" ")).not.toContain("English (English)");
   await page.keyboard.press("Escape");
 
-  // AND IT IS NOT AN ENGLISH FEATURE. The bracket is a catalogue lookup
-  // (`lang.<code>`), not the registry's `exonym` — that column is the English
-  // name and could only ever have served an English reader.
+  // And it is not an English feature: the bracket is a catalogue lookup (`lang.<code>`), not
+  // the registry's `exonym`, which is the English name.
   await pick(page, EN, "hi");
   const hi = await options(HI);
   for (const want of ["English (अंग्रेज़ी)", "Deutsch (जर्मन)", "ਪੰਜਾਬੀ (पंजाबी)", "العربية (अरबी)"]) {
@@ -187,20 +157,16 @@ test("every picker names each language twice, in the reader's own words", async 
   }
   expect(hi).toContain("हिन्दी");
   expect(hi.join(" "), "the Hindi reader's own row is bracketed").not.toContain("हिन्दी (हिन्दी)");
-  // The English NAME must not leak into a picker whose reader does not read it.
+  // The English name must not leak into a picker whose reader does not read it.
   expect(hi.join(" "), "an English name leaked into a Hindi picker").not.toContain("Punjabi");
 });
 
 test("no painted word begins inside a grapheme cluster", async ({ page }) => {
-  // The tokenizer splits on whitespace and peels punctuation off each end, and
-  // in these scripts "punctuation" is a category test that a virama fails and a
-  // matra passes. A peel that took one codepoint too many leaves a word opening
-  // on a combining mark: it reassembles perfectly, the verse text is intact,
-  // and the reader sees a dotted circle where a letter should be.
-  //
-  // `check-indic.py` asserts this over the built corpus; this asserts it over
-  // what actually reached the painter, which is the other end of the same
-  // pipeline — layout and the wire layer are between them.
+  // The tokenizer peels punctuation off each end, and in these scripts "punctuation" is a
+  // category test a virama fails and a matra passes. One codepoint too many leaves a word
+  // opening on a combining mark: the verse text reassembles perfectly and the reader sees a
+  // dotted circle. `check-indic.py` asserts this over the built corpus; this asserts it over
+  // what reached the painter, with layout and the wire layer in between.
   await reader(page, EN);
   await pick(page, EN, "hi");
   const words = (await boxes(page)).filter((b) => b.kind === "word");
@@ -213,14 +179,10 @@ test("Punjabi search finds a word spelled without the dot a reader cannot type",
   await reader(page, EN);
   await pick(page, EN, "pa");
 
-  // ਫ਼ਿਲਿਪੁੱਸ — Philip, and the ਫ਼ is ਫ plus a nukta. Layouts differ on whether
-  // that dot is reachable at all, so a reader types ਫਿਲਿਪੁੱਸ.
-  //
-  // WHAT FAILS WITHOUT THE FOLD: nothing errors, the index is intact, and the
-  // search returns zero rows. What fails with the fold applied too GENEROUSLY —
-  // every nukta dropped — is not visible here at all, which is why
-  // `search::tests` holds that half: ਸ਼ would silently become ਸ through the
-  // whole Bible.
+  // ਫ਼ਿਲਿਪੁੱਸ — Philip; the ਫ਼ is ਫ plus a nukta that many layouts cannot reach, so a reader
+  // types ਫਿਲਿਪੁੱਸ. Without the fold nothing errors and the search returns zero rows. The
+  // opposite failure — the fold applied too generously, so ਸ਼ silently becomes ਸ through the
+  // whole Bible — is not visible here, and lives in `search::tests`.
   await page.getByLabel(PA["common.openSearch"]).click();
   const box = page.getByRole("searchbox");
   await expect(box).toBeVisible();
@@ -240,11 +202,9 @@ test("Punjabi search finds a word spelled without the dot a reader cannot type",
 test.describe("a Punjabi device, cold", () => {
   test.use({ locale: "pa-IN" });
 
-  // The whole feature from the angle the tests above cannot see: they reach
-  // Punjabi through the picker, which proves the app can BE Punjabi, not that
-  // it arrives that way. Arabic shipped once as a fluent Arabic interface over
-  // the English KJV. Asserted on the SCRIPTURE, because the chrome is the half
-  // that was already right when that happened.
+  // The angle the tests above cannot see: they reach Punjabi through the picker, which
+  // proves the app can be Punjabi, not that it arrives that way. Arabic once shipped as a
+  // fluent Arabic chrome over the English KJV, so this asserts on the scripture.
   test("opens its own Bible, in Punjabi, with nobody having chosen anything", async ({ page }) => {
     await reader(page, PA);
     await expect(page.locator("html")).toHaveAttribute("lang", "pa");

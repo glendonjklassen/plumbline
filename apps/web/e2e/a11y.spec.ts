@@ -26,12 +26,6 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
-  const est = page.getByRole("button", { name: "Established believer" });
-  await expect(est.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
   // A fresh profile opens at John 3; wait for the layout, not just the canvas —
   // the mirror is built from the display list, so nothing is there before it.

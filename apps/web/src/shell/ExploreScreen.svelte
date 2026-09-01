@@ -1,27 +1,12 @@
 <script lang="ts">
-  // The STUDY hub, as its own SCREEN — the Android twin is ui/ExploreScreen.kt.
-  // (File and screen id keep the Explore name; the role the bar sells is Study.)
+  // The STUDY hub as its own screen. (The file and screen id keep the Explore
+  // name; the role the bar sells is Study.) Every tool carries a sentence saying
+  // what it is, because "Suggested" and "Constellation" mean nothing cold.
   //
-  // A destination should replace the reader, not hover over it.
-  //
-  // Every study tool with a sentence saying what it is, because "Suggested" and
-  // "Constellation" mean nothing cold. Memorize is a card here, not a bar
-  // destination: the bar carries the reader's ROLES (Read · Study · Preach ·
-  // Share · Sing) and memorization is a study discipline.
-  //
-  // WHY THERE IS A BAND ABOVE THE CARDS (maintainer, 2026-08-13: "every time I
-  // click study it just doesn't excite me… a bunch of boring brown cards, not
-  // like the other pages"). The diagnosis was specific: this screen was eight
-  // identical rectangles of FIXED text, so it looked the same on the day you
-  // installed the app as after a year of study. Plans, by contrast, tells you
-  // today's chapters; the Hymnal is full of actual hymns. They feel alive
-  // because they carry STATE.
-  //
-  // So the hub now opens with what is actually in flight, and every card that
-  // holds a collection says how big it has grown. Nothing here is a new engine
-  // call: each number is a query some other screen already makes, arriving
-  // through the same cache (`q`), so the hub costs a cache read and no round
-  // trip once anything else has asked.
+  // The band above the cards is what is in flight, and every collection card says
+  // how big it has grown — otherwise the screen is fixed text that looks the same
+  // after a year of study as on install day. No new engine calls: each number is
+  // a query some other screen already makes, arriving through the same cache.
   import { getSession } from "../state/session.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
   import { dispatchLink } from "../study/links";
@@ -31,30 +16,17 @@
 
   const s = getSession();
 
-  // Midday, not now: the stamp is part of the query cache's KEY, so a clock
-  // that ticks would mint a fresh entry per read. Same trick BookNav uses.
-
-  // ── what is in flight ───────────────────────────────────────────────────────
+  // `dayStamp()` is midday, not now: the stamp is part of the query cache's key,
+  // so a ticking clock would mint a fresh entry per read.
   //
-  // EVERY running plan gets its own row, in order, each naming the chapters it
-  // still wants (maintainer, 2026-08-13). This read goes through `todayPlans`
-  // rather than into `running` directly, which is the whole reason that module
-  // exists — the chip and the navigator's today card already share it, and
-  // reaching past it here got all four of its rules wrong at once: concept
-  // studies are not schedules and have no day (their id would have rendered
-  // raw, since they are not builtins), a paused plan asks nothing, a finished
-  // one has dropped out, and only the FIRST plan was ever shown.
   // The four reads the band is built from, held once so readiness can be told
-  // from emptiness. `q` answers null while its fetch is in flight, and null and
-  // "nothing running" render identically — so without this the band drew as
-  // empty for a frame or two and then GREW, shoving the cards down the page
-  // ("they pop in on load so it's a bit jarring", maintainer, 2026-08-13).
-  // `qStale`, not `q`: every authoring write and dwell tick invalidates the
-  // cache, and a hub opened inside that window redrew empty and popped back
-  // one answer at a time — the cards shifting under the reader's thumb
-  // ("widgets are spazzy on load", UAT 2026-08-18). A held count self-corrects
-  // the moment the fresh answer lands; nothing here aims a tap by ordinal, so
-  // a beat of staleness costs nothing.
+  // from emptiness — `q` answers null while a fetch is in flight, and null and
+  // "nothing running" render identically, so the band would draw empty and then
+  // grow, shoving the cards down the page. `qStale`, not `q`, for the same
+  // reason: every authoring write and dwell tick invalidates the cache. A held
+  // count self-corrects when the fresh answer lands, and nothing here aims a tap
+  // by ordinal, so a beat of staleness costs nothing. Plan rows go through
+  // `todayPlans` (concept studies have no day, paused plans ask nothing).
   const plansQ = $derived(s.qStale("plans", ""));
   const dueQ = $derived(s.qStale("memoryDue", dayStamp()));
   const suggestedQ = $derived(s.qStale("suggestedWeaves"));
@@ -86,20 +58,16 @@
     ),
   );
   /** A full plan-day was banked today. The row still shows the NEXT portion —
-   *  working ahead is invited, not merely permitted (UAT, 2026-08-18) — and
-   *  this line above it is the acknowledgment, because saying nothing to
-   *  someone who just finished is a little insulting (maintainer, 2026-08-13). */
+   *  working ahead is invited — and this line above it is the acknowledgment. */
   const anyDoneToday = $derived(todays.some((p) => p.doneToday));
 
   const dueCount = $derived(((dueQ?.refs ?? []) as string[]).length);
   const suggestedCount = $derived(((suggestedQ?.suggested ?? []) as any[]).length);
 
-  // ── the reading map, as one number and one bar ──────────────────────────────
-  //
-  // CHAPTERS, not a word-weighted percentage: "412 of 1,189" is a thing a
-  // reader can hold, and the map's own `read` count is exactly chapters that
-  // have had a full pass. The bar is painted in the map's own `readDone` hue,
-  // so it belongs to whichever of the eighteen themes is on, for free.
+  // The reading map as one number and one bar. CHAPTERS, not a word-weighted
+  // percentage: "412 of 1,189" is a thing a reader can hold, and the map's own
+  // `read` count is exactly chapters that have had a full pass. Painted in the
+  // map's `readDone` hue, so it follows whichever theme is on.
   const coverage = $derived.by(() => {
     const books = (booksQ?.books ?? []) as any[];
     if (!books.length) return null;
@@ -114,15 +82,10 @@
 
   const nf = $derived(new Intl.NumberFormat(lang()));
 
-  // ── the lifetime counter ────────────────────────────────────────────────────
-  //
-  // How many times this reader has been through the whole Bible. Seeded ONCE by
-  // hand — somebody arriving with thirty years behind them should not start at
-  // nought — and EARNED after that: nothing here edits it, and the only thing
-  // that moves it is finishing the canon (maintainer, 2026-08-13).
-  //
-  // -1 is "never said", which is deliberately not 0: a reader who answers "none"
-  // has told us something, and must not be asked again.
+  // The lifetime counter: how many times this reader has been through the whole
+  // Bible. Seeded ONCE by hand and earned after that — the only thing that moves
+  // it is finishing the canon. -1 is "never said", deliberately not 0: a reader
+  // who answers "none" has told us something and must not be asked again.
   const reads = $derived(Number(s.config.bibleReads ?? -1));
   const readsSet = $derived(reads >= 0);
 
@@ -145,15 +108,13 @@
   });
 
   async function setReads(): Promise<void> {
-    // Asked once. There is no edit path afterwards on purpose: a number you can
-    // retype is a number that means nothing.
+    // Asked once; no edit path afterwards, on purpose.
     if (readsSet) return;
     const n = await s.askNumber(t("explore.readsAsk"));
     if (n === null) return;
     s.config.bibleReads = n;
-    // Whatever the canon says right now is the state this answer was given
-    // against, so a reader who is ALREADY finished is not immediately credited
-    // with a read they just told us about.
+    // The canon's current state is what this answer was given against, so a
+    // reader already finished is not credited with the read they just reported.
     s.config.bibleReadsCredited = !!coverage && coverage.total > 0 && coverage.read >= coverage.total;
     s.saveConfig();
   }
@@ -176,14 +137,12 @@
   }
 
   // The library tools, each with the count of what is IN it. Plans and Memorize
-  // deliberately carry no count: they are activities rather than collections,
-  // and the band above already says what they are asking for today.
+  // carry no count: they are activities rather than collections, and the band
+  // above already says what they ask for today.
   const cards = $derived([
-    // ONE card for devotionals AND reading plans (maintainer, 2026-08-26): they
-    // were two cards onto the same screen, which is a distinction the reader
-    // pays for and the app does not keep. First in the grid, and a DOOR rather
-    // than a shortcut into today's entry — the screen behind it also has to
-    // offer starting a second booklet and stopping this one.
+    // One card for devotionals AND reading plans — they open the same screen.
+    // A door rather than a shortcut into today's entry: that screen also offers
+    // starting a second booklet and stopping this one.
     { id: "plans", count: null as number | null, go: openPlans },
     { id: "memorize", count: null as number | null, go: openMemorize },
     {
@@ -196,14 +155,12 @@
       count: ((s.qStale("threads")?.threads ?? []) as any[]).length,
       go: () => (s.panel = { kind: "threads" }),
     },
-    // A DOOR now, like Visualizations: there is more than one thing to do with
-    // a tag library (browse, rename, merge) and a card that raised the panel
-    // directly had nowhere to put the rest.
+    // A door: there is more than one thing to do with a tag library (browse,
+    // rename, merge) and a card raising the panel directly fits only one.
     { id: "tags", count: ((s.qStale("tags")?.tags ?? []) as any[]).length, go: () => (s.screen = "tags") },
     // A door for the same reason: the weave library and its suggested-review
-    // queue are two views of one collection, and they were two sibling cards
-    // out here (maintainer, 2026-08-19). The in-progress band above still
-    // surfaces a pending review count directly.
+    // queue are two views of one collection. The band above still surfaces the
+    // pending review count directly.
     {
       id: "weaves",
       count: ((s.qStale("weaves")?.weaves ?? []) as any[]).length,
@@ -211,39 +168,28 @@
     },
   ]);
 
-  // The maps live under ONE card (maintainer UAT, 2026-08-12: the weave map
-  // "should be one of N subitems of a visualization menu item") — two sibling
-  // cards read as two more tools, when they are two views of the same thing.
-  // That card is a DOOR, not a branch: it opens a page (shell/VizScreen.svelte)
-  // the way Plans and Memorize do. It expanded in place at first, and the tree
-  // was the odd one out in a shell where a destination replaces what came
-  // before rather than unfolding inside it (maintainer, 2026-08-13).
+  // The maps live under ONE card, which is a door onto shell/VizScreen.svelte
+  // rather than something that unfolds in place: a destination replaces what
+  // came before.
 </script>
 
 <section class="screen" aria-label={t("nav.study")}>
   <ScreenBar title={t("nav.study")} onBack={() => s.goRead()} onMenu={() => (s.menuOpen = true)} />
   <div class="content">
-    <!-- IN PROGRESS. Only rows with something to say are drawn; a hub that
-         listed "0 cards due · 0 to review" every day would be the same fixed
-         text the cards already were. When nothing is running at all, the band
-         is one invitation rather than an empty box. -->
+    <!-- Only rows with something to say are drawn; with nothing running at all
+         the band is one invitation rather than an empty box. -->
     <section class="band" aria-label={t("explore.inProgress")}>
       <h3>{t("explore.inProgress")}</h3>
       {#if !showReal}
-        <!-- A PLACEHOLDER OF THE SAME SHAPE, not a spinner. The band's job here
-             is to hold its own height. ONE row and the coverage strip is what
-             the band resolves to in the common cases — a reader with one plan
-             running, and a reader with none (who gets the invitation row) — so
-             the cards below start where they will stay. Sized generously it
-             was worse, not better: two ghost rows made the grid jump 49px UP
-             when the real band turned out shorter. Hidden from assistive tech;
-             there is nothing here to read. -->
+        <!-- A placeholder of the same shape, not a spinner: the band's job is to
+             hold its own height. One row plus the coverage strip is what it
+             resolves to in the common cases, so the cards below start where they
+             will stay — two ghost rows made the grid jump 49px UP instead.
+             Hidden from assistive tech; there is nothing here to read. -->
         <div class="skeleton" aria-hidden="true">
           <div class="row ghost"></div>
-          <!-- The reads line is in the settled band for EVERY reader — as the
-               counter once set, as the "how many times" invitation before —
-               so the skeleton owes its height too, or the grid still jumped
-               one row when the real band landed. -->
+          <!-- The reads line is in the settled band for every reader (counter or
+               invitation), so the skeleton owes its height too. -->
           <div class="reads ghost"></div>
           <div class="coverage ghost"></div>
         </div>
@@ -252,9 +198,8 @@
           {#if anyDoneToday}
             <div class="row done"><span class="row-note">{t("explore.planDone")}</span></div>
           {/if}
-          <!-- Every running plan, ALWAYS with its next portion — after a
-               finished day this is the next day's chapters, day-numbered so
-               the reader can see the day was banked and keep going. -->
+          <!-- Every running plan, always with its next portion: after a finished
+               day this is the next day's chapters, day-numbered. -->
           {#each todays as p (p.id)}
             <button class="row" onclick={(ev) => goPlan(p, ev)}>
               <span class="row-name">{p.name}</span>
@@ -285,13 +230,10 @@
             </button>
           {/if}
 
-          <!-- The visual bonus, and it is the reading map's own colour: how much
-               of the canon has had a full pass. Tapping it opens the navigator,
-               where the map itself lives. -->
-          <!-- The lifetime counter, beside the coverage bar it belongs with:
-               one says how far through this pass you are, the other how many
-               passes there have been. Unset, it is an invitation; set, it is a
-               statement and not a control. -->
+          <!-- The lifetime counter, beside the coverage bar: one says how far
+               through this pass you are, the other how many passes there have
+               been. Unset it is an invitation; set it is a statement, not a
+               control. The bar itself opens the navigator, where the map lives. -->
           {#if readsSet}
             <div class="reads"><span class="reads-n">{nf.format(reads)}</span>
               <span class="reads-label">{plural("explore.readsTimes.one", "explore.readsTimes.other", reads)}</span>
@@ -365,8 +307,7 @@
     flex-direction: column;
     gap: 6px;
   }
-  /* A ghost is the row's own box with no content: same height, same radius,
-     same rule — a shape settling rather than a thing arriving. */
+  /* A ghost is the row's own box with no content: same height, radius, rule. */
   .ghost {
     background: color-mix(in srgb, var(--ink, #211f1a) 4%, var(--paper, #fcf9f4));
     animation: breathe 1.6s ease-in-out infinite;
@@ -384,8 +325,8 @@
     0%, 100% { opacity: 0.55; }
     50% { opacity: 0.85; }
   }
-  /* The real content arrives by fading UP, never by pushing: the placeholder it
-     replaces was the same height. */
+  /* The real content fades up rather than pushing: the placeholder it replaces
+     was the same height. */
   .settled {
     animation: settle 0.18s ease-out both;
   }
@@ -393,8 +334,8 @@
     from { opacity: 0; }
     to { opacity: 1; }
   }
-  /* A reader who has asked for less motion gets none of it — the content simply
-     is there. The point was never the animation; it was not moving the page. */
+  /* Reduced motion: the content is simply there. The point was never the
+     animation, it was not moving the page. */
   @media (prefers-reduced-motion: reduce) {
     .ghost {
       animation: none;
@@ -421,9 +362,8 @@
     padding: 12px 14px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 10px;
-    /* The band reads as the LIVE part of the screen: it sits on the reader's
-       own paper while the tool cards below sit on the chrome's, so the two
-       halves are told apart by depth rather than by a heading alone. */
+    /* The band sits on the reader's own paper while the tool cards below sit on
+       the chrome's, so the two halves are told apart by depth. */
     background: var(--paper, #fcf9f4);
   }
   .row:hover {
@@ -458,8 +398,7 @@
   .coverage:hover {
     border-color: var(--gold, #9e7d38);
   }
-  /* A quiet statement, not a control — once set it does nothing when tapped,
-     and it should not invite one. */
+  /* A quiet statement, not a control: once set, a tap does nothing. */
   .reads {
     display: flex;
     align-items: baseline;
@@ -479,12 +418,9 @@
     font-size: calc(14.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
-  /* A TAP TARGET, and the only one on this row: 44px is the floor the rest of
-     the chrome keeps (e2e/touch-targets.spec.ts). `min-height: auto` undid a
-     card floor this no longer inherits and left it at 41 — and the test caught
-     it only on the runs where the hub's real content had replaced the
-     placeholder before it measured, which is why it read as flaky rather than
-     as the plain violation it is. */
+  /* A tap target: 44px is the floor the rest of the chrome keeps
+     (e2e/touch-targets.spec.ts). Restated because the `min-height: auto` above
+     removes the card floor this would otherwise inherit. */
   .reads.unset {
     min-height: 44px;
     align-items: center;
@@ -501,10 +437,9 @@
     display: block;
     height: 8px;
     border-radius: 999px;
-    /* The map's two colours, but the TRACK has to read as empty when it is
-       empty: at 22% the unread gold looked like a full bar on a reader who has
-       read nothing, which is the opposite of what it says. Faint ground, and a
-       hairline so the track still has an edge where the fill has not reached. */
+    /* The map's two colours, but the track must read as empty when it is: at 22%
+       the unread gold looked like a full bar. Faint ground plus a hairline, so
+       the track still has an edge where the fill has not reached. */
     background: color-mix(in srgb, var(--readUnread, #c9a227) 12%, transparent);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rule, #d8cba8) 60%, transparent);
     overflow: hidden;
@@ -527,14 +462,11 @@
     flex-direction: column;
     gap: 4px;
     text-align: start;
-    /* THE TAP FLOOR MUST NOT SQUASH THE TEXT. `min-height: 44px` (app.css,
-       every button) REPLACES the automatic minimum size — the thing that
-       otherwise stops a grid or flex item from being laid out shorter than its
-       own content. With it in force the grid sized these rows below the
-       two-line descriptions and the second line spilled out under the border,
-       at every text scale. `auto` restores the content-driven minimum; the
-       floor is still met by geometry (one 17px line + 32px of padding is 56px),
-       so nothing here can be smaller than a thumb. */
+    /* The tap floor must not squash the text: app.css's `min-height: 44px`
+       REPLACES the automatic minimum size, so the grid sized these rows below
+       their two-line descriptions and the second line spilled under the border.
+       `auto` restores the content-driven minimum; the floor is still met by
+       geometry (a 17px line + 32px padding is 56px). */
 
     padding: 16px 18px;
     border: 1px solid var(--rule, #d8cba8);
@@ -549,12 +481,10 @@
     font-weight: 600;
     color: var(--ink, #211f1a);
   }
-  /* How much is in this tool. Absent at zero rather than shown as "0": an empty
-     tool should read as quiet, not as a score of nought. */
+  /* Absent at zero rather than shown as "0". */
   .ex-count {
-    /* The cards themselves are static text and are on screen from the first
-       frame; only their counts wait on a query, so they fade in rather than
-       snapping. Inline, so nothing moves when they land. */
+    /* The cards are on screen from the first frame; only the counts wait on a
+       query, so they fade in. Inline, so nothing moves when they land. */
     animation: settle 0.18s ease-out both;
     margin-inline-start: 6px;
     font-size: calc(13px * var(--uiScale, 1));
@@ -569,8 +499,7 @@
     line-height: 1.4;
     color: var(--faded, #8a8276);
   }
-  /* The one card that opens a PAGE rather than a panel — the chevron says so,
-     the same way a settings row leading somewhere does. */
+  /* The one card that opens a page rather than a panel; the chevron says so. */
   .ex-chevron {
     color: var(--gold, #9e7d38);
     font-size: calc(13px * var(--uiScale, 1));

@@ -1,21 +1,15 @@
-//! The shared colour palette — the one place every shell's colours are defined,
-//! so light/dark/night can't drift between GTK, WinUI, and (later) Compose.
-//! Tier 0 #5.
+//! The shared colour palette — the one place a shell's colours are defined.
 //!
-//! A [`Palette`] carries a hex string per semantic role. The reader, chrome, and
-//! the study-panel's [`crate::panel::Color`] roles all resolve through it. GTK
-//! reads the struct directly; the non-Rust shells fetch it as JSON
-//! (`plumbline_theme_palette_json`) and apply it. Shells own translucency: a search
-//! band, a Strong's underline, a weave connector are all drawn by applying alpha
-//! to `gold` / `pin`, so those follow the theme for free.
+//! A [`Palette`] carries a hex string per semantic role; the reader, chrome and
+//! the study-panel's [`crate::panel::Color`] roles all resolve through it. A
+//! shell fetches it as JSON (`plumbline_theme_palette_json`). Shells own
+//! translucency: a search band, a Strong's underline, a weave connector are all
+//! alpha over `gold` / `pin`, so they follow the theme for free.
 //!
-//! Every role a shell paints as *text* has to clear WCAG AA (4.5:1) against
-//! every surface a shell paints text *on* — in all three themes. That is a test
-//! (`contrast::every_text_role_clears_aa_on_every_surface`), not a convention, and
-//! it is why the light muted tones are deeper than the ones the shells first
-//! shipped with: `faded`, `gold`, `section`, the tiers, `mono` and `lemma` all sat
-//! between 2.5:1 and 4.0:1 on the warm paper, which is a muted tone you can't
-//! quite read. The hues are the same; only the lightness moved.
+//! Every role painted as *text* must clear WCAG AA (4.5:1) against every surface
+//! text is painted *on*, in every theme — enforced by
+//! `contrast::every_text_role_clears_aa_on_every_surface`, which is why the
+//! light muted tones are deeper than they look like they should be.
 
 use serde::{Deserialize, Serialize};
 
@@ -26,10 +20,8 @@ pub enum Theme {
     Dark,
     Night,
     /// Named presets, inspired by well-known editor themes and tuned to clear
-    /// the same WCAG-AA bar the built-ins do (so they read as this app, not as a
-    /// pixel-copy). Dark unless noted. (Darcula was retired 2026-08-12 — it sat
-    /// a stone's throw from One Dark; `parse` aliases the stored token there so
-    /// no reader's config breaks.)
+    /// the same WCAG-AA bar the built-ins do. Dark unless noted. (`parse` still
+    /// accepts the retired `darcula` token, aliased to One Dark.)
     SolarizedLight,
     SolarizedDark,
     Gruvbox,
@@ -41,11 +33,9 @@ pub enum Theme {
     TokyoNight,
     RosePine,
     Synthwave,
-    /// The house originals — not editor ports. Scriptorium is a medieval
-    /// manuscript (parchment, iron-gall ink, rubricated accents; light);
-    /// Blueprint is a cyanotype (a plumbline is a builder's tool); Phosphor is
-    /// a green CRT with amber accents; HighContrast is the deliberate
-    /// low-vision option (light).
+    /// The house originals. Scriptorium is a medieval manuscript (light);
+    /// Blueprint a cyanotype; Phosphor a green CRT with amber accents;
+    /// HighContrast the deliberate low-vision option (light).
     Scriptorium,
     Blueprint,
     Phosphor,
@@ -80,8 +70,7 @@ impl Theme {
             "light" => Some(Theme::Light),
             "dark" => Some(Theme::Dark),
             "night" => Some(Theme::Night),
-            // Retired 2026-08-12; configs that stored it land on its nearest
-            // neighbour rather than falling back to System.
+            // Retired; a config that stored it lands on its nearest neighbour.
             "darcula" => Some(Theme::OneDark),
             "solarized-light" => Some(Theme::SolarizedLight),
             "solarized-dark" => Some(Theme::SolarizedDark),
@@ -172,8 +161,7 @@ impl ThemeChoice {
             "light" => Some(ThemeChoice::Light),
             "dark" => Some(ThemeChoice::Dark),
             "night" => Some(ThemeChoice::Night),
-            // Retired 2026-08-12 (see `Theme::parse`): a stored darcula config
-            // resolves to its nearest neighbour, not to System.
+            // Retired; see `Theme::parse`.
             "darcula" => Some(ThemeChoice::OneDark),
             "solarized-light" => Some(ThemeChoice::SolarizedLight),
             "solarized-dark" => Some(ThemeChoice::SolarizedDark),
@@ -262,8 +250,8 @@ impl ThemeChoice {
     }
 }
 
-/// Every themed colour, as a `#rrggbb` hex string. Serialized camelCase for the
-/// non-Rust shells; consumed field-by-field by GTK.
+/// Every themed colour, as a `#rrggbb` hex string. Serialized camelCase to the
+/// shell.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Palette {
@@ -306,25 +294,22 @@ pub struct Palette {
     pub strip_bg: String,
     /// Weave-authoring pin selection (blue base; drawn with alpha).
     pub pin: String,
-    /// The reading map's three hues (see `crate::reading::Standing`) — the
-    /// navigator's book/chapter tiles. Shells own the bloom: the glow is these
-    /// same colours at rising alpha and spread, so it follows the theme for free.
+    /// The reading map's three hues (see `crate::reading::Standing`), painting
+    /// the navigator's book/chapter tiles. A shell owns the bloom: the glow is
+    /// these same colours at rising alpha and spread.
     ///
-    /// A chapter never read. GOLD, and glowing from the first launch: unopened
-    /// scripture should read as treasure worth going after, not as a gap in a
-    /// checklist.
+    /// A chapter never read — gold, and glowing, so unopened scripture reads as
+    /// treasure rather than as a gap in a checklist.
     pub read_unread: String,
-    /// A chapter partway through — copper, clearly darker than the unread gold so
-    /// "started" never reads as "untouched".
+    /// A chapter partway through — copper, clearly darker than the unread gold.
     pub read_partial: String,
-    /// A chapter read all the way through — sage, settled.
+    /// A chapter read all the way through — sage.
     pub read_done: String,
 }
 
 impl Palette {
     /// A panel [`crate::panel::Color`] → this palette's hex, or `None` for
-    /// `Ink` (the shell inherits the panel's themed body ink). Every shell maps
-    /// these identically, so the panel reads the same everywhere.
+    /// `Ink` (the shell inherits the panel's themed body ink).
     pub fn panel_color(&self, c: crate::panel::Color) -> Option<&str> {
         use crate::panel::Color::*;
         Some(match c {
@@ -358,9 +343,8 @@ pub fn palette(theme: Theme) -> Palette {
             section: "#776537".into(),
             tier_god: "#7d632c".into(),
             tier_human: "#556d51".into(),
-            // Both greys land on #666666: that is the lightest neutral grey that
-            // clears AA on `strip_bg`, so the old #999999/#888888 pair had nowhere
-            // left to differ. The tier is told apart by where it sits, not by tone.
+            // #666666 is the lightest neutral grey clearing AA on `strip_bg`, so
+            // both grey roles land there; the tier is told apart by position.
             tier_machine: "#666666".into(),
             tier_research: "#aa4838".into(),
             mono: "#666666".into(),
@@ -375,18 +359,15 @@ pub fn palette(theme: Theme) -> Palette {
             read_partial: "#a8642c".into(),
             read_done: "#6f8f6a".into(),
         },
-        // Candlelight-warm dark: a dark brown-charcoal paper, near-white ink, a
-        // brighter gold that holds contrast on the dark ground. The ink was
-        // #e8e0d0 until 2026-08-17 — readers reported the body text as dim, so
-        // it moved most of the way to white while keeping the warm cast.
+        // Candlelight-warm dark: brown-charcoal paper, near-white ink, a
+        // brighter gold that holds contrast on the dark ground.
         Theme::Dark => Palette {
             dark: true,
             paper: "#1f1b16".into(),
             ink: "#f5f1e8".into(),
             faded: "#9a9385".into(),
-            // Barely below the ink: on dark paper a dimmed added-word grey read
-            // as "darkened" and broke the reading flow —
-            // the italic slant carries the distinction, the tint only whispers.
+            // Barely below the ink: on dark paper a dimmed added-word grey reads
+            // as damage. The italic slant carries the distinction.
             added: "#e7e0d0".into(),
             divine: "#d8b48c".into(),
             title_ink: "#b8aa90".into(),
@@ -395,8 +376,7 @@ pub fn palette(theme: Theme) -> Palette {
             tier_god: "#c8a24e".into(),
             tier_human: "#8fb389".into(),
             tier_machine: "#9a9a9a".into(),
-            // A hair brighter than it was: #d0705e is 4.46:1 on this theme's
-            // popup paper — the only dark/night pair that missed AA.
+            // A hair brighter than #d0705e, which was 4.46:1 on the popup paper.
             tier_research: "#d17261".into(),
             mono: "#9a9a9a".into(),
             morph: "#b0a06a".into(),
@@ -439,21 +419,14 @@ pub fn palette(theme: Theme) -> Palette {
             read_done: "#86ac82".into(),
         },
         // ── named presets ─────────────────────────────────────────────────────
-        // Inspired by well-known editor themes; muted roles are pushed lighter
-        // (dark themes) or darker (light) than the originals so every text role
-        // clears WCAG AA on every surface — the originals' comment/base tones do
-        // not. Tune the hex to taste; the contrast test is the floor.
+        // Muted roles are pushed lighter (dark themes) or darker (light) than
+        // the originals, whose comment/base tones do not clear AA. The `read_*`
+        // tiles reuse each theme's own gold/divine/tier_human so the navigator
+        // belongs to the active theme rather than a fixed gold/copper/sage.
         //
-        // The reading-map tiles (`read_*`) reuse each theme's own gold/divine/
-        // tier_human so the navigator is unmistakably part of the active theme —
-        // never a fixed gold/copper/sage that ignores the palette.
-        //
-        // A medieval manuscript: parchment paper, iron-gall brown-black ink,
-        // and the accent role RUBRICATED — verse numbers, links and connectors
-        // in the scribe's red, which is what a rubric is. The divine name sits
-        // in the same red family one step deeper, as an illuminator would have
-        // it. `tier_research` moves to a plum ink so it cannot be confused
-        // with the rubric.
+        // Scriptorium: parchment and iron-gall ink, with the accent rubricated —
+        // verse numbers, links and connectors in the scribe's red.
+        // `tier_research` is plum so it cannot be read as the rubric.
         Theme::Scriptorium => Palette {
             dark: false,
             paper: "#f2e5c4".into(),
@@ -480,10 +453,8 @@ pub fn palette(theme: Theme) -> Palette {
             read_partial: "#96481b".into(),
             read_done: "#567244".into(),
         },
-        // A cyanotype: Prussian-blue paper, pale chalk ink, the drafting lines
-        // in lighter blue. A plumbline is a builder's tool; this is the theme
-        // that says so. Gold stays for the divine name and the God tier — the
-        // one precious thing on a working drawing.
+        // A cyanotype: Prussian-blue paper, pale chalk ink, drafting lines in
+        // lighter blue. Gold stays for the divine name and the God tier.
         Theme::Blueprint => Palette {
             dark: true,
             paper: "#0e2a47".into(),
@@ -510,10 +481,9 @@ pub fn palette(theme: Theme) -> Palette {
             read_partial: "#ff9e64".into(),
             read_done: "#7fd0a0".into(),
         },
-        // A green-phosphor CRT, with the classic amber second phosphor as the
-        // accent — so links and verse numbers glow amber against green body
-        // text, the dual-tube terminal look. Near-black paper with a green
-        // cast, never pure black (that is Night's job).
+        // A green-phosphor CRT with the amber second phosphor as the accent, so
+        // links glow amber against green body text. Near-black paper with a
+        // green cast — pure black is Night's.
         Theme::Phosphor => Palette {
             dark: true,
             paper: "#050a05".into(),
@@ -540,11 +510,9 @@ pub fn palette(theme: Theme) -> Palette {
             read_partial: "#ff8c42".into(),
             read_done: "#58c477".into(),
         },
-        // The deliberate low-vision option: pure white paper, pure black ink,
-        // and every muted role pulled far past AA (the quiet greys of the other
-        // light themes are exactly what a low-vision reader cannot use). Pairs
-        // naturally with Atkinson Hyperlegible, though type and colour stay
-        // independent axes.
+        // The low-vision option: pure white paper, pure black ink, every muted
+        // role pulled far past AA — the quiet greys of the other light themes
+        // are exactly what a low-vision reader cannot use.
         Theme::HighContrast => Palette {
             dark: false,
             paper: "#ffffff".into(),
@@ -702,8 +670,7 @@ pub fn palette(theme: Theme) -> Palette {
             read_partial: "#d19a66".into(),
             read_done: "#98c379".into(),
         },
-        // Sepia: a warm-paper light theme for long reading — browns and muted
-        // greens on aged paper.
+        // A warm-paper light theme for long reading.
         Theme::Sepia => Palette {
             dark: false,
             paper: "#f4ecd8".into(),
@@ -757,8 +724,8 @@ pub fn palette(theme: Theme) -> Palette {
             read_partial: "#fab387".into(),
             read_done: "#a6e3a1".into(),
         },
-        // Catppuccin "Latte": pastel light — the Mocha family on a bright ground,
-        // accents darkened to clear AA on paper.
+        // Catppuccin "Latte": the Mocha family on a bright ground, accents
+        // darkened to clear AA on paper.
         Theme::CatppuccinLatte => Palette {
             dark: false,
             paper: "#eff1f5".into(),
@@ -812,8 +779,8 @@ pub fn palette(theme: Theme) -> Palette {
             read_partial: "#ff9e64".into(),
             read_done: "#9ece6a".into(),
         },
-        // "Rosé Pine": muted rose/pine on a soft-black ground; "read" borrows the
-        // foam cyan, which reads clearly apart from the gold and rose.
+        // "Rosé Pine": muted rose/pine on a soft-black ground; `read_done`
+        // borrows the foam cyan, clearly apart from the gold and rose.
         Theme::RosePine => Palette {
             dark: true,
             paper: "#191724".into(),
@@ -840,8 +807,7 @@ pub fn palette(theme: Theme) -> Palette {
             read_partial: "#ebbcba".into(),
             read_done: "#9ccfd8".into(),
         },
-        // Synthwave: deep indigo-violet night sky, hot-pink accent, cyan reserved
-        // for selection, amber for the divine name.
+        // Synthwave: deep indigo-violet night sky, amber for the divine name.
         Theme::Synthwave => Palette {
             dark: true,
             paper: "#1a1033".into(),
@@ -850,11 +816,9 @@ pub fn palette(theme: Theme) -> Palette {
             added: "#d0a8e8".into(),
             divine: "#ffd75e".into(),
             title_ink: "#c4b4ee".into(),
-            // The accent is ELECTRIC CYAN, not the genre's hot pink: this role
-            // paints verse numbers, every link, the connectors and the search
-            // band (at alpha), so it is the colour the reader sees most of, and
-            // pink at that volume reads as a highlighter over the text. Pink
-            // stays as detail — `lemma`, and the `pin` selection.
+            // Cyan, not the genre's hot pink: this role paints verse numbers,
+            // every link, the connectors and the search band, and pink at that
+            // volume reads as a highlighter over the text.
             gold: "#4fd6ff".into(),
             section: "#86c9ee".into(),
             tier_god: "#ffcf6b".into(),
@@ -862,16 +826,16 @@ pub fn palette(theme: Theme) -> Palette {
             tier_machine: "#b4b0d8".into(),
             tier_research: "#ff7d92".into(),
             mono: "#b2aed2".into(),
-            // Violet and pink, moved off the blues they used to sit in: with a
-            // cyan accent, a cyan gloss and a blue lemma read as links.
+            // Violet and pink, not blues: against a cyan accent, a blue gloss or
+            // lemma reads as a link.
             morph: "#c49cff".into(),
             lemma: "#ff9fe0".into(),
             rule: "#45307a".into(),
             popup_paper: "#221443".into(),
             pane_nav_bg: "#271950".into(),
             strip_bg: "#2d1d5c".into(),
-            // Magenta, for the same reason: a cyan selection band under cyan
-            // links is one signal painted twice.
+            // Magenta, same reason: a cyan band under cyan links is one signal
+            // painted twice.
             pin: "#ff5fd2".into(),
             read_unread: "#ffc94d".into(),
             read_partial: "#ff9e64".into(),
@@ -884,9 +848,8 @@ pub fn palette(theme: Theme) -> Palette {
 mod tests {
     use super::*;
 
-    /// Every concrete theme — the one list the roundtrip and contrast tests
-    /// share, so a new theme can't be added to `palette()` and quietly skip
-    /// either check.
+    /// Every concrete theme — one list shared by the roundtrip and contrast
+    /// tests, so a theme added to `palette()` cannot skip either check.
     pub(super) const ALL_THEMES: [Theme; 18] = [
         Theme::Light,
         Theme::Dark,
@@ -937,8 +900,8 @@ mod tests {
             assert_eq!(ThemeChoice::parse(c.token()), Some(c));
         }
         assert_eq!(Theme::parse("nope"), None);
-        // Retired 2026-08-12, aliased rather than dropped: a config that stored
-        // darcula opens on its nearest neighbour instead of snapping to System.
+        // Retired but aliased, so a config that stored darcula opens on its
+        // nearest neighbour instead of snapping to System.
         assert_eq!(Theme::parse("darcula"), Some(Theme::OneDark));
         assert_eq!(ThemeChoice::parse("darcula"), Some(ThemeChoice::OneDark));
     }
@@ -959,10 +922,9 @@ mod tests {
         assert_eq!(c, ThemeChoice::Light); // back to start
     }
 
-    /// The light anchors that must not drift: the paper and ink the whole look
-    /// is built on, the tier-God/gold identity the panel relies on, and the
-    /// unread gold (deliberately treasure-bright). Everything else in
-    /// the light palette is governed by the contrast test below, not by a hex.
+    /// The light anchors that must not drift: paper and ink, the tier-God/gold
+    /// identity the panel relies on, and the unread gold. Everything else is
+    /// governed by the contrast test below, not by a pinned hex.
     #[test]
     fn light_anchors_hold() {
         let p = palette(Theme::Light);
@@ -982,19 +944,15 @@ mod tests {
     }
 }
 
-/// The palette's accessibility floor, measured rather than eyeballed.
-///
-/// A muted tone that can't be read isn't muted, it's missing. Light theme shipped
-/// with six roles between 2.5:1 and 4.0:1 on the warm paper; this module is the
-/// guard that stops the next palette tweak putting them back.
+/// The palette's accessibility floor, measured rather than eyeballed — the
+/// guard that stops a palette tweak reintroducing an unreadable muted tone.
 #[cfg(test)]
 mod contrast {
     use super::*;
 
-    /// WCAG AA for body text. Nothing in the palette is large-text-only —
-    /// `faded` paints 11 px canon-strip labels, `mono` and `lemma` the panel's
-    /// smallest type — so every text role is held to the body threshold, not the
-    /// 3:1 large-text one.
+    /// WCAG AA for body text. Nothing in the palette is large-text-only (`faded`
+    /// paints 11 px canon-strip labels, `mono` and `lemma` the panel's smallest
+    /// type), so no role gets the 3:1 large-text threshold.
     const AA_BODY: f64 = 4.5;
 
     /// One sRGB channel → linear light (WCAG relative-luminance, step 1).
@@ -1042,9 +1000,8 @@ mod contrast {
         ]
     }
 
-    /// Every surface a shell paints text on. Checking all four beats reasoning
-    /// about which role lands where: a role that clears the darkest light surface
-    /// clears the reader, the panel, the chrome and the canon strip at once.
+    /// Every surface a shell paints text on. Checked exhaustively rather than
+    /// reasoning about which role lands where.
     fn surfaces(p: &Palette) -> Vec<(&'static str, &str)> {
         vec![
             ("paper", &p.paper),
@@ -1054,19 +1011,17 @@ mod contrast {
         ]
     }
 
-    /// Roles that carry no text, with the reason. Listed so the exhaustiveness
-    /// test below can prove nothing slipped past a contrast decision.
+    /// Roles that carry no text, with the reason, so the exhaustiveness test
+    /// below can prove nothing slipped past a contrast decision.
     const NOT_TEXT: &[(&str, &str)] = &[
         ("dark", "a flag, not a colour"),
         ("pin", "the weave-authoring selection band; shells draw it with alpha"),
-        // 1.5:1 on paper. A 3:1 hairline would turn every divider in a
-        // paper-and-ink reader into a hard line, and the controls that draw it as a
-        // border all carry their own legible label — but a text field's border IS
-        // its only affordance, so this one wants the maintainer's eye.
+        // 1.5:1 on paper, deliberately: a 3:1 hairline would turn every divider
+        // into a hard line. Every control that draws it as a border carries its
+        // own label — a text field, whose border is its only affordance, would not.
         ("rule", "a decorative hairline, never an only-affordance boundary"),
-        // Tile paint, not type: the shells composite these at ≤0.30 alpha for the
-        // fill and ≤0.80 for the border, so the raw hex never reaches the screen,
-        // and every tile also states its standing in its own tooltip.
+        // Composited at ≤0.30 alpha (fill) and ≤0.80 (border), so the raw hex
+        // never reaches the screen; each tile also states its standing in a tooltip.
         ("readUnread", "reading-map tile paint, composited with alpha"),
         ("readPartial", "reading-map tile paint, composited with alpha"),
         ("readDone", "reading-map tile paint, composited with alpha"),
@@ -1090,8 +1045,8 @@ mod contrast {
         }
     }
 
-    /// A new palette field has to declare itself: either it carries text (and the
-    /// test above then holds it to AA) or it says why it doesn't.
+    /// A new palette field must declare itself: either it carries text (and the
+    /// test above holds it to AA) or it says why it does not.
     #[test]
     fn no_role_escapes_the_contrast_decision() {
         let p = palette(Theme::Light);
@@ -1116,8 +1071,8 @@ mod contrast {
         );
     }
 
-    /// The maths itself, against values whose ratios are fixed by the spec —
-    /// otherwise a broken `linear()` would quietly pass everything.
+    /// The maths itself, against ratios the spec fixes — a broken `linear()`
+    /// would otherwise pass everything above.
     #[test]
     fn ratio_matches_the_spec_extremes() {
         assert!((ratio("#000000", "#ffffff") - 21.0).abs() < 0.001);

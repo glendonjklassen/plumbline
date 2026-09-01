@@ -1,26 +1,15 @@
 //! The shipped stock study set has to be loadable by the build that ships it.
 //!
-//! `apps/android/app/src/main/assets/stock/{tags,threads,weaves}` is the one
-//! source of truth for the bundled study aids (CLAUDE.md §Layout): Android
-//! copies it out of its APK assets on first launch, and
-//! `scripts/build-web-pack.mjs` packs the same directory into the web data pack
-//! with `seedOnce`. Nothing validated it. A stock file with a typo in a refKey,
-//! a stale tokenization stamp, or a format tag the core does not recognise would
-//! ship in both shells and fail at SEED time — on a reader's device, on first
-//! launch, where the only symptom is a study aid that quietly is not there.
+//! These fail against a stock file with a bad refKey, a stale tokenization stamp
+//! or an unrecognised format tag — defects that otherwise surface only at seed
+//! time on a reader's device, as a study aid that quietly is not there. Every
+//! file is parsed through the core's own `Deserialize` impls, as the shell does,
+//! so "valid JSON" is not enough to pass.
 //!
-//! These tests parse every shipped file through the core's own `Deserialize`
-//! impls, which is what the shells do, so "it is valid JSON" is not enough to
-//! pass: the format tag, the tokenization stamp and every refKey have to be
-//! right.
-//!
-//! HONEST LIMIT: refs are checked STRUCTURALLY — the book is one of the 66 and
-//! the chapter and verse are sane — not against the corpus, because the canon
-//! table carries no chapter counts and loading `data/kjv.jsonl` here would put a
-//! 19 MB parse on every `cargo test`. So `Jude 1:3` is verified to be a real
-//! reference shape naming a real book; `Jude 1:99` would pass this and fail on a
-//! device. Closing that needs the corpus, and belongs with whatever else earns
-//! its cost.
+//! Limit: refs are checked structurally (a real book id, sane chapter and verse),
+//! not against the corpus — the canon table carries no chapter counts and loading
+//! `data/kjv.jsonl` would put a 19 MB parse on every `cargo test`. `Jude 1:99`
+//! passes here and fails on a device.
 
 use std::path::{Path, PathBuf};
 
@@ -28,7 +17,7 @@ use plumbline_core::canon::{book_by_id, TOKENIZATION_VERSION};
 use plumbline_core::reference::VRef;
 
 fn stock() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/android/app/src/main/assets/stock")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../stock")
 }
 
 /// Every `*.json` under `dir`, recursively (weaves has a `suggested/` subtree).
@@ -64,8 +53,8 @@ fn check_ref(key: &str, at: &Path) {
 fn every_stock_tag_loads() {
     let dir = stock().join("tags");
     let files = json_files(&dir);
-    // Not merely "whatever is there parses": there IS a stock tag, because it is
-    // the only example a reader ever sees of what a tag is for.
+    // Not merely "whatever is there parses": a stock tag has to ship, since it is the
+    // only example a reader ever sees of what a tag is for.
     assert!(!files.is_empty(), "no stock tag ships in {}", dir.display());
     for f in &files {
         let bytes = std::fs::read(f).unwrap();
@@ -103,9 +92,8 @@ fn every_stock_thread_loads() {
 #[test]
 fn every_stock_weave_loads() {
     let files = json_files(&stock().join("weaves"));
-    // 222 weaves and one suggested subtree at the time of writing; the count is
-    // deliberately not asserted, only that the set is not empty and every member
-    // of it loads.
+    // The count is deliberately not asserted, only that the set is not empty and
+    // every member of it loads.
     assert!(!files.is_empty(), "no stock weaves ship");
     for f in &files {
         let bytes = std::fs::read(f).unwrap();
@@ -122,10 +110,9 @@ fn every_stock_weave_loads() {
 
 #[test]
 fn a_stock_file_lands_where_its_shell_will_look_for_it() {
-    // The filename is not decoration: both shells seed by copying the file, and
-    // the core then finds a tag again by slugging its NAME. A stock file whose
-    // name does not slug to its filename is seeded once and then invisible to
-    // every later save, which would silently fork it in two.
+    // The shell seeds by copying the file, and the core then finds a tag again by
+    // slugging its name. A stock file whose name does not slug to its filename is
+    // seeded once and then invisible to every later save, forking it in two.
     for f in json_files(&stock().join("tags")) {
         let bytes = std::fs::read(&f).unwrap();
         let tag: plumbline_core::tag::Tag = serde_json::from_slice(&bytes).unwrap();

@@ -4,43 +4,22 @@
 //
 //   node scripts/subset-fonts.mjs        (run by `npm run pack:fonts`)
 //
-// The reader picks TWO faces independently — one for scripture, one for the
-// chrome (`core::font::Font`, config `textFont` / `chromeFont`) — so this script
-// builds a FAMILY TABLE rather than one face. Each family is emitted whole; the
-// browser downloads only the families a reader actually selects, because
-// @font-face is lazy, so bundling four costs a reader who keeps the default
-// exactly nothing over bundling one.
+// The reader picks two faces independently — one for scripture, one for the
+// chrome (`core::font::Font`, config `textFont` / `chromeFont`) — so this builds
+// a family table rather than one face. @font-face is lazy, so bundling every
+// family costs a reader who keeps the default nothing.
 //
-// THE CORRECTNESS CONSTRAINT, which is why the charset below is generous:
-// chapter layout is measured in the ENGINE WORKER over an OffscreenCanvas, and
-// the shell PAINTS the resulting display list on the main thread. Both contexts
-// load the same file, so they agree — but only if the file has every glyph the
-// text can contain. A missing glyph means one context measures a fallback font's
-// advance width and the other paints the real face's, and the line wraps
-// somewhere it isn't drawn. A few KB of unused glyphs is nothing against that,
-// so the ranges are whole Unicode blocks rather than a tight codepoint list.
-//
-// The ranges were DERIVED, not guessed (2026-07-28). Every non-ASCII codepoint
-// in data/kjv.jsonl, data/kjv-notes.jsonl, data/akjv.jsonl, data/strongs.json and
-// apps/web/src was collected and checked against the subset:
-//
-//   - reader text needs 104 codepoints total: ASCII, æ Æ, U+2019, U+2026, U+2014,
-//     and 22 Hebrew letters (Psalm 119's acrostic stanza headings);
-//   - Strong's is the demanding one — 69k Greek, 5.5k polytonic Greek Extended,
-//     114k Hebrew, plus modifier letters U+02BB/U+02BC in the transliterations;
-//   - EB Garamond contains NO Hebrew at all (0 of 27 letters, 0 of the points),
-//     so every Hebrew glyph already came from a system fallback before this and
-//     still does. Subsetting cannot regress what a font never had, and the same
-//     is true of the three faces added beside it: a family that has no polytonic
-//     Greek simply keeps falling back for it, exactly as Garamond does for Hebrew.
-//
-// Verified after subsetting: zero advance-width differences across every kept
-// glyph, GPOS/GSUB retained (kerning and ligatures affect measured widths too),
-// and the `wght` variable axis retained — every family here is VARIABLE and the
-// CSS declares `font-weight: 400 700`, so instancing them would silently kill
-// bold. Fira Code's axis runs 300–700 with its DEFAULT at 300, which is why the
-// declaration matters more than it looks: without an explicit 400 the browser
-// would render the Light instance as regular text.
+// The correctness constraint, and why the charsets below are generous: chapter
+// layout is measured in the engine worker over an OffscreenCanvas and painted by
+// the shell on the main thread. The two agree only if the file carries every
+// glyph the text can contain — a missing one means one context measures a
+// fallback's advance width while the other paints the real face's, and the line
+// wraps somewhere it isn't drawn. A few KB of unused glyphs is nothing against
+// that. GPOS/GSUB are kept for the same reason (kerning and ligatures move
+// measured widths), and so is the `wght` axis: the CSS declares
+// `font-weight: 400 700`, so instancing a variable family would kill bold — and
+// Fira Code's axis defaults to 300, so without an explicit 400 the browser would
+// render Light as regular text.
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -75,18 +54,16 @@ const UNICODES = [
   "U+FFFD", // Replacement char (one occurrence in Strong's — a data artefact)
 ].join(",");
 
-// The bundled families, keyed by their `core::font::Font` token — the SAME
-// tokens the config stores and Android's registry uses, so a face cannot be
-// called one thing here and another there.
+// The bundled families, keyed by their `core::font::Font` token — the same
+// tokens the config stores, so a face cannot be called one thing here and
+// another there.
 //
-// A family with no italic entry does not get one. Fira Code ships no italic at
-// all, and a sheared upright looks exactly like a sheared upright; the reader
-// tells translator-supplied words apart by the palette's `added` tone instead
-// (see `core::font`, and `Font::has_italic`, which is the same fact in Rust).
-// `scale` is the face's optical size multiplier — the numbers are
-// `core::font::Font::scale()`'s (crates/core/src/font.rs, the source of truth,
-// where the x-height measurements and the half-correction rationale live) and
-// must stay identical to them, like the tokens.
+// A family with no italic entry does not get one (Fira Code ships none, and a
+// sheared upright is not an italic); the reader tells translator-supplied words
+// apart by the palette's `added` tone instead — `Font::has_italic` is the same
+// fact in Rust. `scale` is the face's optical size multiplier and must stay
+// identical to `core::font::Font::scale()`, which holds the x-height
+// measurements behind the numbers.
 const FAMILIES = [
   {
     token: "eb-garamond",
@@ -130,12 +107,11 @@ const FAMILIES = [
     faces: [{ src: "FiraCode.ttf", style: "normal" }],
   },
   {
-    // The one STATIC family (no `wght` axis): four files where the others are
-    // one or two. Each face declares its own single weight — a static 400
-    // declared as `400 700` would make the browser paint bold text regular —
-    // and the 700s are `chromeOnly`: the engine worker measures scripture,
-    // which is never bold, so FONT_FILES (its load list) skips them while
-    // fonts.css (the document's paint list) declares all four.
+    // The one STATIC family (no `wght` axis), so each face declares its own
+    // single weight: a static 400 declared `400 700` makes the browser paint
+    // bold text regular. The 700s are `chromeOnly` — scripture is never bold, so
+    // FONT_FILES (the worker's measurement list) skips them while fonts.css (the
+    // document's paint list) declares all four.
     token: "atkinson-hyperlegible",
     script: "latin",
     css: "Atkinson Hyperlegible",
@@ -149,18 +125,13 @@ const FAMILIES = [
     ],
   },
   {
-    // The naskh face that carries Arabic — see the note above the token
-    // constants. Its ranges and layout features are its own: the Arabic block
-    // instead of the Latin one, and EVERY layout feature rather than fontTools'
-    // default set, because init/medi/fina/isol are what join cursive script and
-    // subsetting them away would leave every letter in isolated form at a
-    // different advance width than the shaped text.
+    // The naskh face that carries Arabic — see SCRIPT_FALLBACK_TOKENS below.
+    // `layoutFeatures: "*"` rather than fontTools' default set: init/medi/fina/
+    // isol are what join cursive script, and subsetting them away leaves every
+    // letter isolated at a different advance width than the shaped text.
     //
-    // `font-weight: 400` and no italic. A static regular declared `400 700`
-    // paints bold text regular — the lesson Atkinson's entry above records — so
-    // this one declares what it is and lets the browser synthesize a bold for
-    // chrome headings. Scripture is never bold, so nothing the engine measures
-    // is affected.
+    // Static regular, so `font-weight: 400` and no italic (Atkinson's note
+    // above); the browser synthesizes a bold for chrome headings.
     token: "amiri",
     script: "arabic",
     css: "Amiri",
@@ -173,18 +144,14 @@ const FAMILIES = [
     faces: [{ src: "Amiri-Regular.ttf", style: "normal", weight: "400" }],
   },
   {
-    // Gurmukhi, for the Punjabi Bible. `layoutFeatures: "*"` for the same
-    // reason Amiri needs it and more so: an Indic script is SHAPED, not just
-    // laid out. `nukt` composes the base and its dot into one glyph, `half`
-    // and `blwf` make the subjoined forms a conjunct is drawn with, `pres`
-    // and `abvs` place the matras. Subsetting those away leaves every
-    // conjunct as a row of separate letters at a different total advance than
-    // the shaped text — the measure-and-paint disagreement in the header, at
-    // the scale of most words in the language.
+    // Gurmukhi, for the Punjabi Bible. `layoutFeatures: "*"` more than Amiri
+    // needs it: an Indic script is shaped, not just laid out — `nukt` composes
+    // the base and its dot, `half`/`blwf` make a conjunct's subjoined forms,
+    // `pres`/`abvs` place the matras. Without them every conjunct is a row of
+    // separate letters at a different total advance than the shaped text.
     //
-    // The unicode range is the Gurmukhi block plus Latin: the app's chrome is
-    // painted in the reader's face too, and the chrome carries version
-    // numbers, "KJV", and the Latin font names in the picker.
+    // Latin is in the range too: the chrome is painted in the reader's face and
+    // carries version numbers, "KJV", and the Latin font names in the picker.
     token: "noto-serif-gurmukhi",
     script: "gurmukhi",
     css: "Noto Serif Gurmukhi",
@@ -199,21 +166,18 @@ const FAMILIES = [
     // Urdu-Devanagari would read too, which is why `core::font::Font::script`
     // is the column and the language is not.
     //
-    // U+0964-0965 is the danda and double danda, which BOTH Indic corpora end
-    // their sentences with and which live outside either script's own block.
-    // A missing danda is a missing glyph on 27,354 Punjabi and 31,541 Hindi
-    // verses, measured in one context and painted from a fallback in the other.
+    // U+0964-0965 is the danda and double danda: both Indic corpora end their
+    // sentences with them and they live outside either script's own block, so
+    // omitting them is a missing glyph on tens of thousands of verses.
     token: "noto-serif-devanagari",
     script: "devanagari",
     css: "Noto Serif Devanagari",
     fallback: "serif",
     scale: 0.82,
-    // The ONLY family here with a second variation axis, and nothing reads it:
-    // the CSS never sets `font-stretch`, so every width but the default is
-    // dead weight in a file the engine worker downloads before it can lay out
-    // a line. Pinned rather than subsetted away, because `--unicodes` does not
-    // touch `fvar` — 237 KB of woff2 against 130 KB, on a face every reader
-    // fetches whether or not they read Hindi.
+    // The only family with a second variation axis, and nothing reads it: the
+    // CSS never sets `font-stretch`. Pinned rather than subsetted away, because
+    // `--unicodes` does not touch `fvar` — 237 KB of woff2 against 130 KB, on a
+    // face every reader fetches whether or not they read Hindi.
     pinAxes: { wdth: 100 },
     unicodes: ["U+0020-007E", "U+00A0-00FF", "U+0900-097F", "U+0964-0965", "U+200C-200D", "U+2000-206F"].join(","),
     layoutFeatures: "*",
@@ -222,31 +186,25 @@ const FAMILIES = [
   {
     // Han, for both Chinese Bibles — one face, one script, two corpora
     // (`core::i18n::Script::Han`; traditional and simplified are repertoires,
-    // not scripts). The TC cut of Source Han Serif: the 1919 和合本 is a
-    // traditional-character text first, and TC glyph forms are the tradition
-    // the simplified edition descends from.
+    // not scripts). The TC cut, because the 1919 和合本 is a
+    // traditional-character text and the simplified edition descends from it.
     //
-    // THE CHARSET IS DERIVED, NOT DECLARED. Whole-block ranges are the wrong
-    // shape here — the URO is 21k characters and the CUV uses 4.2k — so
-    // `cjkFiles` names the shipped corpora and the two Chinese catalogues, and
-    // the subset is their exact codepoints: every character the engine can be
-    // asked to measure, nothing else (~1.0 MB of woff2 against 24 MB of
-    // source). Strictness is split: a corpus codepoint the font lacks FAILS
-    // the build (--no-ignore-missing-unicodes — tofu in scripture is a
-    // shipping bug, and the two 规范字 the face lacks are already carried as
-    // traditional forms by `build-cuv.py`); catalogue characters below U+2E80
-    // that are not punctuation (the chrome's ✕ ▸ dingbats) are left out and
-    // fall back per glyph, exactly as Garamond falls back for Hebrew.
+    // The charset is DERIVED, not declared: whole-block ranges are the wrong
+    // shape (the URO is 21k characters and the CUV uses 4.2k), so `cjkFiles`
+    // names the shipped corpora and the two Chinese catalogues and the subset is
+    // their exact codepoints — ~1.0 MB of woff2 against 24 MB of source.
+    // Strictness is split: a corpus codepoint the font lacks fails the build
+    // (--no-ignore-missing-unicodes; tofu in scripture is a shipping bug), while
+    // catalogue characters below U+2E80 that are not punctuation (the chrome's
+    // ✕ ▸ dingbats) are left to per-glyph fallback.
     //
-    // `layoutFeatures: ""` drops GSUB/GPOS outright: horizontal Han has no
-    // shaping, no kerning and no ligatures, so the tables would be dead
-    // weight in a file every reader downloads — the opposite call from the
-    // Indic faces, for the same measured-width reason.
+    // `layoutFeatures: ""` drops GSUB/GPOS outright — the opposite call from the
+    // Indic faces, for the same measured-width reason: horizontal Han has no
+    // shaping, kerning or ligatures, so the tables are dead weight.
     //
-    // THE SOURCE IS FETCHED, NOT COMMITTED. The upstream OTF is 24 MB — the
-    // data-prep convention for inputs that size is curl-at-build-time, and
-    // only the built artifact is committed (public/fonts/*.woff2). The
-    // download is sha256-pinned and lands in fonts-src/ (gitignored).
+    // The source is fetched, not committed: the upstream OTF is 24 MB, so it
+    // follows the data-prep convention of curl-at-build-time (sha256-pinned,
+    // into gitignored fonts-src/) with only the woff2 committed.
     token: "noto-serif-tc",
     script: "han",
     css: "Noto Serif TC",
@@ -266,38 +224,25 @@ const FAMILIES = [
   },
 ];
 
-// THE SCRIPT FALLBACK: a family that is bundled for everyone and offered to
-// nobody who cannot read it.
+// The script fallbacks: bundled for everyone, offered to nobody who cannot read
+// them.
 //
-// None of the five families above contains a single Arabic glyph, and for this
-// app that is a CORRECTNESS bug rather than an ugly one — the same one the
-// header warns about, at the scale of a whole script. Chapter layout is measured
-// in the engine worker and painted on the main thread; with no Arabic in the
-// selected face, the worker measures whatever system font its OffscreenCanvas
-// falls back to and the main thread paints whatever the document falls back to.
-// Those are not required to be the same font, and when they differ every line of
-// the Van Dyck wraps somewhere it is not drawn.
+// No Latin family here carries a single Arabic, Gurmukhi or Devanagari glyph,
+// which is the header's measure-vs-paint bug at the scale of a whole script —
+// the worker measures whatever its OffscreenCanvas falls back to and the main
+// thread paints whatever the document falls back to, and those need not be the
+// same font. So these faces are appended to every family's fallback stack and
+// loaded in both contexts unconditionally, and are not tokens in the picker:
+// per-glyph fallback gives a reader on EB Garamond Garamond for English and
+// Amiri for Arabic out of one stack.
 //
-// So Amiri is appended to EVERY family's fallback stack and loaded in both
-// contexts unconditionally. Not a sixth token in the picker: the reader's choice
-// is about the voice of the Latin text, and there is nothing to choose between
-// here — it is the difference between rendering Arabic and not. Per-glyph
-// fallback means a reader on EB Garamond gets Garamond for English and Amiri for
-// Arabic out of one stack, which is exactly what a fallback list is for.
-//
-// Amiri because it is the naskh face that Arabic typography actually uses for
-// scripture, and because it positions tashkeel properly — `svd1865.jsonl` is
-// fully vocalized, and most faces either collide the marks or drop them.
-// OFL 1.1, vendored at fonts-src/OFL-Amiri.txt.
-/** The families that exist to carry a script none of the Latin faces has —
- *  bundled always, each offered only to readers of its own script. See
- *  `core::font::Font::offered_for`, which is the same fact in Rust and the one
- *  the pickers actually read.
- *
- *  A LIST, and it was a single token while Arabic was the only one. Two more
- *  scripts arrived at once and every consumer of the singular form was written
- *  as `token === SCRIPT_FALLBACK_TOKEN`, which is exactly the shape that
- *  answers "wrong" for the second member. */
+// Amiri is the naskh face Arabic typography uses for scripture and positions
+// tashkeel properly (`svd1865.jsonl` is fully vocalized, and most faces either
+// collide the marks or drop them). OFL 1.1, vendored at fonts-src/OFL-Amiri.txt.
+/** The families that carry a script none of the Latin faces has. A list, not a
+ *  single token: every consumer written as `token === SCRIPT_FALLBACK_TOKEN`
+ *  answers wrong for the second member. `core::font::Font::offered_for` is the
+ *  same fact in Rust, and what the pickers read. */
 const SCRIPT_FALLBACK_TOKENS = FAMILIES.filter((f) => f.script !== "latin").map((f) => f.token);
 const SCRIPT_FALLBACK_CSS = FAMILIES.filter((f) => f.script !== "latin").map((f) => `"${f.css}"`).join(", ");
 
@@ -331,9 +276,8 @@ const INSTANCER = ["-m", "fontTools.varLib.instancer"];
 mkdirSync(outDir, { recursive: true });
 
 // Clear previously generated faces so an old hash cannot linger and be served.
-// Every woff2 in here is ours and is regenerated below, so the sweep is by
-// extension rather than by a per-family name pattern — a family REMOVED from
-// the table above must not leave its last build behind.
+// By extension rather than a per-family name pattern: a family removed from the
+// table above must not leave its last build behind.
 for (const n of readdirSync(outDir)) {
   if (n.endsWith(".woff2")) rmSync(join(outDir, n));
 }
@@ -367,9 +311,8 @@ function deriveCjkUnicodes(cjkFiles) {
     .join("\n");
 }
 
-/** Fetch a family's pinned source into fonts-src when it is not already
- *  there — the 24 MB inputs follow the data-prep convention (curl at build
- *  time, never committed) and the hash makes the fetch reproducible. */
+/** Fetch a family's pinned source into fonts-src when it is not already there;
+ *  the hash makes the fetch reproducible. */
 function ensureDownloaded(family, src) {
   if (existsSync(src)) return;
   console.log(`fetching ${family.download.url}`);
@@ -426,10 +369,10 @@ for (const family of FAMILIES) {
     execFileSync("woff2_compress", [subTtf], { stdio: ["ignore", "inherit", "inherit"] });
     const woff2Tmp = subTtf.replace(/\.ttf$/, ".woff2");
     const bytes = readFileSync(woff2Tmp);
-    // Content-hashed, for two concrete reasons: sw.js treats `/fonts/` as
-    // immutable BY PATH, so a font replaced under the same name would be served
-    // from cache forever; and the cache sweep exempts un-versioned entries, so
-    // an old face could never be reclaimed.
+    // Content-hashed: sw.js treats `/fonts/` as immutable BY PATH, so a font
+    // replaced under the same name would be served from cache forever, and the
+    // cache sweep exempts un-versioned entries, so an old face could never be
+    // reclaimed.
     const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 8);
     const name = `${base}-${hash}.woff2`;
     writeFileSync(join(outDir, name), bytes);
@@ -442,9 +385,9 @@ for (const family of FAMILIES) {
 
 // ── the two generated consumers ──────────────────────────────────────────────
 //
-// ONE source of truth for the URLs. The worker builds FontFaces from them for
-// MEASUREMENT and the document declares @font-face from them for PAINTING; if
-// those two ever named different files, layout and paint would disagree.
+// One source of truth for the URLs: the worker builds FontFaces from them to
+// MEASURE and the document declares @font-face from them to PAINT, so two lists
+// naming different files would make layout and paint disagree.
 
 const cssPath = join(web, "public/fonts.css");
 writeFileSync(

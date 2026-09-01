@@ -1,18 +1,13 @@
 //! The text-as-witness loader: a lexicon-free Hebrew↔Greek alignment that can
-//! *testify against* the bridge and its sources — seeded only by the phonetic
-//! correspondence of transliterated proper names, grown only by usage-geometry
-//! self-learning (no lexicographer's hand in its training path). Where it
-//! disbelieves a link every lexicon-derived source agrees on, that disagreement
-//! is the text's own usage pushing back on the tradition.
+//! disbelieve links the bridge and its sources assert — seeded from the phonetic
+//! correspondence of transliterated proper names, grown by usage geometry alone.
 //!
-//! Ported from overlay `Witness.hs` — the loader + the **gate** only. The
-//! offline `ml/text_witness.py` produces `data/text-witness.json`; this reads
-//! its output. Crucially, [`TextWitness::disbelief`] returns a percentile only
-//! once the witness has passed its held-out grading (`witnessQualified` **and**
-//! `testimonyActionable`), so an ungraded witness is structurally incapable of
-//! surfacing an accusation. In the shipped data both flags are false — it is
-//! reported for the record, not yet fit to accuse — so this always returns
-//! `None` today; the code path is complete for when a qualified witness ships.
+//! Ported from overlay `Witness.hs` — the loader and the gate only; the offline
+//! `ml/text_witness.py` produces `data/text-witness.json`. [`TextWitness::disbelief`]
+//! returns a percentile only once the witness has passed its held-out grading
+//! (`witnessQualified` and `testimonyActionable`), so an ungraded witness cannot
+//! surface an accusation. Both flags are false in the shipped data, so it always
+//! returns `None` today.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -83,11 +78,10 @@ impl TextWitness {
         }
     }
 
-    /// The disbelief percentile for a (Hebrew, Greek) pair — but ONLY once the
-    /// witness has been graded fit (`qualified` **and** `actionable`). The
-    /// gate: `None` regardless of the stored pairs when the witness has not
-    /// earned the right to accuse. The intended UI contract is a one-line "a
-    /// second witness disbelieves this link" badge, shown iff this is `Some`.
+    /// The disbelief percentile for a (Hebrew, Greek) pair, but only once the
+    /// witness is graded fit (`qualified` and `actionable`) — otherwise `None`
+    /// regardless of the stored pairs. The UI contract is a one-line "a second
+    /// witness disbelieves this link" badge, shown iff this is `Some`.
     pub fn disbelief(&self, heb: &str, grk: &str) -> Option<f64> {
         if self.qualified && self.actionable {
             self.twice.get(&(heb.to_string(), grk.to_string())).copied()

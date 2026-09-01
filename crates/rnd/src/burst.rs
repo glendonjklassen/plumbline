@@ -1,14 +1,13 @@
-//! Leitwort / burst discovery: which Strong's concepts are *bursty* —
-//! deliberately repeated and packed into one narrative stretch (Buber's
-//! *Leitwort*: `qara` "call" through creation, `dabar` "word" through
-//! Jeremiah) — rather than scattered evenly across the canon.
+//! Leitwort / burst discovery: which Strong's concepts are bursty — repeated and
+//! packed into one narrative stretch (Buber's *Leitwort*) — rather than scattered
+//! evenly across the canon.
 //!
 //! Ported from overlay `Burst.hs`. For each concept with enough occurrences, a
-//! scan statistic finds its densest window of occurrences; a Poisson upper-tail
-//! probability (via the regularized incomplete gamma, Numerical Recipes §6.2)
-//! scores how surprising that packing is under uniform scatter; the tail is
-//! Bonferroni-corrected within a concept and Benjamini–Hochberg–gated across
-//! concepts. Pure corpus statistics — no ML data.
+//! scan statistic finds its densest window; a Poisson upper-tail probability (via
+//! the regularized incomplete gamma, Numerical Recipes §6.2) scores how
+//! surprising that packing is under uniform scatter, Bonferroni-corrected within
+//! a concept and Benjamini–Hochberg-gated across concepts. Pure corpus
+//! statistics, no ML data.
 
 use std::collections::HashMap;
 
@@ -16,9 +15,8 @@ use plumbline_core::canon;
 use plumbline_core::corpus::Corpus;
 use plumbline_core::reference::{VRef, OT_NT_DIVIDE};
 
-/// Discovery parameters. Defaults chosen against the real corpus (see the
-/// overlay concept-engine notes): occur in ≥8 verses but ≤10% of the testament,
-/// cluster ≥4 in the window, at a 1% false-discovery rate.
+/// Discovery parameters. Defaults tuned against the real corpus: occur in ≥8
+/// verses but ≤10% of the testament, cluster ≥4 in the window, 1% FDR.
 #[derive(Debug, Clone, Copy)]
 pub struct BurstParams {
     pub min_occ: usize,
@@ -62,7 +60,7 @@ pub fn span_label(name: impl Fn(&str) -> String, start: &VRef, end: &VRef) -> St
 
 // ── numerical core (Numerical Recipes §6.1–6.2) ────────────────────────────────
 
-/// `log Γ(x)` for `x > 0` (Lanczos).
+/// `log Γ(x)` for `x > 0` (Lanczos approximation).
 pub fn gammaln(xx: f64) -> f64 {
     let cof = [
         76.18009172947146,
@@ -280,28 +278,16 @@ pub fn discover_leitworter(bp: &BurstParams, corpus: &Corpus) -> Vec<Burst> {
 
 /// The same discovery, one bite at a time — for the boot warm.
 ///
-/// [`discover_leitworter`] walks the whole corpus building a positions map, then
-/// scans every code for a burst, in ONE call on the only thread that answers
-/// layout, taps and word studies. Measured on the maintainer's desktop:
-/// **83 ms**, against a ~300 ms warm-chunk budget — which on a phone
-/// (5–10× slower) is the whole budget for one phase, and the reader feels it as
-/// the app being unavailable.
+/// [`discover_leitworter`] does the whole thing in one call on the only thread
+/// that answers layout, taps and word studies: 83 ms on a desktop against a
+/// ~300 ms warm-chunk budget, which on a phone is the entire budget for a phase.
+/// Two cursored stages — positions (walk `budget` verses) then scoring (scan
+/// `budget` codes) — then the cheap Benjamini-Hochberg gate and sort.
 ///
-/// Two stages, each cursored, so [`step`](Self::step) can stop anywhere:
-///
-/// 1. **positions** — walk `budget` verses, recording which absolute verse
-///    indices each Strong's code occurs in.
-/// 2. **scoring** — scan `budget` codes for a significant burst.
-///
-/// Then the Benjamini-Hochberg gate and the sort, which are over ~8k scored
-/// items and cheap.
-///
-/// One deliberate difference from the one-shot version: this scores codes in
-/// **sorted** order rather than `HashMap` order, so its output is deterministic
-/// run to run. `discover_leitworter` is not — it collects in hash order and both
-/// later sorts are stable — so the two agree code for code but can disagree on
-/// the ORDER of exact score ties. The engine keys these by code, so nothing
-/// downstream can tell; the test compares code for code for that reason.
+/// This scores codes in sorted order rather than `HashMap` order, so its output
+/// is deterministic where `discover_leitworter`'s is not; the two agree code for
+/// code but can order exact score ties differently. Callers key these by code, so
+/// nothing downstream can tell.
 pub struct LeitwortBuilder {
     bp: BurstParams,
     stage: u8,
@@ -407,7 +393,7 @@ impl LeitwortBuilder {
                 let mut sig = benjamini_hochberg(self.bp.fdr_alpha, &self.scored);
                 sig.sort_by(|a, b| b.score.total_cmp(&a.score));
                 self.out = Some(sig);
-                // The positions map is the big allocation; let it go now rather
+                // The positions map is the big allocation; release it now rather
                 // than holding it until the caller collects.
                 self.positions = HashMap::new();
                 self.codes = Vec::new();
@@ -473,9 +459,8 @@ mod tests {
     }
 
     /// A corpus with an OT and an NT half, one code packed into a run of verses
-    /// (the shape a burst is) and one spread thin. Small — the discovery rules
-    /// need far more verses than this to call anything significant — so it exists
-    /// to drive the builder's CURSOR through both stages, not to find leitwörter.
+    /// and one spread thin. Far too small for the discovery rules to call anything
+    /// significant: it exists to drive the builder's cursor through both stages.
     const BURSTY: &str = concat!(
         r#"{"format":"x","tokenization":"kjv1769-tok2","verses":8}"#,
         "\n",
@@ -497,13 +482,10 @@ mod tests {
     );
 
     /// Slicing is a scheduling change; it must not change the answer. Run against
-    /// the REAL corpus, because the interesting disagreement — an exact score tie
+    /// the real corpus, because the interesting disagreement — an exact score tie
     /// coming out in a different order — cannot happen in a five-verse fixture.
-    ///
-    /// Compared code for code rather than as a sequence: `discover_leitworter`
-    /// collects in `HashMap` order, so ITS tie order varies run to run while the
-    /// builder's does not (see [`LeitwortBuilder`]). Every discovery, and every
-    /// number on it, must match.
+    /// Compared code for code rather than as a sequence, since only the builder's
+    /// tie order is deterministic (see [`LeitwortBuilder`]).
     ///
     /// `cargo test -p plumbline-rnd -- --ignored sliced_leitwort`
     #[test]
@@ -558,8 +540,7 @@ mod tests {
         assert!(b.take().is_none(), "taken once only");
     }
 
-    /// What the worst single leitwort slice costs — the number the slicing exists
-    /// to hold down, next to the one-shot cost it replaces.
+    /// The worst single leitwort slice, next to the one-shot cost it replaces.
     /// `cargo test --release -p plumbline-rnd -- --ignored --nocapture leitwort_slice_profile`
     #[test]
     #[ignore]

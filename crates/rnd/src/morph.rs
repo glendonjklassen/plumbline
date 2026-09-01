@@ -1,16 +1,14 @@
 //! The morphology layer: per-token parsing codes as a second annotation axis
 //! beside Strong's numbers. Hebrew/Aramaic comes from OSHB (a tagged Westminster
-//! Leningrad Codex — the Masoretic text); Greek from Robinson's parsed Textus
-//! Receptus. Both were projected offline onto the KJV tokens into
-//! `data/morphology.jsonl` (keyed by verse + token index, the same frozen
-//! addressing threads and weaves use).
+//! Leningrad Codex); Greek from Robinson's parsed Textus Receptus. Both were
+//! projected offline onto the KJV tokens into `data/morphology.jsonl`, keyed by
+//! verse + token index — the same frozen addressing threads and weaves use.
 //!
-//! Ported from overlay `Morph.hs` — the **consuming** side only (data model,
-//! the OSHM + Robinson code parsers, the study-panel renderer, and the sidecar
-//! loader). The offline projection pipeline that *builds* the sidecar stays in
-//! Python; this crate never generates it, only reads it. A stale tokenization
-//! stamp is refused at load, like the concept cache; a missing file is a silent
-//! `None` (the layer is optional).
+//! Ported from overlay `Morph.hs` — the consuming side only (data model, the OSHM
+//! + Robinson code parsers, the study-panel renderer, the sidecar loader); the
+//! offline projection that builds the sidecar stays in Python. A stale
+//! tokenization stamp is refused at load; a missing file is a silent `None`,
+//! since the layer is optional.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -27,10 +25,10 @@ pub enum MorphLang {
     Greek,
 }
 
-/// One parsing code, structured. Fields hold canonical lowercase names
-/// (`"qal"`, `"wayyiqtol"`, `"aorist"`, `"proper name"`); [`render_morph`] turns
-/// them into the study-panel phrase. `raw` keeps the source code verbatim — the
-/// parse is derived, the code is the datum.
+/// One parsing code, structured. Fields hold canonical lowercase names (`"qal"`,
+/// `"wayyiqtol"`, `"aorist"`, `"proper name"`); [`render_morph`] turns them into
+/// the study-panel phrase. `raw` keeps the source code verbatim: the parse is
+/// derived, the code is the datum.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Morph {
     pub lang: MorphLang,
@@ -765,8 +763,8 @@ impl MorphData {
 pub fn load_morph(tok_version: &str, path: impl AsRef<Path>) -> Option<MorphData> {
     let path = path.as_ref();
     // The packed sibling first — same annotations, no 10.4 MB of JSON. A home
-    // with only the text (an older pack, a hand-built home) still works, and a
-    // packed file we cannot read falls through to the text as well.
+    // with only the text still works, and an unreadable packed file falls
+    // through to the text as well.
     if let Ok(bytes) = std::fs::read(morphb_path(path)) {
         if let Some(m) = parse_morph_bin(tok_version, &bytes) {
             return Some(m);
@@ -783,15 +781,11 @@ pub fn morphb_path(path: &Path) -> std::path::PathBuf {
 
 // ── the packed form (`.morphb`) ────────────────────────────────────────────────
 //
-// The sidecar is 10.4 MB of JSONL: 31,091 `serde_json` calls building 355,603
-// entries, each allocating three strings. Like the concept vectors, the parsed
-// result cannot outlive a browser tab, so a phone repeated the whole thing on
-// every launch — and this half cost twice what the vectors did.
-//
-// The shape that makes it cheap is the data's own repetition: those 355,603
-// entries use only 13,990 distinct Strong's numbers, 2,840 codes and 6
-// homographs. Interned, an entry is four small integers, so the body is fixed
-// -width records and the file lands SMALLER than the text it replaces.
+// The sidecar is 10.4 MB of JSONL — 31,091 `serde_json` calls building 355,603
+// entries — and the parsed result cannot outlive a browser tab, so a phone
+// repeated the whole thing on every launch. Those entries use only 13,990
+// distinct Strong's numbers, 2,840 codes and 6 homographs, so interned an entry
+// is four small integers and the packed file is smaller than the text.
 //
 //   0..8    magic "PLMORB01"
 //   8..12   verse_count u32
@@ -804,7 +798,7 @@ pub fn morphb_path(path: &Path) -> std::path::PathBuf {
 //   then    verses:  book u16, chapter u16, verse u16, n_entries u16
 //   then    entries: tok u16, strongs u16, code u16, homograph u8, pad u8
 //
-// Indices are u16 on purpose — the encoder REFUSES rather than truncate if the
+// Indices are u16 on purpose: the encoder refuses rather than truncate if the
 // data ever outgrows them, and the caller keeps shipping the text.
 
 const MORPHB_MAGIC: &[u8; 8] = b"PLMORB01";
@@ -997,11 +991,9 @@ mod tests {
 
     #[test]
     fn hebrew_codes_render() {
-        // Gen 1:1 tokens: noun fem sing absolute; verb qal wayyiqtol 3ms.
         assert_eq!(heb("HNcfsa"), "common noun, feminine singular absolute");
         assert_eq!(heb("HVqp3ms"), "Qal perfect, 3rd masculine singular");
         assert_eq!(heb("HVqw3ms"), "Qal wayyiqtol, 3rd masculine singular");
-        // Object marker particle, and the article preposition.
         assert_eq!(heb("HTo"), "direct object marker");
         // Pronominal suffix on a construct noun.
         assert_eq!(
@@ -1053,10 +1045,10 @@ mod tests {
         {\"b\":\"Gen\",\"c\":1,\"v\":2,\"e\":[[1,\"H776\",null,\"HNcfsa\"]]}\n\
         {\"b\":\"John\",\"c\":3,\"v\":16,\"e\":[[3,\"G2316\",null,\"N-NSM\"]]}\n";
 
-    /// The packed form must be the SAME sidecar: same verses, same entries in
+    /// The packed form must be the same sidecar: same verses, same entries in
     /// token order, same glosses, same provenance — compared through the API,
     /// since byte-equality with the text would prove nothing about what a reader
-    /// gets. Includes a homograph, a Greek code and a Hebrew one.
+    /// gets. Covers a homograph, a Greek code and a Hebrew one.
     #[test]
     fn packed_morphology_loads_identically_to_the_text() {
         let text = MorphData::parse("kjv1769-tok2", SIDECAR).unwrap();

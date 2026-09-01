@@ -1,26 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// THE ENGINE WORKER DYING USED TO BE THE QUIETEST FAILURE IN THE APP.
-//
 // Every engine read goes through one promise map (`#waiting` in
-// engine/worker-client.ts). Nothing settled that map except a reply, so if the
-// worker went away — an uncaught throw during boot, an OOM kill on a phone, a
-// reply that would not structured-clone — every pending promise simply stayed
-// pending. The splash sat on its last phase, or the reader on a spinner, with no
-// error, no explanation and nothing to retry. Forever.
+// engine/worker-client.ts), and nothing settled it except a reply — so a worker that
+// went away (an uncaught throw during boot, an OOM kill on a phone, a reply that would
+// not structured-clone) left every pending promise pending for ever, with the splash on
+// its last phase, no error and nothing to retry.
 //
-// Three things now end it: an `error` handler, a `messageerror` handler, and a
-// boot watchdog for the case where the worker is technically alive but has gone
-// silent. All three reject every pending call, which is what the shell already
-// turns into its boot error (App.svelte renders whatever `boot()` throws, with a
-// Retry) — and mark the client dead so a later call fails fast instead of
-// queueing into a corpse.
+// Three things end it now: an `error` handler, a `messageerror` handler, and a boot
+// watchdog for a worker that is alive but silent. All three reject every pending call —
+// which App.svelte renders as its boot error, with a Retry — and mark the client dead so
+// a later call fails fast instead of queueing into a corpse.
 //
-// WHAT IS NOT COVERED, honestly. A worker death AFTER boot is surfaced only as a
-// rejection to whoever asked plus the `onFatal` hook; the shell has no
-// post-boot fatal UI to show yet (the splash is gone by then), so a reader who
-// loses the worker mid-session sees reads stop answering rather than a notice.
-// The hook is where that UI will attach.
+// Not covered: a worker death AFTER boot surfaces only as a rejection to the caller plus
+// the `onFatal` hook, since there is no post-boot fatal UI yet. The hook is where it
+// will attach.
 
 /** The blob-worker plumbing shared by the cases below, evaluated in the page. */
 const HARNESS = `
@@ -39,46 +32,42 @@ const HARNESS = `
     ]);
 `;
 
-/** Boot far enough that the session exists (the first-run chooser may still own
- *  the screen — this needs the engine client, not the reader). */
+/** Boot far enough that the session exists: this needs the engine client, not the
+ *  reader, so the first-run chooser may still own the screen. */
 async function bootedSession(page: Page): Promise<void> {
   await page.goto("/");
   await page.waitForFunction(() => !!(window as any).__plumbline?.rpc, null, { timeout: 90_000 });
 }
 
 test("an engine worker that cannot start shows an error, not an endless splash", async ({ page }) => {
-  // The real app, the real splash, and a real worker that dies: abort the
-  // request for the worker's own script and its construction fails, which is the
-  // same `error` event a crash raises. Before the handler existed this page
-  // painted "Fetching scripture data — 0%" and stayed there.
+  // Aborting the request for the worker's own script fails its construction, which
+  // raises the same `error` event a crash does. Without the handler this page paints
+  // "Fetching scripture data — 0%" and stays there.
   await page.route(/engine\.worker/, (route) => route.abort());
   await page.goto("/");
-  // The reader's sentence, not the machine's: the raw "The study engine stopped
-  // unexpectedly — …" is built at the throw site and stays in the <details>.
+  // The reader's sentence, not the machine's: the raw text is built at the throw site
+  // and stays in the <details>.
   await expect(page.locator(".splash .error")).toContainText(/engine stopped before Plumbline finished opening/, {
     timeout: 30_000,
   });
   await expect(page.locator(".splash details pre")).toContainText(/The study engine stopped unexpectedly/);
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
-  // And it is an ERROR screen, not an error next to a progress bar that is
-  // still pretending something is happening.
+  // An error screen, not an error beside a progress bar still claiming progress.
   await expect(page.locator(".splash .bar")).toHaveCount(0);
 });
 
-// One boot, three cases: a cold first visit is the expensive part of this file,
-// and none of these three needs its own.
+// One boot, three cases: the cold first visit is the expensive part, and none of the
+// three needs its own.
 test("a dead or silent engine worker settles every call; a slow one is left alone", async ({ page }) => {
   await bootedSession(page);
 
   // ── 1. it dies mid-boot ────────────────────────────────────────────────────
-  // A module worker that throws while evaluating: the same shape as an uncaught
-  // error inside the real one.
+  // A worker that throws while evaluating: the shape of an uncaught error in the real one.
   const died = await page.evaluate(`(async () => {
     ${HARNESS}
     const rpc = new Rpc({ workerUrl: workerOf("throw new Error('engine worker crashed (test)')") });
     const boot = await settle(rpc.boot(), 10_000);
-    // Anything asked AFTERWARDS must fail immediately rather than join a queue
-    // nothing will ever read.
+    // Anything asked afterwards must fail at once, not join a queue nobody reads.
     const t0 = performance.now();
     const later = await settle(rpc.call("toc"), 10_000);
     return { boot, later, laterMs: performance.now() - t0 };
@@ -95,8 +84,7 @@ test("a dead or silent engine worker settles every call; a slow one is left alon
   expect(died.laterMs, "a call to a dead worker should fail at once, not wait").toBeLessThan(1_000);
 
   // ── 2. it lives, but never answers ────────────────────────────────────────
-  // Nothing above catches this: the thread is alive, so no `error` event ever
-  // fires. The watchdog is the only thing that can.
+  // The thread is alive, so no `error` event fires; only the watchdog can catch this.
   const silent = await page.evaluate(`(async () => {
     ${HARNESS}
     const rpc = new Rpc({
@@ -111,11 +99,10 @@ test("a dead or silent engine worker settles every call; a slow one is left alon
   ).toContain("went quiet");
 
   // ── 3. slow is not dead ───────────────────────────────────────────────────
-  // The whole risk of a watchdog: killing a cold first visit on a phone, which
-  // legitimately spends minutes downloading and opening the text. It reports
-  // progress throughout, so the budget is SILENCE, not elapsed time. This worker
-  // takes ~8x its silence budget to boot while talking the whole way, and must
-  // be allowed to finish — a plain elapsed-time timer fails here.
+  // The risk of a watchdog is killing a cold first visit on a phone, which legitimately
+  // spends minutes downloading and opening the text while reporting progress. So the
+  // budget is SILENCE, not elapsed time: this worker takes ~8x its silence budget to
+  // boot while talking the whole way, and a plain elapsed-time timer fails here.
   const slow = await page.evaluate(`(async () => {
     ${HARNESS}
     const rpc = new Rpc({
@@ -145,7 +132,7 @@ test("a dead or silent engine worker settles every call; a slow one is left alon
     "a worker that was reporting progress the whole time was declared dead — the watchdog is " +
       "measuring elapsed time instead of silence, and it will kill cold boots on phones",
   ).toBe("resolved");
-  // The measurement only means something if this boot really did outlast the
-  // budget several times over.
+  // The result only means something if the boot really did outlast the silence budget
+  // several times over.
   expect(slow.ms, "the slow worker finished too quickly to have tested anything").toBeGreaterThan(1_000);
 });

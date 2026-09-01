@@ -8,16 +8,19 @@
   test: would the string look normal in a mainstream app's settings screen?
   Applies to every user-visible string in `crates/core/src/i18n/` (every
   language) and any hardcoded shell copy.
-- **Two shells, one product: Android (Compose) and web (PWA).** Android is
-  the **UX gold standard** — its layout/menu patterns port to the web, not
-  the other way around. A feature added in either shell lands in the other
-  in the same change set when possible. There is no written parity contract
-  any more (`docs/` was removed 2026-08-26) — the shells themselves are the
-  record, so survey the one you are porting from. (The GTK and WinUI desktop
-  shells were retired and removed — git history has them; ignore stale
-  references.)
-- Distribution: the PWA (apps/web) for most people; the signed APK on GitHub
-  Releases for rooted/sideloading users. No Play Store, no Google account.
+- **No first run, and no personas.** The welcome screen, its four paths
+  (curious / new believer / sharing / established) and the `start=new` link
+  parameter were removed 2026-08-31: the reader is the first screen. A shared
+  link's destination opens straight away, because a person handed it over and
+  provides the context the welcome used to. The analysis tiers moved to
+  on-by-default (§Architecture #4) since nothing asks any more.
+- **One shell: the PWA (`apps/web`).** The GTK and WinUI desktop shells were
+  retired 2026-07-25 and the Android/Compose one 2026-08-30 — git history has
+  them all; ignore stale references to parity, "the two shells", or the
+  Compose "UX gold standard". A native shell may be rebuilt from scratch one
+  day, which is why the C ABI stays.
+- Distribution: the PWA, deployed to <https://plumblinebible.org/>. No app
+  store, no account.
 - `../overlay` (Haskell) is the read-only reference implementation — port
   from it, never modify it.
 - Frozen contracts: the on-disk data formats (§Data formats below), `kjv1769-tok2`
@@ -27,9 +30,8 @@
   note file and already sits inside shipped backup zips, so renaming it with the
   product would break restore-from-backup; same for `overlay-weave-v2` and
   `overlay-memory-v1`.
-- The bundled stock study set lives at `apps/android/app/src/main/assets/stock`
-  (threads/tags/weaves); both shells seed it once and user edits/deletions
-  stick.
+- The bundled stock study set lives at `stock/` (threads/tags/weaves); the
+  shell seeds it once and user edits/deletions stick.
 
 ## Layout of the tree
 
@@ -38,16 +40,13 @@
 | `crates/core` (`plumbline-core`) | Pure domain: corpus, Strong's, search, weaves, tags, config, atomic store |
 | `crates/layout` (`plumbline-layout`) | Greedy line-breaker + hit regions (measures via callback) |
 | `crates/rnd` (`plumbline-rnd`) | Feature-gated analytics: bridge, morphology, keyness, witness, concept |
-| `crates/ffi` (`plumbline-ffi`) | The single flat C ABI for native shells (cdylib) — see [crates/ffi/README.md](crates/ffi/README.md) |
+| `crates/ffi` (`plumbline-ffi`) | The single flat C ABI (cdylib), compiled to wasm for the shell — see [crates/ffi/README.md](crates/ffi/README.md) |
 | `crates/hydrate` (`plumbline-hydrate`) | CLI: copy/verify the data pack into a home |
-| `apps/android` | The Compose shell (Android) — the UX gold standard |
 | `apps/web` | The PWA shell (Svelte + the core compiled to wasm32-wasip1) |
 
 The five portable crates are dependency-light pure Rust and build anywhere,
-including `wasm32-wasip1` (the web shell) and the Android NDK targets. CI runs
-the portable tests, the R&D-feature tests, an MSRV check, an FFI
-binding-drift guard, the web shell's Playwright suite, and the Android APK
-build — engine cross-compiled for the shipped ABI — on every push. The
+including `wasm32-wasip1`. CI runs the portable tests, the R&D-feature tests,
+an MSRV check, a header-drift guard, and the web shell's Playwright suite. The
 offline pipeline that produced the data pack is documented in
 [data-prep/README.md](data-prep/README.md).
 
@@ -57,10 +56,10 @@ Decisions in force:
 
 | # | Decision | Choice |
 |---|----------|--------|
-| 1 | UI strategy | **Native shell per platform** over a shared Rust core. Today: Jetpack Compose (Android, the UX gold standard) + a PWA (web) covering every desktop. The GTK/WinUI desktop shells were built first and retired. |
-| 2 | Build order | Desktop first (GTK4) → Windows → Android → web; the desktops then retired in favour of the PWA. |
+| 1 | UI strategy | **Thin shell over a shared Rust core.** Today one shell: the PWA. The GTK/WinUI and Compose shells were built and retired; the C ABI is what makes another one cheap. |
+| 2 | Build order | Desktop first (GTK4) → Windows → Android → web; everything but the PWA then retired. |
 | 3 | Data delivery | **Bundle core, download R&D** — KJV + Strong's ship in-app; heavy analytics artifacts are optional packs. |
-| 4 | R&D default | **Guided first-run** — first launch picks the analysis tiers (scholars' / machine) with examples; the text and the reader's own data are always on. |
+| 4 | R&D default | **On by default** — both analysis tiers ship on and the pack downloads unasked (3 MB against 260 MB of Bibles); Settings turns them off. Superseded the guided first-run, which was removed with the welcome (2026-08-31). |
 | — | Patches / signed rules | Dropped — the Ed25519 point-patch/rule layer was not ported. |
 | — | Future | The paid sync SaaS was **cancelled** — the product is entirely free. Keep the data-model discipline it imposed anyway (stable ids, no host-local assumptions, exportable single-file JSON). |
 
@@ -69,16 +68,15 @@ Rust core (pure, headless, fully testable)
   ├─ crates/core     domain: canon, references, corpus, Strong's, search, weaves, threads
   ├─ crates/rnd      OPTIONAL, feature-gated analytics
   ├─ crates/layout   text layout + per-word HIT-TESTING → a display list
-  └─ crates/ffi      one C ABI surface → Kotlin/Android JNA + the wasm web binding
+  └─ crates/ffi      one C ABI surface → the wasm web binding
 
-Thin native shells (paint the display list, forward input coords back to core)
-  ├─ apps/android    Jetpack Compose — the UX gold standard
+Thin shell (paints the display list, forwards input coords back to core)
   └─ apps/web        Svelte PWA over the core compiled to wasm32-wasip1
 ```
 
 The load-bearing idea: **layout and hit-testing live in the core.** Given a
-chapter + width + font metrics (via an injected measure callback —
-android.graphics.Paint on Android, canvas measureText on the web), the core
+chapter + width + font metrics (via an injected measure callback — canvas
+measureText on the web), the core
 produces a *display list*: positioned glyph runs plus a table of tappable word
 rectangles, each carrying its verse ref, token index, and Strong's refs. A
 shell only paints that list and sends tap / hover `(x, y)` back for the core to
@@ -116,19 +114,12 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
 
 ## Working on this machine (Linux)
 
-- Everything Rust builds and tests natively; the two shipping targets
-  cross-build from here — the Android `.so` via `cargo-ndk` (NDK at
-  `/opt/android-ndk`) and the web engine via `wasm32-wasip1`. There is no
-  desktop shell to build anymore, so nothing in the tree needs a Windows or
-  GTK toolchain.
-- Android needs **JDK 21** (`JAVA_HOME=java-21-openjdk`); a newer system JDK is
-  too new for AGP and fails the Gradle build.
+Everything Rust builds and tests natively, and the one shipping target — the
+web engine — cross-builds from here via `wasm32-wasip1`. No other toolchain is
+needed.
 
 ## UI testing
 
-- **Native shells (Android):** never drive the UI with synthetic input —
-  build, then hand over; the maintainer tests on-device and gives feedback.
-  Launching is fine only when asked.
 - **Web shell:** Playwright end-to-end tests are sanctioned and wanted
   (`apps/web`, `npm run test:e2e`). Keep the boot-responsiveness regression
   test green — the engine lives in ONE worker thread, so a long synchronous
@@ -199,11 +190,10 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
 - `cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate`
 - `cargo test --locked -p plumbline-rnd` (featureless — must stay compiling)
 - `cargo test --locked -p plumbline-rnd --features "bridge morphology concept"`
-- After touching `crates/ffi`'s extern surface: regenerate bindings
-  (`cargo run -p plumbline-ffi --features bindgen --bin plumbline-bindgen`) — CI fails
-  on drift (the check is header ↔ the hand-written Kotlin JNA binding) — and
-  keep the wasm-only exports in `crates/ffi/src/wasm.rs` in the bindgen
-  exclude list.
+- After touching `crates/ffi`'s extern surface: regenerate the header
+  (`cargo run -p plumbline-ffi --features bindgen --bin plumbline-bindgen`) — CI
+  fails on drift — and keep the wasm-only exports in `crates/ffi/src/wasm.rs` in
+  the bindgen exclude list.
 - Web: `cd apps/web && npm run check && npm run build`. Full pipeline:
   `npm run pack:data`, `cargo build -p plumbline-ffi --release --target
   wasm32-wasip1`, `npm run pack:wasm`, `npm run build`, `npm run preview`.
@@ -215,32 +205,13 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
   test the last engine you packed and report failures that are stale by
   construction. The two ways this bites: a theme colour that looks unchanged,
   and removed ABI endpoints that look still-present.
-- **Same rule for Android, and it is easier to miss: gradle does NOT build the
-  engine.** The APK embeds whatever `.so` is sitting in
-  `apps/android/app/src/main/jniLibs`, and only `cargo ndk` puts it there. A
-  gradle build after a crate change succeeds, its unit tests pass (they are JVM
-  tests and never load the native library), lint is clean — and the APK you hand
-  over runs the engine from whenever you last cross-compiled. A stale `.so` means
-  an on-device UAT tests an engine that predates your changes. Before building an
-  APK for anyone to run:
-  `ANDROID_NDK_HOME=/opt/android-ndk cargo ndk -t arm64-v8a --platform 26
-  -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release`. To check
-  an APK really has it, `unzip -l` it and compare the `.so`'s size with the one on
-  disk.
 - No 3k-line source files.
 
 ## Releases
 
-- Tag `v*` → `.github/workflows/release.yml` builds a signed Android APK
-  (arm64-v8a) and attaches it to a GitHub Release — the repo is the
-  download page — and deploys the PWA to GitHub Pages at
-  <https://plumblinebible.org/> (custom domain; the old
-  glendonjklassen.github.io/plumbline URL 301s there).
-- The APK job needs four repo secrets — `ANDROID_KEYSTORE_BASE64`,
-  `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
-  (generation steps are in the workflow header). Without them the job no-ops
-  with a warning. The keystore is the app's stable update identity — back it
-  up; losing it forces users to uninstall to upgrade. Local APK build:
-  `apps/android/gradlew -p apps/android :app:assembleDebug` with
-  `JAVA_HOME=java-21-openjdk` (the .so comes from `cargo ndk -t arm64-v8a
-  -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release`).
+Tag `v*` → `.github/workflows/release.yml` creates a GitHub Release (the
+changelog) and deploys the PWA to GitHub Pages at
+<https://plumblinebible.org/> (custom domain; the old
+glendonjklassen.github.io/plumbline URL 301s there). A manual
+`workflow_dispatch` run is a dry run: it builds everything and publishes
+nothing.

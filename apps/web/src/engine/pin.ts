@@ -1,30 +1,20 @@
 // The pack pin: what data pack this device is KNOWN to hold.
 //
-// Without the pin, boot must fetch `pack/manifest.json` before it can do anything
-// else — a network request on the critical path, on the one file with no version
-// in its URL, so it cannot be cache-first. On a stalled radio that costs up to the
-// service worker's 3.5 s timebox before a device holding every byte of scripture
-// would open. The pin removes the request: it IS a manifest, stored on the device,
-// written only after every file it names was verified present.
+// Without it, boot must fetch `pack/manifest.json` before anything else — a
+// network request on the critical path, on the one pack file with no version in
+// its URL, so it cannot be cache-first. The pin removes that request, which is
+// what makes a warm boot cost ZERO network requests before text: it IS a
+// manifest, stored on the device, written only after every file it names was
+// verified present.
 //
-// WHERE IT LIVES, and the rule behind it. The pin sits in the depot (the Cache
-// API), beside the bytes it describes — not in IndexedDB.
+// It lives in the depot beside the bytes it describes, not in IndexedDB (which
+// holds what cannot be re-derived — the reader's files, and flags recording their
+// decisions). Co-located, an eviction takes description and bytes together and the
+// device cold-starts cleanly, leaving one case to handle:
 //
-//   IndexedDB holds what CANNOT be re-derived: the reader's authored files, and
-//   the small flags that record a reader's DECISION (stockSeeded, bundled).
-//   The depot holds what can be re-downloaded. A description of a store shares
-//   that store's fate.
-//
-// The argument is failure-correlation rather than tidiness. Split across two
-// independently-evictable stores, the divergences double — pin-without-bytes AND
-// bytes-without-pin, each needing its own recovery. Co-located, an eviction takes
-// both and the device cold-starts cleanly, leaving exactly one case to handle:
-// some bytes evicted under a surviving pin. Which is handled, because:
-//
-//   THE PIN IS A CLAIM, NOT A PROOF. Browsers evict under storage pressure. Every
-//   read of a pinned file is written as "try the depot, else fall back", never as
-//   "the pin said so, therefore it is there". Boot degrades to the cold path,
-//   which re-downloads only what is actually missing.
+//   THE PIN IS A CLAIM, NOT A PROOF. Browsers evict, so every read of a pinned
+//   file is "try the depot, else fall back to the cold path" — and the cold path
+//   IS the repair: it re-downloads only what is actually missing.
 
 import { depotGet, depotPut } from "./depot";
 import { assetUrl, type PackFile, type PackManifest } from "./pack";
@@ -32,10 +22,10 @@ import { assetUrl, type PackFile, type PackManifest } from "./pack";
 /** This build. Read once so a pin and a staleness check cannot disagree. */
 const BUILD_ID = typeof __BUILD_ID__ === "string" ? __BUILD_ID__ : "dev";
 
-/** Whether this pin was written by an OLDER build than the one running — the
- *  condition under which the pin's file list may be missing something the code
- *  now expects, and the only condition under which a warm boot re-asks for the
- *  manifest. Unknown (a pin from before the field) counts as stale, once. */
+/** Whether this pin was written by an older build than the one running — the pin's
+ *  file list may then be missing something the code now expects, and it is the only
+ *  condition under which a warm boot re-asks for the manifest. Unknown (a pin from
+ *  before the field) counts as stale, once. */
 export function pinIsFromAnOlderBuild(pin: Pin | null): boolean {
   return pin !== null && pin.buildId !== BUILD_ID;
 }
@@ -47,35 +37,23 @@ const FORMAT = "pack-pin-v1";
 export interface Pin {
   format: string;
   /** The app base this pin was written against, ABSOLUTE. The Cache API is
-   *  origin-partitioned and our URLs are built from a resolved base, so a pin
-   *  from a different origin or subpath describes storage we cannot see. Treating
-   *  a base mismatch as "no pin" is correct rather than defensive: it IS a
-   *  different origin's storage. */
+   *  origin-partitioned, so a pin from a different origin or subpath describes
+   *  storage we cannot see — a base mismatch reads as "no pin". */
   base: string;
   packVersion: string;
-  /** The BUILD that wrote this pin (`__BUILD_ID__`, one per `vite build`).
-   *
-   *  What it answers is "is my code newer than my pack description?" — the pin
-   *  IS the manifest on a warm boot, so a pin from an older build can be missing
-   *  a file the running code expects.
-   *
-   *  A build id rather than the app version, because a deploy that changes only
-   *  data still rebuilds, and the app version would not move. Absent on a pin
-   *  written before this field existed, which reads as "unknown, assume stale"
-   *  — one manifest fetch on the first boot after upgrading, then never again. */
+  /** The build that wrote this pin (`__BUILD_ID__`, one per `vite build`) — a
+   *  build id rather than the app version, because a data-only deploy still
+   *  rebuilds. Absent on pins written before the field, which reads as stale. */
   buildId?: string;
   /** Every file the PACK OFFERS, each carrying the explicit URL its bytes are
-   *  stored under. Explicit rather than computed, so two pack generations can
-   *  coexist in the depot and an unchanged file keeps its URL across a version
-   *  bump.
+   *  stored under — explicit rather than computed, so two pack generations can
+   *  coexist in the depot and an unchanged file keeps its URL across a version bump.
    *
-   *  A file this device does not have is listed WITHOUT a url. Only `optional`
-   *  files are ever in that state, and the distinction carries the pin's two
-   *  jobs at once: the entry has to stay, because a warm boot rebuilds the
-   *  manifest from this list and Settings could not offer a download it cannot
-   *  see; and the url has to go, because the pin's promise is that every file
-   *  it names is PRESENT, and prune keeps exactly the urls it names. Both
-   *  readers already skip an entry with no url. */
+   *  A file this device does not have (only `optional` files) is listed WITHOUT a
+   *  url: the entry stays, because a warm boot rebuilds the manifest from this list
+   *  and Settings could not otherwise offer the download; the url goes, because the
+   *  pin's promise is that every url it names is present and prune keeps exactly
+   *  those. Both readers skip an entry with no url. */
   files: PackFile[];
 }
 
@@ -93,14 +71,13 @@ function pinFrom(manifest: PackManifest, base: string, here: PackFile[]): Pin {
 }
 
 /** The URL a pack file's bytes live under: content-addressed on the file's own
- *  hash, so a release that changes one weave invalidates one URL instead of all
- *  forty-four. The hash goes in the QUERY, not the filename, so the layout under
+ *  hash, so a release that changes one weave invalidates one URL instead of all of
+ *  them. The hash goes in the QUERY, not the filename, so the layout under
  *  `public/pack/` is untouched and the server needs no old-generation retention.
  *
- *  Module-private: the pin is the ONLY thing that mints these, and every reader
- *  of a pack file goes through `packFileUrl` in pack.ts, which prefers the URL
- *  the pin already recorded. Exporting this offered a second way to derive what
- *  is supposed to be recorded once. */
+ *  Module-private: the pin is the only thing that mints these, and every reader of
+ *  a pack file goes through `packFileUrl` in pack.ts, which prefers the recorded
+ *  URL — a second way to derive it is a second way to disagree. */
 function fileUrl(f: PackFile, packVersion: string): string {
   return f.hash ? `pack/${f.path}.gz?h=${f.hash}` : `pack/${f.path}.gz?v=${packVersion}`;
 }
@@ -122,21 +99,17 @@ export async function readPin(base: string): Promise<Pin | null> {
   return null;
 }
 
-// THERE IS NO "does the depot have this stage?" PROBE HERE, on purpose. Boot
-// instead asks `fetchStageLocal` for the stage's BYTES and treats a miss as the
-// cold path. A probe would cost a storage round trip per file on the one path we
-// are making fast (44 files on a phone), and — because the pin is a claim, not a
-// proof — it can disagree with the read it is supposed to describe. The read that
-// actually happens is the only honest answer. (Same reasoning as `depotBytes`'s
-// `source` out-param.)
+// No "does the depot have this stage?" probe here, on purpose: boot asks
+// `fetchStageLocal` for the stage's BYTES and treats a miss as the cold path. A
+// probe costs a storage round trip per file on the path we are making fast, and —
+// the pin being a claim, not a proof — can disagree with the read it describes.
 
 /** Commit a pin, keeping the one it replaces.
  *
- *  Order matters: `prev` is written FIRST, so a torn or half-written `pin.json`
- *  degrades to the previous generation — whose bytes are all still present,
- *  because prune keeps two generations and runs at the START of a session rather
- *  than the end. That is the whole atomicity story, and it needs no lock: a
- *  `Cache.put` either lands whole or does not land. */
+ *  Order matters: `prev` is written FIRST, so a torn `pin.json` degrades to the
+ *  previous generation, whose bytes are all still present because prune keeps two
+ *  generations and runs at the START of a session. No lock needed: a `Cache.put`
+ *  either lands whole or does not land. */
 export async function writePin(manifest: PackManifest, base: string, here: PackFile[]): Promise<void> {
   const next = pinFrom(manifest, base, here);
   const current = await depotGet(assetUrl(PIN_URL));
@@ -166,9 +139,9 @@ export async function pinnedUrls(base: string): Promise<Set<string>> {
   return keep;
 }
 
-/** A manifest equivalent to what the network would have returned, from the pin.
- *  Every stage filter in pack.ts works off this unchanged — the pin does not get
- *  its own loading path, which is what keeps the two from drifting. */
+/** A manifest equivalent to what the network would have returned, from the pin, so
+ *  every stage filter in pack.ts works off it unchanged — the pin gets no loading
+ *  path of its own, which is what keeps the two from drifting. */
 export function manifestFromPin(pin: Pin): PackManifest {
   return { formatVersion: 2, version: pin.packVersion, files: pin.files };
 }

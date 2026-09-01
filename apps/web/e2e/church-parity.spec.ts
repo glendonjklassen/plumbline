@@ -33,14 +33,21 @@ import {
   churchTitle,
   safeChurchUrl,
   shareUrl,
+  sharedDevotional,
+  sharedLang,
+  sharedThread,
   type Church,
 } from "../src/shell/church";
 
 interface Row {
   name: string;
   church: Partial<Church>;
-  startAsNewBeliever: boolean;
   at: string | null;
+  /** The share palette's columns. Absent on the rows that predate it, which is
+   *  why they are optional here and default to undefined below. */
+  lang?: string | null;
+  thread?: string | null;
+  devotional?: string | null;
   cleaned: Church;
   url: string;
   title: string;
@@ -60,8 +67,10 @@ test("the web builds the same share link the core does", () => {
     expect(cleanChurch(row.church), `cleaned ${where}`).toEqual(row.cleaned);
     expect(
       shareUrl(PWA_URL, row.church as Church, {
-        startAsNewBeliever: row.startAsNewBeliever,
         at: row.at,
+        lang: row.lang,
+        thread: row.thread,
+        devotional: row.devotional,
       }),
       `url ${where}`,
     ).toBe(row.url);
@@ -100,6 +109,15 @@ test("only http(s) links are offered as links", () => {
   expect(safeChurchUrl("https://gracebible.org")).toBe("https://gracebible.org");
   expect(safeChurchUrl("  http://gracebible.org/x?y#z  ")).toBe("http://gracebible.org/x?y#z");
   expect(safeChurchUrl("HTTPS://GRACE.ORG")).toBe("HTTPS://GRACE.ORG");
+
+  // A church writes its address the way it is on the sign, so the scheme is
+  // supplied when there is none — https, never the insecure one. Mirrors
+  // `church::tests::only_http_urls_are_offered_as_links`.
+  expect(safeChurchUrl("gracebible.org")).toBe("https://gracebible.org");
+  expect(safeChurchUrl("www.gracebible.org")).toBe("https://www.gracebible.org");
+  expect(safeChurchUrl("  gracebible.org/welcome  ")).toBe("https://gracebible.org/welcome");
+  expect(safeChurchUrl("grace.org:8080/x"), "a port is not a scheme").toBe("https://grace.org:8080/x");
+
   for (const bad of [
     "javascript:alert(1)",
     "JavaScript:alert(1)",
@@ -110,14 +128,56 @@ test("only http(s) links are offered as links", () => {
     "JAVASCRIPT://grace.org/\nalert(1)",
     "data:text/html,<script>",
     "ftp://files.grace.org",
-    "gracebible.org",
+    "mailto:pastor@grace.org",
     "https://",
     "https://@",
     "",
     "   ",
     null,
     "https://grace.org\njavascript:alert(1)",
+    // Supplying a scheme must not make a link out of the church NAME typed into
+    // the website field, nor repair a scheme we refuse.
+    "Grace Bible Church",
+    "gracebible",
+    "javascript:void(0)",
   ]) {
     expect(safeChurchUrl(bad), `${JSON.stringify(bad)} must not be offered as a link`).toBeNull();
   }
+});
+
+// The table pins what the two implementations BUILD. What they READ is pinned
+// here, off the very same rows: every row's url is fed back through the parsers
+// and has to yield the columns it was built from.
+//
+// This is the half a shared vector table cannot check by itself. A builder that
+// drops `lang` and a parser that never looks for it agree perfectly and lose the
+// reader's language — so the assertion is against the ROW, not against whatever
+// the builder happened to emit.
+test("the web reads back every parameter the table says the link carries", () => {
+  for (const row of rows) {
+    const where = `[${row.name}]`;
+    const q = new URL(row.url).search;
+    expect(sharedLang(q), `lang ${where}`).toBe(row.lang ?? null);
+    expect(sharedThread(q), `thread ${where}`).toBe(row.thread ?? null);
+    expect(sharedDevotional(q), `devotional ${where}`).toBe(row.devotional ?? null);
+  }
+});
+
+// A stranger's query string is the least trusted input the app has. Each of
+// these must be IGNORED rather than half-applied: an unknown-shaped language
+// reaching the engine as a "choice" would leave the reader stuck in it.
+test("a stranger's palette parameters are refused", () => {
+  expect(sharedLang("?lang=")).toBeNull();
+  expect(sharedLang("?lang=not-a-language-code")).toBeNull();
+  expect(sharedLang("?church=Grace")).toBeNull();
+  expect(sharedLang("?lang=pa")).toBe("pa");
+  expect(sharedLang("?lang=pa-IN")).toBe("pa-IN");
+
+  expect(sharedThread("?thread=%20%20")).toBeNull();
+  expect(sharedThread(`?thread=${"t".repeat(121)}`)).toBeNull();
+  expect(sharedThread(`?thread=${"t".repeat(120)}`)).toHaveLength(120);
+  expect(sharedDevotional("?devotional=")).toBeNull();
+  // Counted in CODE POINTS, like the name cap: 120 emoji are 120 characters,
+  // and a slice by UTF-16 unit would refuse this and cut the next one in half.
+  expect(sharedThread(`?thread=${encodeURIComponent("\u{1F600}".repeat(120))}`)).not.toBeNull();
 });

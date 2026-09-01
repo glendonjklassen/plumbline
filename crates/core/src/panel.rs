@@ -1,18 +1,14 @@
 //! The study-panel **content model**: one Rust producer builds a typed list of
-//! blocks for every panel view (word study, code study, concordance, …), and
-//! each shell walks the blocks with a *small* per-block renderer (GTK Pango,
-//! WinUI `Inlines`, Compose `AnnotatedString`). This retires the ~700-line
-//! hand-duplicated panel builders the shells carried (architecture-review P0.1).
+//! blocks for every panel view (word study, code study, concordance, …) and a shell
+//! walks them with a small per-block renderer.
 //!
-//! The producer knows nothing about pixels, colours, or fonts. A [`Run`] carries
-//! a **semantic** colour role + a logical point size + bold/italic + an optional
+//! The producer knows nothing about pixels, colours, or fonts. A [`Run`] carries a
+//! **semantic** colour role + a logical point size + bold/italic + an optional
 //! `uri`; the shell maps the role to its palette and paints. Data reaches the
-//! producer through the [`PanelSource`] trait, which both the GTK `State` and
-//! the FFI `PlumblineEngine` implement — so the derivation lives here **once**.
+//! producer through the [`PanelSource`] trait, so the derivation lives here once.
 //!
-//! The block vocabulary is deliberately tiny and generic (unknown kinds render
-//! as nothing on the wire), so the core can add kinds without breaking older
-//! shells.
+//! The block vocabulary is deliberately tiny and generic (unknown kinds render as
+//! nothing on the wire), so the core can add kinds without breaking older shells.
 
 use crate::reference::VRef;
 use crate::renderings::normalize as render_key;
@@ -20,8 +16,7 @@ use crate::{i18n, versification};
 
 // ── the block model ───────────────────────────────────────────────────────────
 
-/// A semantic colour role. The shell owns the actual colours; every shell maps
-/// these identically so the panel reads the same on each platform.
+/// A semantic colour role. The shell owns the actual colours.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
     /// Primary body text.
@@ -77,9 +72,8 @@ impl Run {
         self.uri = Some(uri.into());
         self
     }
-    /// Pin this run (and the ones after it so marked) to the END of the row —
-    /// action icons sit right-aligned across from the header or stat they act
-    /// on, instead of trailing it inline.
+    /// Pin this run (and the ones after it so marked) to the END of the row, so
+    /// action icons sit right-aligned across from the header or stat they act on.
     pub fn end(mut self) -> Run {
         self.end = true;
         self
@@ -93,32 +87,24 @@ pub enum Block {
     /// A section header (spaced, muted gold), with an optional tier mark glyph
     /// whose colour is the paired role.
     Section { title: String, mark: Option<(String, Color)> },
-    /// A flowing paragraph of styled runs. `indent` insets it (compare-card
-    /// verse text, snippets); `top_gap` adds a little space above (action rows).
-    /// `drag` marks a row a shell may reorder by dragging — `"{thread}:{entry}"`
-    /// on a thread entry's header row, self-contained so the drop handler needs
-    /// nothing from panel state. The ↑/↓ links on the same row stay: they are
-    /// the touch/assistive path, drag is the pointer shortcut.
+    /// A flowing paragraph of styled runs. `indent` insets it (compare-card verse
+    /// text, snippets); `top_gap` adds space above (action rows). `drag` marks a row
+    /// a shell may reorder by dragging — `"{thread}:{entry}"`, self-contained so the
+    /// drop handler needs nothing from panel state.
     Para { runs: Vec<Run>, indent: bool, top_gap: bool, drag: Option<String> },
     /// A horizontal rule.
     Rule,
 }
 
-/// A catalogue string, in the reader's language.
-///
-/// This module generates PROSE the reader reads, so it is as much a part of the
-/// catalogue as any shell and must be localized like one. Shorthand because there
-/// are twenty call sites and
-/// `crate::i18n::t(crate::i18n::active(), …)` at each of them would be noise.
+/// A catalogue string in the reader's language — shorthand, twenty call sites.
 fn s(id: &str) -> String {
     crate::i18n::t(crate::i18n::active(), id, &[])
 }
 
-/// Whether the active language's dictionary has MACHINE-TRANSLATED definitions,
-/// as opposed to merely being that language's own file. The two are not the
-/// same: a dictionary ships its localized renderings as soon as the tagged
-/// corpus exists and its translated prose only after a translation run, and the
-/// disclosure has to follow the second, not the first.
+/// Whether the active language's dictionary has MACHINE-TRANSLATED definitions, as
+/// opposed to merely being that language's own file: a dictionary ships localized
+/// renderings as soon as the tagged corpus exists but its translated prose only
+/// after a translation run, and the disclosure follows the second.
 fn machine_translated() -> bool {
     crate::i18n::active().spec().lexicon.is_some_and(|l| l.machine_translated)
 }
@@ -128,8 +114,7 @@ fn sn(id: &str, n: usize) -> String {
     crate::i18n::t(crate::i18n::active(), id, &[("n", &n.to_string())])
 }
 
-/// One/other by `n`, from a `<id>.one` / `<id>.other` pair. Replaces this
-/// module's own `plural()` helper, which appended an English "s".
+/// One/other by `n`, from a `<id>.one` / `<id>.other` pair.
 fn sp(id: &str, n: usize) -> String {
     crate::i18n::plural(crate::i18n::active(), &format!("{id}.one"), &format!("{id}.other"), n as u64, &[])
 }
@@ -146,7 +131,7 @@ impl Block {
     }
 }
 
-// ── logical sizes (one place, so the hierarchy is consistent) ─────────────────
+// ── logical sizes ─────────────────────────────────────────────────────────────
 
 mod sz {
     pub const WORD: f32 = 26.0;
@@ -164,7 +149,7 @@ mod sz {
     pub const MARK: f32 = 11.0;
 }
 
-// ── projected data the producer renders (the trait fills these in) ────────────
+// ── projected data the producer renders ───────────────────────────────────────
 
 /// A Strong's dictionary entry, projected to plain strings.
 #[derive(Debug, Clone, Default)]
@@ -209,8 +194,8 @@ pub struct OccurrencesView {
 }
 
 /// A surface word's usage across the open corpus (the word-usage card): totals,
-/// per-book counts, and one page of in-context occurrence lines. Word-keyed,
-/// not code-keyed, so it answers in every language — tagged or not.
+/// per-book counts, and one page of in-context occurrence lines. Word-keyed, not
+/// code-keyed, so it answers in every language — tagged or not.
 #[derive(Debug, Clone, Default)]
 pub struct WordUsageView {
     /// The folded headword the counts describe.
@@ -400,27 +385,24 @@ pub struct SearchHitView {
 
 // ── the data source ───────────────────────────────────────────────────────────
 
-/// Everything the panel producer reads. Both the GTK `State` and the FFI
-/// `PlumblineEngine` implement this over the same underlying indices, so the panel
-/// derivation is written once. Every method is a thin projection; the R&D tiers
-/// (bridge / concept / morphology / similar verses) return empty when their
-/// artifact is absent, so a simple-reader source needs only the base methods.
+/// Everything the panel producer reads, so the panel derivation is written once.
+/// Every method is a thin projection; the R&D tiers (bridge / concept / morphology
+/// / similar verses) return empty when their artifact is absent, so a simple-reader
+/// source needs only the base methods.
 pub trait PanelSource {
     /// The surface English word at a token, if the verse/token resolve.
     fn token_word(&self, verse: &str, token: u32) -> Option<String>;
-    /// Whether the open corpus is the KJV — the text every analytic in this
-    /// module is tagged against. False for a translation with its own
-    /// tokenization (the German Luther 1912): its tokens carry Strong's tags
-    /// too, so the dictionary and the concordance work there, but the
-    /// KJV-token-anchored tiers (morphology, the rendering lens) stay off.
+    /// Whether the open corpus is the KJV — the text every analytic in this module
+    /// is tagged against. False for a translation with its own tokenization, whose
+    /// tokens still carry Strong's tags (so dictionary and concordance work) but
+    /// whose KJV-token-anchored tiers (morphology, the rendering lens) stay off.
     fn is_kjv_text(&self) -> bool {
         true
     }
-    /// Whether the loaded Strong's dictionary is a LOCALIZED one
-    /// (`strongs-de.json`, `strongs-es.json`) rather than the English source —
-    /// machine-translated definitions plus renderings derived from that
-    /// language's own tagged corpus. The study card labels the renderings for
-    /// the right Bible and carries the machine-translation caveat when true.
+    /// Whether the loaded Strong's dictionary is a LOCALIZED one (`strongs-de.json`)
+    /// rather than the English source: machine-translated definitions plus
+    /// renderings from that language's own tagged corpus. Drives the renderings
+    /// label and the machine-translation caveat.
     fn lexicon_localized(&self) -> bool {
         false
     }
@@ -448,19 +430,17 @@ pub trait PanelSource {
     /// A code's full concordance (capped by the source).
     fn occurrences(&self, code: &str) -> OccurrencesView;
 
-    /// A surface word's usage: totals, distribution, one page of lines.
-    /// `scope` as [`crate::search::SearchScope::token`] spells it. `None`
-    /// means the answer is not ready yet (the search index is still warming
-    /// and the shell will re-ask) — a source with no word index at all also
-    /// answers `None`, and the card shows its loading line either way.
+    /// A surface word's usage: totals, distribution, one page of lines. `scope` as
+    /// [`crate::search::SearchScope::token`] spells it. `None` means not ready yet
+    /// (index still warming, or no word index at all) and the card shows its
+    /// loading line.
     fn word_usage(&self, _word: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
         None
     }
 
-    /// The usage card's original-word lens: the same view shape, but the
-    /// occurrences are every verse tagged with `code`, and the emphasized
-    /// tokens are the ones carrying it — whatever the surface rendering. Same
-    /// `None` semantics as [`PanelSource::word_usage`].
+    /// The usage card's original-word lens: the same view shape, but every verse
+    /// tagged with `code`, emphasizing the tokens carrying it whatever the surface
+    /// rendering. Same `None` semantics as [`PanelSource::word_usage`].
     fn code_usage(&self, _code: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
         None
     }
@@ -492,27 +472,23 @@ pub trait PanelSource {
     /// Run a search query.
     fn search(&self, query: &str) -> SearchView;
     /// Run a search query narrowed to a scope, as
-    /// [`crate::search::SearchScope::token`] spells it. A source that has no
-    /// scoped path answers the whole corpus — a wider answer, never a wrong
-    /// one.
+    /// [`crate::search::SearchScope::token`] spells it. A source with no scoped path
+    /// answers the whole corpus — a wider answer, never a wrong one.
     fn search_scoped(&self, query: &str, _scope: &str) -> SearchView {
         self.search(query)
     }
 }
 
-// ── the link router (one verb vocabulary, shared by every shell) ──────────────
+// ── the link router ───────────────────────────────────────────────────────────
 //
-// The producer above bakes every interactive `uri`; [`parse_link`] turns one
-// back into a typed verb. Emit and parse live side by side here, so the verb
-// vocabulary is a single source both shells route through (GTK calls it
-// directly; the non-Rust shells via `plumbline_route_link_json`) — a verb can't
-// drift between what the panel emits and what a shell handles. Navigation and
-// native prompts stay shell-side; the write verbs still call the author
-// endpoints (which need shell-gathered input).
+// The producer bakes every interactive `uri`; [`parse_link`] turns one back into a
+// typed verb. Emit and parse live side by side so a verb cannot drift between what
+// the panel emits and what a shell handles (shells route via
+// `plumbline_route_link_json`). Navigation and native prompts stay shell-side.
 
-/// A parsed panel link. Read verbs re-fetch a view or navigate; write verbs
-/// (the `Edit*` / `Add*` / `Untag` / `Approve` / `Reject` family) drive an
-/// author endpoint after the shell gathers any input.
+/// A parsed panel link. Read verbs re-fetch a view or navigate; write verbs (the
+/// `Edit*` / `Add*` / `Untag` / `Approve` / `Reject` family) drive an author
+/// endpoint after the shell gathers any input.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PanelLink {
     /// `go:BOOK:CH[:V]` — navigate the active pane (V bands the verse).
@@ -521,8 +497,7 @@ pub enum PanelLink {
         chapter: u32,
         verse: Option<u32>,
     },
-    /// `ext:https://…` — open an external link in the platform browser. Only
-    /// https survives the parse; the shells decide how to open it.
+    /// `ext:https://…` — open an external link. Only https survives the parse.
     External {
         url: String,
     },
@@ -548,9 +523,9 @@ pub enum PanelLink {
         scope: String,
         page: u32,
     },
-    /// `lusage:PAGE:CODE:WORD:SCOPE` — the usage card in its original-word
-    /// lens: `code`'s occurrences, with `word` kept so the surface chip can
-    /// switch back. Same trailing-SCOPE layout as `wusage:`.
+    /// `lusage:PAGE:CODE:WORD:SCOPE` — the usage card in its original-word lens:
+    /// `code`'s occurrences, `word` kept so the surface chip can switch back. Same
+    /// trailing-SCOPE layout as `wusage:`.
     CodeUsage {
         code: String,
         word: String,
@@ -584,8 +559,8 @@ pub enum PanelLink {
         tag: usize,
         refkey: String,
     },
-    /// `makeweave:I` — weave tag I's passages (the shell may offer a subset)
-    /// into a canon-ordered chain via `weave_from_tag`.
+    /// `makeweave:I` — weave tag I's passages into a canon-ordered chain via
+    /// `weave_from_tag` (the shell may offer a subset).
     MakeWeave {
         tag: usize,
     },
@@ -596,9 +571,8 @@ pub enum PanelLink {
     Reject {
         index: usize,
     },
-    /// `deletethread:I` / `deletetag:I` / `deleteweave:I` — delete the whole
-    /// item (library ordinal). Destructive: the shell confirms before it
-    /// authors, like `reject:`.
+    /// `deletethread:I` / `deletetag:I` / `deleteweave:I` — delete the whole item
+    /// (library ordinal). Destructive: the shell confirms first.
     DeleteThread {
         index: usize,
     },
@@ -620,17 +594,15 @@ pub enum PanelLink {
         thread: usize,
         entry: usize,
     },
-    /// `moveentry:T:E:D` — move thread T's entry E by D places (-1 up, +1
-    /// down). A thread's ORDER is the argument it makes, so rearranging it is
-    /// an edit like any other, not a sort.
+    /// `moveentry:T:E:D` — move thread T's entry E by D places (-1 up, +1 down).
     MoveEntry {
         thread: usize,
         entry: usize,
         delta: i32,
     },
     /// `removeentry:T:E` — drop thread T's entry E. Destructive, so the shell
-    /// confirms first, like `deletethread:`. The THREAD survives its last
-    /// entry; deleting the thread is its own verb.
+    /// confirms first. The THREAD survives its last entry; deleting it is its own
+    /// verb.
     RemoveEntry {
         thread: usize,
         entry: usize,
@@ -650,8 +622,8 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
     let (verb, rest) = uri.split_once(':').unwrap_or((uri, ""));
     Some(match verb {
         "go" => {
-            // `BOOK:CH[:V]` — the book may contain spaces ("1 John") but never a
-            // ':', so split from the left into at most three parts.
+            // `BOOK:CH[:V]` — a book may contain spaces ("1 John") but never a ':',
+            // so split from the left into at most three parts.
             let segs: Vec<&str> = rest.splitn(3, ':').collect();
             match segs.as_slice() {
                 [book, ch] => PanelLink::Go { book: (*book).to_string(), chapter: ch.parse().ok()?, verse: None },
@@ -776,7 +748,7 @@ fn concept_chips(src: &dyn PanelSource, size: f32, codes: &[String]) -> Vec<Run>
     runs
 }
 
-/// The additive tier-mark glyphs (never one "winning" tier) + a research flask.
+/// The tier-mark glyphs — additive, never one "winning" tier — plus a research flask.
 fn tier_marks(runs: &mut Vec<Run>, tiers: &[String], research: bool) {
     let has = |t: &str| tiers.iter().any(|x| x == t);
     if has("god") {
@@ -808,12 +780,10 @@ fn legend() -> Block {
 
 // ── word study ────────────────────────────────────────────────────────────────
 
-/// Which analysis tiers the reader has switched on. The text (and the reader's
-/// own data — tags, notes, author actions) is always on; **human** gates the
+/// Which analysis tiers the reader has switched on. The text and the reader's own
+/// data (tags, notes, author actions) are always on; **human** gates the
 /// curated-scholarship tiers (renderings, morphology, same-root, TSK) and
-/// **machine** the learned/statistical ones (the symbolic concept engine, SIF,
-/// leitwort). Replaces the old all-or-nothing Simple/Full request flag — the
-/// reader accumulates tags in any mode.
+/// **machine** the learned/statistical ones (concept engine, SIF, leitwort).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Gates {
     pub human: bool,
@@ -843,20 +813,17 @@ impl Gates {
     }
 }
 
-/// The study of a clicked word: its Strong's entries (dictionary + gated
-/// analysis tiers), this verse's cross-references, and its margin notes.
-/// `verse`/`token` locate the tap; `codes` are its Strong's codes. The
-/// legacy `full: bool` shape lives on as [`word_study`].
+/// The study of a clicked word: its Strong's entries (dictionary + gated analysis
+/// tiers), the verse's cross-references, and its margin notes. `verse`/`token`
+/// locate the tap; `codes` are its Strong's codes.
 pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token: u32, codes: &[String]) -> Vec<Block> {
     let mut out = Vec::new();
     let display = src.verse_display(verse).unwrap_or_else(|| verse.to_string());
     let word = src.token_word(verse, token).unwrap_or_default();
 
-    // The reference, and — where the two traditions disagree — what a printed
-    // German Bible calls the same verse. 357 verses out of 31,102, so on almost
-    // every card this adds nothing; on Maleachi 4,1 it says "Luther 3,19", which
-    // is what lets a reader find a reference somebody handed them.
-    // `crate::versification` explains why this annotates rather than renumbers.
+    // The reference, plus — for the 357 verses where the traditions disagree — what
+    // a printed Bible in this language calls the same verse. See
+    // `crate::versification` for why this annotates rather than renumbers.
     let mut head = vec![Run::new(&display, sz::BODY, Color::Ink).bold()];
     if let Some(printed) = VRef::parse_ref_key(verse).and_then(|v| versification::printed_note(i18n::active(), &v)) {
         head.push(Run::new("  ", sz::BODY, Color::Ink));
@@ -866,17 +833,11 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
     if !word.is_empty() {
         out.push(Block::para(vec![Run::new(&word, sz::WORD, Color::Ink)]));
     }
-    // WHAT A SECOND TRANSLATION CAN AND CANNOT HAVE, and the line between them
-    // is exactly whether a thing is keyed by TOKEN INDEX or by refKey.
-    //
-    // Token-keyed, so meaningless here: Strong's, the morphology gloss,
-    // renderings, same-root, the concept lens. The German corpus tokenizes the
-    // same verse into different words at different indices, so this evidence
-    // would describe a different set of words while appearing to describe these.
-    //
-    // refKey-keyed, so perfectly valid here: the reader's own note, their tags
-    // and threads, and the Treasury's CROSS-REFERENCES — which is the one that
-    // matters, because it is a lot of real study value.
+    // What a second translation can carry is decided by whether a thing is keyed by
+    // TOKEN INDEX or by refKey. Token-keyed evidence (morphology gloss, renderings,
+    // same-root, the concept lens) would describe a different set of words in
+    // another corpus's tokenization; refKey-keyed data (the reader's note, tags,
+    // threads, TSK cross-references) is valid in any of them.
     let kjv = src.is_kjv_text();
 
     if kjv && gates.human {
@@ -884,14 +845,13 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
             out.push(Block::para(vec![Run::new(g, sz::NOTE, Color::Morph).italic()]));
         }
     }
-    // The reader's own note rides near the top — it's what they wrote, not
-    // evidence to scroll for.
+    // The reader's own note rides near the top — what they wrote comes before the
+    // evidence.
     user_note_block(src, verse, &mut out);
 
-    // The German corpus carries Strong's tags of its own now, so the dictionary
-    // and the concordance serve there like on the KJV; only the
-    // KJV-token-anchored tiers stay gated (inside `code_study`). A word without
-    // tags reads the same in both languages.
+    // A translated corpus carries Strong's tags of its own, so the dictionary and
+    // concordance serve there like on the KJV; only the KJV-token-anchored tiers
+    // stay gated (inside `code_study`).
     if codes.is_empty() {
         out.push(Block::para(vec![Run::new(
             crate::i18n::t(crate::i18n::active(), "study.noStrongs", &[]),
@@ -912,8 +872,7 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
     out
 }
 
-/// Legacy Simple/Full entry point (the GTK shell + the v1 ABI endpoints call
-/// this shape); Full switches every tier on.
+/// Legacy Simple/Full entry point (the v1 ABI endpoints); Full switches every tier on.
 pub fn word_study(src: &dyn PanelSource, full: bool, verse: &str, token: u32, codes: &[String]) -> Vec<Block> {
     word_study_gated(src, Gates::from_full(full), verse, token, codes)
 }
@@ -949,12 +908,10 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
             if let Some(d) = &e.def {
                 let mut runs = vec![Run::new(d, sz::BODY, Color::Ink)];
                 if src.lexicon_localized() && machine_translated() {
-                    // The at-a-glance mark, right on the definition it
-                    // qualifies; the full caveat + report link close the card.
-                    // Only when the definitions REALLY are translated — a
-                    // dictionary whose renderings are localized and whose prose
-                    // is still Strong's own English must not be marked as AI
-                    // output. See `i18n::LexiconSpec`.
+                    // The at-a-glance mark on the definition it qualifies; the full
+                    // caveat closes the card. Only where the definitions REALLY are
+                    // translated — localized renderings over Strong's own English
+                    // prose must not be marked as AI output. See `i18n::LexiconSpec`.
                     runs.push(Run::new("  ", sz::NOTE, Color::Faded));
                     runs.push(Run::new(s("study.aiMark"), sz::NOTE, Color::Faded).italic());
                 }
@@ -962,11 +919,8 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
             }
             if let Some(k) = &e.kjv {
                 // In a localized dictionary this slot holds that language's own
-                // renderings, derived from its tagged corpus — Luther's words
-                // for a German reader, Reina-Valera's for a Spanish one. The
-                // name comes from the language's row, so a new Bible is labelled
-                // correctly by having been added rather than by anyone
-                // remembering this line.
+                // renderings, from its tagged corpus. The Bible's name comes from
+                // the language's row, so a new one is labelled by having been added.
                 let label =
                     if src.lexicon_localized() { i18n::active().corpus().label } else { i18n::Lang::En.corpus().label };
                 out.push(Block::para(vec![Run::new(format!("{label}: {k}"), sz::NOTE, Color::Faded)]));
@@ -975,15 +929,14 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
         None => out.push(Block::para(vec![Run::new(s("panel.notInDictionary"), sz::BODY, Color::Faded).italic()])),
     }
 
-    // The tiers below are all evidence about KJV tokens (renderings lens,
-    // same-root, morphology, the machine analytics) — off for the German text,
+    // Everything below is evidence about KJV tokens — off for a translated corpus,
     // whose card is the dictionary + concordance above.
     if !gates.any() || !src.is_kjv_text() {
         return;
     }
 
-    // RENDERINGS: the English words this code is translated as, most frequent
-    // first; the tapped word's own rendering is bold.
+    // The English words this code is translated as, most frequent first; the tapped
+    // word's own rendering is bold.
     let rends = if gates.human { src.renderings(code) } else { Vec::new() };
     if !rends.is_empty() {
         out.push(Block::section_marked("RENDERINGS", "†", Color::TierHuman));
@@ -1065,9 +1018,8 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
 }
 
 /// The per-verse extras after a word's code blocks: author actions, weave + TSK
-/// cross-references, tags, and margin notes. Author
-/// actions and the verse's tags are the reader's own data — never gated
-/// (tags accumulate in any mode; the weave comes later).
+/// cross-references, tags, and margin notes. Author actions and the verse's tags are
+/// the reader's own data and are never gated.
 fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<Block>) {
     out.push(Block::Para {
         runs: vec![
@@ -1082,17 +1034,12 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
 
     let xrefs = src.verse_xrefs(verse);
 
-    // WHICH WEAVES THIS VERSE IS IN, before the partner list and separate from
-    // it. The partners answer "what does this connect to"; a reader also wants
-    // "what is this verse part of", and the partner list buries that — a verse
-    // in one weave with six links reads as six rows repeating the same weave
-    // name, and a verse in three weaves gives no way to see the three at all.
-    //
-    // Derived from the partners rather than fetched, because a weave is a graph
-    // of verse↔verse links: a verse that appears in a weave appears in at least
-    // one of its links, so the distinct weaves ARE the membership. Insertion
-    // order is kept (canon order of the partners), and the dedupe is by NAME
-    // because that is what identifies a weave to the reader.
+    // Which weaves this verse is IN, before the partner list and separate from it —
+    // "what is this part of" is a different question from "what does it connect to".
+    // Derived from the partners rather than fetched: a weave is a graph of
+    // verse↔verse links, so a verse in a weave appears in at least one of its links
+    // and the distinct weaves ARE the membership. First-seen (canon) order is kept,
+    // and the dedupe is by NAME because that is what identifies a weave to a reader.
     let mut in_weaves: Vec<(&str, Option<usize>)> = Vec::new();
     for x in &xrefs {
         if !in_weaves.iter().any(|(name, _)| *name == x.weave) {
@@ -1173,17 +1120,15 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
     }
 }
 
-/// The reader's own note for a verse — emitted near the **top** of the word
-/// study (their words come before the evidence). Never gated. The edit link
-/// prompts; empty text clears.
+/// The reader's own note for a verse — emitted near the **top** of the word study,
+/// their words before the evidence. Never gated. The edit link prompts; empty text
+/// clears.
 fn user_note_block(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
     let mine = src.user_note(verse);
     out.push(Block::Para {
         runs: vec![
-            // `panel.yourNote` IS the pencil. The verb beside it carried one too,
-            // so the row read "✎   ✎ add" — two pencils side by side (maintainer,
-            // 2026-08-26). The glyph marks the section; the link says what tapping
-            // it does, and only one of them needs to be a picture of a pencil.
+            // `panel.yourNote` IS the pencil; the verb beside it must not carry a
+            // second one, or the row reads "✎   ✎ add".
             Run::new(s("panel.yourNote"), sz::LABEL, Color::Ink).bold(),
             Run::new("   ", sz::LABEL, Color::Ink),
             Run::new(

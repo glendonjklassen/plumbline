@@ -1,7 +1,5 @@
-// Instantiate the plumbline-ffi wasm module under the browser WASI shim and expose
-// the raw C ABI plus string marshalling. The higher-level, method-for-method
-// binding lives in StudyEngine.ts (the TS sibling of StudyEngine.kt /
-// Plumbline.cs); this module owns the runtime plumbing only.
+// Instantiate the plumbline-ffi wasm module under the browser WASI shim and expose the
+// raw C ABI plus string marshalling. The method-for-method binding is StudyEngine.ts.
 
 import { depotResponse } from "./depot";
 import { assetUrl } from "./pack";
@@ -37,8 +35,7 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 export async function instantiate(homeRoot: Map<string, Directory | File>): Promise<WasmEngine> {
-  // fds 0–2 are stdio (panic messages surface on the console); preopens
-  // follow from fd 3, where Rust's std discovers them.
+  // fds 0–2 are stdio (panics reach the console); preopens start at fd 3, where std looks.
   const wasi = new WASI(
     [],
     ["HOME=/home", "XDG_CONFIG_HOME=/home/.config"],
@@ -54,23 +51,21 @@ export async function instantiate(homeRoot: Map<string, Directory | File>): Prom
   let measure: (text: string) => number = (t) => t.length * 8;
   let measureCalls = 0;
 
-  // Through the depot: on a first visit this worker may not be SW-controlled
-  // yet, and an uncached engine means no offline launch.
+  // Through the depot: this worker may not be SW-controlled yet, and an uncached engine
+  // means no offline launch.
   const wasmUrl = assetUrl(`plumbline_ffi.wasm?v=${__BUILD_ID__}`);
   const wasmRes = await depotResponse(wasmUrl);
-  // compileStreaming refuses a response that isn't `application/wasm` — the
-  // depot sets that explicitly, but a copy served by the service worker or a
-  // host with a thin MIME table may not, so fall back to a buffered compile
-  // rather than failing to boot over a header.
+  // compileStreaming refuses a response that isn't `application/wasm`; a copy served by
+  // the service worker or a host with a thin MIME table may not set it, so fall back to
+  // a buffered compile rather than failing to boot over a header.
   const source = await WebAssembly.compileStreaming(wasmRes.clone()).catch(async () =>
     WebAssembly.compile(await wasmRes.arrayBuffer()),
   );
   const instance = await WebAssembly.instantiate(source, {
     wasi_snapshot_preview1: wasi.wasiImport,
     plumbline: {
-      // Every text run the layout engine measures crosses wasm → JS here and
-      // decodes a C string on the way. The counter is how we know whether a
-      // slow chapter turn is the layout algorithm or this boundary.
+      // Every measured text run crosses wasm → JS here and decodes a C string. The
+      // counter separates a slow chapter turn's layout cost from this boundary's.
       plumbline_js_measure: (_ctx: number, ptr: number) => {
         if (PERF) measureCalls++;
         return measure(cstrAt(ptr));

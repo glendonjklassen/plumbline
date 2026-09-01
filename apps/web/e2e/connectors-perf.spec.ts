@@ -1,33 +1,20 @@
-// The ambient weave connectors are drawn on one canvas spanning the whole pane
-// row, and the effect that draws them depends on every pane's scrollY — so it
-// runs on EVERY scroll frame. It used to open that draw with an unconditional
+// The ambient weave connectors are drawn on one canvas spanning the pane row, and the effect that
+// draws them depends on every pane's scrollY, so it runs on every scroll frame. It used to open
+// that draw with an unconditional `canvas.width = ...; canvas.height = ...`, and assigning either
+// reallocates and clears the backing store even when the value is the one already there. On a
+// phone there is one pane and so no cross-pane connector to draw: the whole cost was a
+// full-viewport allocation per frame to paint nothing.
 //
-//     canvas.width  = Math.round(cssW * dpr);
-//     canvas.height = Math.round(cssH * dpr);
+// So these count the allocations themselves — the HTMLCanvasElement width/height setters are
+// patched in the page, recording which canvas took each write and whether the value was already
+// there. Three states, one per part of the fix: one pane (the overlay is not mounted), two panes
+// with a weave link across them (draws every frame, sizes its canvas once), and two panes with
+// nothing woven between them (mounted, effect runs, frame must cost nothing).
 //
-// and assigning either of those REALLOCATES the backing store and clears it even
-// when the number assigned is the number already there. On a phone there is one
-// pane, so there is no cross-pane connector in existence to draw: the whole cost
-// was a full-viewport allocation per frame to paint nothing at all.
-//
-// So this counts the ALLOCATIONS THEMSELVES rather than a proxy for them. The
-// HTMLCanvasElement width/height setters are patched in the page, and every write
-// is recorded with which canvas took it and whether the value written was already
-// there. A redundant write is not "a bit of waste" — it is exactly the bug.
-//
-// Three states, because the fix has three parts and each one owns a state: one
-// pane (the overlay is not mounted), two panes with a weave link across them (it
-// draws every frame and sizes its canvas once), and two panes with nothing woven
-// between them (it is mounted, the effect runs, and the frame must cost nothing).
-//
-// There is no time budget anywhere below, deliberately. The assertions are "zero"
-// and "did not grow when the frame count doubled": both are exact, and neither can
-// pass on a fast machine by luck. (A fixed-millisecond ceiling once passed against
-// the very bug it described — see the working rules.)
-//
-// e2e/connectors.spec.ts is the other half of this pair and the equivalence proof:
-// it asserts the connectors still MEET their verses, at two chrome heights. This
-// file only asserts what the frame costs.
+// No time budget anywhere: the assertions are "zero" and "did not grow when the frame count
+// doubled", both exact, and neither can pass on a fast machine by luck the way a fixed-millisecond
+// ceiling can. e2e/connectors.spec.ts is the equivalence half — it asserts the connectors still
+// meet their verses; this file only asserts what the frame costs.
 import { expect, test, type Page } from "@playwright/test";
 
 interface Counts {
@@ -37,15 +24,13 @@ interface Counts {
   overlayRedundant: number;
   /** clearRect calls on the overlay's context — one per frame that really drew. */
   overlayFrames: number;
-  /** setTransform calls on a reader pane's canvas — one per pane repaint. The
-   *  witness that the scroll actually drove frames, which matters most in the
-   *  one-pane test where the overlay is not there to leave a trace. */
+  /** setTransform calls on a reader pane's canvas — one per pane repaint, and the witness that
+   *  the scroll drove frames at all in the one-pane test, where the overlay leaves no trace. */
   paneFrames: number;
 }
 
-/** Patch the canvas size setters before any app code runs. Reports per-canvas so
- *  the reader panes (which have always guarded their own resize) cannot be
- *  mistaken for the overlay. */
+/** Patch the canvas size setters before any app code runs, per canvas, so the reader panes (which
+ *  guard their own resize) cannot be mistaken for the overlay. */
 async function instrument(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const c: Counts = { overlaySize: 0, overlayRedundant: 0, overlayFrames: 0, paneFrames: 0 };
@@ -96,12 +81,6 @@ async function instrument(page: Page): Promise<void> {
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
-  const est = page.getByRole("button", { name: "Established believer" });
-  await expect(est.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
 }
 
@@ -112,14 +91,10 @@ interface Pair {
   bChapter: number;
 }
 
-/** Open the two chapters of one stock weave link side by side, and specifically
- *  one whose LEFT chapter is longer than the pane — a chapter that fits has no
- *  scroll range, `scrollTop` never moves, and the scroll frames this whole file
- *  measures never happen. (The first cross-chapter pair in the stock set is Ps
- *  110 ↔ Heb 5, and Psalm 110 fits: the first attempt at this test measured 1
- *  draw in 30 frames and looked like a broken overlay.) The link is taken from
- *  the engine's own pairs rather than named here, so it does not rot when the
- *  stock set changes. */
+/** Open the two chapters of one stock weave link side by side, specifically one whose left chapter
+ *  is longer than the pane: a chapter that fits has no scroll range, so `scrollTop` never moves
+ *  and the frames this file measures never happen. The link comes from the engine's own pairs
+ *  rather than being named here, so it does not rot when the stock set changes. */
 async function openScrollableWovenPair(page: Page): Promise<void> {
   const candidates: Pair[] = await page.evaluate(async () => {
     const s = (window as any).__plumbline;

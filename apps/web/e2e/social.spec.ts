@@ -1,32 +1,21 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
-// What a stranger sees before they see the app: the link card.
+// The link card a stranger sees before the app. The failure worth testing is not a
+// missing tag — a missing card is obvious the first time anyone shares the link — it
+// is `og:image:width` drifting from the shipped PNG. Scrapers trust the declared size
+// rather than measuring the file, so a card claiming 1200×630 that ships a 512×512
+// image renders cropped or not at all, while every local previewer looks fine. Same
+// shape for the touch icon: a transparent PNG looks white everywhere except on an iOS
+// home screen, which composites it on black. So each test DECODES the served bytes
+// and checks them against what the markup claims.
 //
-// A pasted address used to produce nothing — no title beyond the tab name, no
-// description, no image — and iOS had no touch icon, so "Add to Home Screen"
-// saved a screenshot of the page instead of the mark. The tags in index.html fix
-// that; these tests are here because the way that fix rots is INVISIBLE.
-//
-// The failure mode worth a test is not a missing tag — a missing card is obvious
-// the first time anyone shares the link. It is `og:image:width` and the shipped
-// PNG drifting apart. Scrapers trust the declared size (many will not download a
-// file to measure it), so a card that claims 1200×630 and ships a 512×512 image
-// renders cropped, or letterboxed, or not at all — and every previewer on this
-// machine shows the file looking perfectly fine. Same shape for the touch icon:
-// a transparent PNG looks white on white everywhere except on an iOS home
-// screen, where it is composited on BLACK. So each test DECODES the bytes the
-// server actually returns and checks them against what the markup claims.
-//
-// Written 2026-07-29, for the pre-v1.0.0 audit item about sharing the link.
-//
-// The two PNGs were generated from public/icon.svg (rsvg-convert for the mark,
-// PIL for the composition) so the mark is the real one, on the Light theme's
-// paper/ink/gold from crates/core/src/theme.rs.
+// The two PNGs come from public/icon.svg on the Light theme's paper/ink/gold
+// (crates/core/src/theme.rs); regenerate them from there.
 
-// The one origin the app is shared from (CLAUDE.md § Releases). Pinned here on
-// purpose: a typo'd or stale host in a card tag serves nothing, and nothing in
-// the app itself would ever notice — every in-app url is relative.
+// The one origin the app is shared from (CLAUDE.md § Releases). A typo'd or stale host
+// in a card tag serves nothing, and the app itself would never notice — every in-app
+// url is relative.
 const PROD = "https://plumblinebible.org";
 
 /** A `<meta>` value by name or property, or "" when the tag is absent. */
@@ -35,13 +24,12 @@ async function meta(page: import("@playwright/test").Page, key: string): Promise
   return (await el.count()) ? ((await el.getAttribute("content")) ?? "") : "";
 }
 
-/** Fetch an asset a tag names and DECODE it, returning its real pixel size and
- *  whether any of its four corners is transparent.
+/** Fetch an asset a tag names and decode it, returning its real pixel size and whether
+ *  any corner is transparent.
  *
- *  The card urls are absolute and point at production, which this test run is
- *  not; the icon href is relative. Both are reduced to a BASENAME and resolved
- *  against the page, which also keeps this working whether the suite is served
- *  from a domain root or a repo subpath. */
+ *  Card urls are absolute and point at production, which this run is not; the icon href
+ *  is relative. Both are reduced to a basename and resolved against the page, which also
+ *  works whether the suite is served from a domain root or a repo subpath. */
 async function decode(
   page: import("@playwright/test").Page,
   url: string,
@@ -68,15 +56,9 @@ async function decode(
 test("a pasted link has everything a crawler needs to draw a card", async ({ page }) => {
   await page.goto("/");
 
-  // The sentence a stranger reads. Long enough to say what this is, short enough
-  // that no scraper cuts it mid-word.
-  //
-  // The floor was 60 and is 40, because the description was deliberately cut to
-  // "The Holy Bible in a free, private, offline application." (54 chars,
-  // 2026-07-30). That is shorter than a search result or a social card will
-  // happily show — both have room for roughly 155 — so there is unused space
-  // here. It is a judgement about voice, not an oversight, and the floor exists
-  // to catch an EMPTY or one-word description rather than to enforce a length.
+  // The sentence a stranger reads. The shipped description is deliberately shorter
+  // than the ~155 characters a card will show, so the floor of 40 is here to catch an
+  // empty or one-word description rather than to enforce a length.
   const description = await meta(page, "description");
   expect(description.length, "no meta description — a pasted link says nothing about the app").toBeGreaterThan(
     40,
@@ -143,24 +125,20 @@ test("iOS gets a 180x180 opaque touch icon", async ({ page }) => {
     { width: got.width, height: got.height },
     `the touch icon is ${got.width}×${got.height}, but the link says 180x180`,
   ).toEqual({ width: 180, height: 180 });
-  // iOS composites a touch icon on BLACK, so a transparent corner is a black
-  // corner on the reader's home screen — and it looks perfect everywhere else.
+  // iOS composites a touch icon on black, so a transparent corner is a black corner on
+  // the reader's home screen — and it looks perfect everywhere else.
   expect(got.transparentCorner, "the touch icon has transparent corners; iOS will fill them black").toBe(
     false,
   );
 });
 
 test("every icon this page links is part of the offline shell", async ({ page }) => {
-  // The shell manifest's `publicFiles` list is what the depot precaches, and it
-  // is maintained BY HAND in vite.config.ts — so a new icon link and a new depot
-  // entry are two separate edits, and forgetting the second one costs a reader
-  // their home-screen icon on a device with no network. Read the config as text
-  // rather than the built manifest: this holds on a dev server too, and the
-  // built-manifest side is already covered (app.spec.ts, "the whole shell is
-  // stored after one visit").
-  //
-  // og-image.png is deliberately NOT on that list — only remote crawlers fetch
-  // it — which is why this walks the icon LINKS and not the card tags.
+  // The depot precaches the shell manifest's `publicFiles` list, maintained by hand in
+  // vite.config.ts, so a new icon link and a new depot entry are two separate edits and
+  // missing the second costs a reader their home-screen icon offline. The config is read
+  // as text so this holds on a dev server too; the built-manifest side is covered in
+  // app.spec.ts. og-image.png is deliberately not on that list — only remote crawlers
+  // fetch it — so this walks the icon links and not the card tags.
   await page.goto("/");
   const config = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
   const hrefs = await page.locator('link[rel~="icon"], link[rel="apple-touch-icon"]').evaluateAll((ls) =>

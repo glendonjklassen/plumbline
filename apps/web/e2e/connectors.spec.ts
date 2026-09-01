@@ -1,19 +1,12 @@
-// The ambient weave connectors have to MEET the verses they name. They are
-// drawn on one overlay canvas spanning the whole pane row, so every endpoint is
-// offset by the pane chrome standing above the text — and that offset was a
-// hardcoded 33px. The nav strip then grew to Android's 48dp touch targets, the
-// overlay never heard, and every connector ended up some 25px clear of its verse.
+// Weave connectors are drawn on one overlay canvas spanning the whole pane row, so every endpoint
+// is offset by the pane chrome standing above the text — and that offset was a hardcoded 33px.
+// When the nav strip grew, the overlay never heard, and every connector ended up some 25px clear
+// of its verse.
 //
-// So this asserts GEOMETRY, at TWO chrome heights: the connector's endpoint dot
-// lines up in y with the pane's own weave gutter dot for that verse. Those are
-// two independent paints of one verse's position — the pane's painter, which is
-// right by construction, and the overlay's, which was not — and no constant can
-// satisfy both heights at once, which is the whole reason for testing two.
-//
-// The second height is injected CSS rather than a setting, because nothing in the
-// web chrome is font-scaled today. It is still the change that caused the bug:
-// the strip has been resized by hand twice, and a measurement survives that where
-// a written-down number does not.
+// So this asserts geometry at two chrome heights: the connector's endpoint dot lines up in y with
+// the pane's own weave gutter dot for that verse. Those are two independent paints of one verse's
+// position, and no constant can satisfy both heights at once. The second height is injected CSS
+// rather than a setting, because nothing in the web chrome is font-scaled today.
 import { expect, test, type Page } from "@playwright/test";
 
 /** Endpoint-to-verse slack we allow (px): a pixel or two of centroid noise, no
@@ -22,12 +15,6 @@ const TOL = 2;
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
-  const est = page.getByRole("button", { name: "Established believer" });
-  await expect(est.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
 }
 
@@ -38,11 +25,10 @@ interface Woven {
   bVerse: number;
 }
 
-/** Put the two chapters of one stock weave link side by side. The link is chosen
- *  from the engine's own pairs rather than named here, so the test does not rot
- *  when the stock set changes: it wants a pair whose two chapters each hold
- *  exactly ONE woven verse, near the top — one gutter dot and one connector per
- *  pane, nothing to confuse them with, and no scrolling to place them. */
+/** Put the two chapters of one stock weave link side by side. The link is chosen from the engine's
+ *  own pairs rather than named here, so the test does not rot when the stock set changes: it wants
+ *  a pair whose two chapters each hold exactly one woven verse near the top, so there is one gutter
+ *  dot and one connector per pane and no scrolling to place them. */
 async function openWovenPair(page: Page): Promise<Woven> {
   const pick = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
@@ -89,7 +75,7 @@ async function openWovenPair(page: Page): Promise<Woven> {
 }
 
 interface Aligned {
-  /** Pane chrome above the text, per pane — what the overlay used to hardcode. */
+  /** Pane chrome above the text, per pane — the offset the overlay used to hardcode. */
   strip: number[];
   /** Viewport y of each pane's weave gutter dot: where the verse actually is. */
   gutter: (number | null)[];
@@ -101,12 +87,11 @@ interface Aligned {
   paneBottom: number;
 }
 
-/** Read both paints back out of the pixels. Nothing here knows a single one of
- *  the overlay's numbers — it finds the dots by what they are. */
+/** Read both paints back out of the pixels, finding the dots by what they are rather than by any
+ *  of the overlay's own numbers. */
 async function readAlignment(page: Page, woven: Woven): Promise<Aligned> {
-  // Settle first. A chrome change reaches the overlay through a ResizeObserver and
-  // is painted in a rAF after that, so the frames have to be given away before the
-  // pixels mean anything.
+  // A chrome change reaches the overlay through a ResizeObserver and is painted in a rAF after
+  // that, so the frames have to be given away before the pixels mean anything.
   await page.waitForTimeout(500);
   await page.evaluate(
     () =>
@@ -141,9 +126,8 @@ async function readAlignment(page: Page, woven: Woven): Promise<Aligned> {
       return n ? { x: sx / n / dpr, y: sy / n / dpr } : null;
     };
 
-    // The overlay's endpoint dots are the only thing drawn at α0.7 — the Bézier
-    // between them is α0.35 — so a mid threshold picks out the ends alone. One
-    // per side of the row, this pair being the only one on screen.
+    // The endpoint dots are the only thing drawn at α0.7 (the Bézier between them is α0.35), so a
+    // mid threshold picks out the ends alone — one per side of the row.
     const overlay = document.querySelector<HTMLCanvasElement>(".panes .overlay canvas")!;
     const half = overlay.width / 2;
     const endpoint = [0, 1].map((i) => {
@@ -152,10 +136,9 @@ async function readAlignment(page: Page, woven: Woven): Promise<Aligned> {
       return hit ? overlay.getBoundingClientRect().top + hit.y : null;
     });
 
-    // The pane's own witness: the gold gutter dot it paints beside a woven verse
-    // (α0.75 gold over paper). It is the leftmost gold thing on the page — the
-    // verse numbers begin some 7px to its right — so the leftmost gold column and
-    // its neighbours are the dot and nothing else.
+    // The pane's own witness: the gold gutter dot beside a woven verse (α0.75 gold over paper). It
+    // is the leftmost gold thing on the page — verse numbers begin some 7px to its right — so the
+    // leftmost gold column and its neighbours are the dot and nothing else.
     const gutter = panes.map((pane) => {
       const c = pane.querySelector<HTMLCanvasElement>("canvas")!;
       const goldish = (r: number, g: number, b: number) => r > g && g > b && r - b > 40;
@@ -172,11 +155,10 @@ async function readAlignment(page: Page, woven: Woven): Promise<Aligned> {
       return hit ? c.getBoundingClientRect().top + hit.y : null;
     });
 
-    // The two dots are a small, KNOWN distance apart by design: the pane puts its
-    // gutter dot 0.55em below the top of the verse's first line (reader/paint.ts),
-    // and a connector meets the CENTRE of that line. Both distances come off the
-    // same layout entry, so the gap is arithmetic rather than slack — which is what
-    // lets the tolerance be a pixel or two instead of half a line.
+    // The two dots sit a known distance apart: the pane puts its gutter dot 0.55em below the top
+    // of the verse's first line (reader/paint.ts) and a connector meets the centre of that line.
+    // Both come off the same layout entry, so the gap is arithmetic rather than slack, which is
+    // what lets the tolerance be a pixel or two instead of half a line.
     const fontPx = Number(s.config.bodySize ?? 18);
     const want = [woven.aVerse, woven.bVerse].map((verse, i) => {
       const h = s.paneVerseGeom[i]?.get(verse)?.h;
@@ -201,8 +183,7 @@ function expectConnectorsMeetTheirVerses(m: Aligned, woven: Woven, where: string
     const ref = i === 0 ? woven.a : woven.b;
     expect(m.endpoint[i], `${where}: no connector endpoint drawn on pane ${i}'s edge`).not.toBeNull();
     expect(m.gutter[i], `${where}: pane ${i} painted no weave gutter dot for ${ref}`).not.toBeNull();
-    // Both ends must be well inside the pane, or a clamped endpoint could pass
-    // for an aligned one.
+    // Both ends must be well inside the pane, or a clamped endpoint could pass for an aligned one.
     expect(m.gutter[i]!, `${where}: ${ref} is not clear of the pane's edges`).toBeGreaterThan(
       m.paneTop + m.strip[i] + 20,
     );
@@ -229,8 +210,7 @@ test("a weave connector meets its verse, at either chrome height", async ({ page
   const shipped = await readAlignment(page, woven);
   expectConnectorsMeetTheirVerses(shipped, woven, "the shipped chrome");
 
-  // Now resize the chrome under it, which is exactly what happened to this
-  // overlay in the first place.
+  // Resize the chrome underneath it, which is the change that caused the bug.
   await page.addStyleTag({ content: ".pane .nav { padding-top: 34px !important; }" });
   const taller = await readAlignment(page, woven);
   expect(

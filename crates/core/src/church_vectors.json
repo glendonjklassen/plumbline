@@ -2,7 +2,6 @@
   {
     "name": "nothing set",
     "church": {},
-    "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "",
@@ -18,7 +17,6 @@
     "church": {
       "name": "Grace Bible Church"
     },
-    "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "Grace Bible Church",
@@ -35,7 +33,6 @@
       "name": "Grace Bible Church",
       "url": "https://example.org"
     },
-    "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "Grace Bible Church",
@@ -51,21 +48,19 @@
     "church": {
       "name": "Grace"
     },
-    "startAsNewBeliever": true,
     "at": "Ps 23:1",
     "cleaned": {
       "name": "Grace",
       "url": "",
       "service": null
     },
-    "url": "https://plumblinebible.org/?church=Grace&start=new&at=Ps+23%3A1",
+    "url": "https://plumblinebible.org/?church=Grace&at=Ps+23%3A1",
     "title": "Grace",
     "safeUrl": null
   },
   {
     "name": "a shared verse with no church",
     "church": {},
-    "startAsNewBeliever": false,
     "at": "1John 4:8",
     "cleaned": {
       "name": "",
@@ -81,7 +76,6 @@
     "church": {
       "name": "Iglesia Bíblica"
     },
-    "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "Iglesia Bíblica",
@@ -97,7 +91,6 @@
     "church": {
       "name": "Faith + Hope Chapel"
     },
-    "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "Faith + Hope Chapel",
@@ -115,7 +108,6 @@
       "url": "https://x.org",
       "service": 600
     },
-    "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "",
@@ -132,7 +124,6 @@
       "name": "Grace",
       "url": "javascript:alert(1)"
     },
-    "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "Grace",
@@ -149,7 +140,6 @@
       "name": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
       "url": "https://x.org/uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu"
     },
-    "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
@@ -166,7 +156,6 @@
       "name": "Grace",
       "url": "https://ejemplo.org/a?b=c&d=e"
     },
-    "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "Grace",
@@ -184,7 +173,6 @@
       "service": 600,
       "url": "https://grace.example"
     },
-    "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "Grace Bible Church",
@@ -201,7 +189,6 @@
       "name": "Grace Bible Church",
       "service": 5000
     },
-    "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "Grace Bible Church",
@@ -210,6 +197,108 @@
     },
     "url": "https://plumblinebible.org/?church=Grace+Bible+Church",
     "title": "Grace Bible Church",
+    "safeUrl": null
+  },
+  {
+    "name": "the palette: a Punjabi link onto a thread, for a soul winner",
+    "church": {
+      "name": "Grace Bible Church"
+    },
+    "at": null,
+    "lang": "pa",
+    "thread": "Romans Road",
+    "devotional": null,
+    "cleaned": {
+      "name": "Grace Bible Church",
+      "url": "",
+      "service": null
+    },
+    "url": "https://plumblinebible.org/?church=Grace+Bible+Church&lang=pa&thread=Romans+Road",
+    "title": "Grace Bible Church",
+    "safeUrl": null
+  },
+  {
+    "name": "the palette: a devotional, no church",
+    "church": {},
+    "at": null,
+    "lang": "en",
+    "thread": null,
+    "devotional": "new-believer-30",
+    "cleaned": {
+      "name": "",
+      "url": "",
+      "service": null
+    },
+    "url": "https://plumblinebible.org/?lang=en&devotional=new-believer-30",
+    "title": "Your church",
+    "safeUrl": null
+  },
+  {
+    "name": "the palette: everything at once, a verse included",
+    "church": {
+      "name": "Faith + Hope Chapel",
+      "service": 600,
+      "url": "https://example.org"
+    },
+    "at": "John 3:16",
+    "lang": "zht",
+    "thread": "Romans Road",
+    "devotional": "new-believer-30",
+    "cleaned": {
+      "name": "Faith + Hope Chapel",
+      "url": "https://example.org",
+      "service": 600
+    },
+    "url": "https://plumblinebible.org/?church=Faith+%2B+Hope+Chapel&churchService=600&churchUrl=https%3A%2F%2Fexample.org&at=John+3%3A16&lang=zht&thread=Romans+Road&devotional=new-believer-30",
+    "title": "Faith + Hope Chapel: Meets Sundays at 10:00 AM",
+    "safeUrl": "https://example.org"
+  },
+  {
+    "name": "a church that typed its address without a scheme",
+    "church": {
+      "name": "Grace",
+      "url": "gracebible.org"
+    },
+    "at": null,
+    "cleaned": {
+      "name": "Grace",
+      "url": "gracebible.org",
+      "service": null
+    },
+    "url": "https://plumblinebible.org/?church=Grace&churchUrl=gracebible.org",
+    "title": "Grace",
+    "safeUrl": "https://gracebible.org"
+  },
+  {
+    "name": "a church that typed www and no scheme",
+    "church": {
+      "name": "Grace",
+      "url": "www.gracebible.org"
+    },
+    "at": null,
+    "cleaned": {
+      "name": "Grace",
+      "url": "www.gracebible.org",
+      "service": null
+    },
+    "url": "https://plumblinebible.org/?church=Grace&churchUrl=www.gracebible.org",
+    "title": "Grace",
+    "safeUrl": "https://www.gracebible.org"
+  },
+  {
+    "name": "a church name mistyped into the website field is not a link",
+    "church": {
+      "name": "Grace",
+      "url": "Grace Bible Church"
+    },
+    "at": null,
+    "cleaned": {
+      "name": "Grace",
+      "url": "Grace Bible Church",
+      "service": null
+    },
+    "url": "https://plumblinebible.org/?church=Grace&churchUrl=Grace+Bible+Church",
+    "title": "Grace",
     "safeUrl": null
   }
 ]

@@ -1,48 +1,33 @@
 //! `plumbline-ffi` — the single, flat C ABI over `plumbline-core` + `plumbline-layout`.
 //!
-//! Decision #1 (native-per-platform) says: define the app's data surface
-//! **once** here as a C ABI, then let each native UI bind to it — csbindgen /
-//! P-Invoke for C# (WinUI) and JNA/UniFFI for Kotlin (Android). Every shell
-//! paints the display list the core produces and forwards input coordinates
-//! back across this boundary; no study logic is reimplemented in Kotlin or C#.
-//!
 //! ## Shape of the ABI
 //!
-//! * Two **opaque handles**: [`PlumblineEngine`] (the loaded corpus + Strong's +
-//!   search/occurrence indices) and [`PlumblineDisplayList`] (one laid-out chapter).
-//!   C sees them as forward-declared structs; only these functions touch them.
-//! * **Primitives** for scalar params (chapter numbers, coordinates).
-//! * **JSON** (NUL-terminated UTF-8) for every structured return value. JSON is
-//!   the lowest common denominator across C#, Kotlin, Swift and JS, it keeps the
-//!   ABI tiny and stable (a future field is additive, not a struct-layout
-//!   break), and it is exactly what a cross-device sync SaaS will speak later.
-//!   The wire schemas live in the [`wire`] module and are the frozen contract.
-//! * Layout keeps living in Rust: the caller passes a [`PlumblineMeasureFn`] callback
-//!   so `plumbline_layout::layout_chapter` measures text with the platform's own
-//!   engine (Pango/DirectWrite/Android) while the hard line-breaking + per-word
-//!   hit-region bookkeeping stays written once, here.
+//! * Two **opaque handles**: [`PlumblineEngine`] (corpus + Strong's + search/occurrence
+//!   indices) and [`PlumblineDisplayList`] (one laid-out chapter), forward-declared in C.
+//! * **Primitives** for scalar params; **JSON** (NUL-terminated UTF-8) for every structured
+//!   return value. The wire schemas live in [`wire`] and are a frozen contract that evolves
+//!   additively only.
+//! * Layout stays in Rust: the caller passes a [`PlumblineMeasureFn`] so text is measured by
+//!   the platform's own text stack while line-breaking and per-word hit regions are written
+//!   once, here.
 //!
 //! ## Memory & safety contract (read before binding)
 //!
-//! * Every `*mut c_char` returned by a `plumbline_*` function is owned by the caller
-//!   and must be released with [`plumbline_string_free`]. A null return means
-//!   "no value" (blank query, unknown code) or an error (see per-fn docs).
-//! * Every handle (`*mut PlumblineEngine`, `*mut PlumblineDisplayList`) must be released
-//!   with its matching `*_free`. Freeing null is a no-op; double-free is UB.
-//! * Input `*const c_char` / byte pointers are **borrowed for the call only**;
-//!   the caller keeps ownership. Strings must be valid UTF-8.
-//! * Every entry point is wrapped in `catch_unwind`: a Rust panic can never
-//!   unwind across the C boundary (that would be UB). A panic surfaces as a
-//!   null / `0` / `0.0` return instead.
-//! * A `*const PlumblineEngine` may be shared across threads for these read-only
-//!   calls; a `*mut PlumblineDisplayList` is single-owner (do not hit-test one from
-//!   two threads at once — though all calls here are `&`-only, so it is in
-//!   practice also safe to read concurrently).
+//! * Every `*mut c_char` returned by a `plumbline_*` function is owned by the caller and must
+//!   be released with [`plumbline_string_free`]. A null return means "no value" (blank query,
+//!   unknown code) or an error (see per-fn docs).
+//! * Every handle (`*mut PlumblineEngine`, `*mut PlumblineDisplayList`) must be released with
+//!   its matching `*_free`. Freeing null is a no-op; double-free is UB.
+//! * Input `*const c_char` / byte pointers are **borrowed for the call only**; the caller
+//!   keeps ownership. Strings must be valid UTF-8.
+//! * Every entry point is wrapped in `catch_unwind`: a Rust panic unwinding across the C
+//!   boundary would be UB, so a panic surfaces as a null / `0` / `0.0` return instead.
+//! * A `*const PlumblineEngine` may be shared across threads; a `*mut PlumblineDisplayList`
+//!   is single-owner, though all calls on it are `&`-only so concurrent reads are also safe.
 
-// Wasm-only shims for the web shell's TS binding — not part of the native C
-// ABI surface (header / C# / Kotlin). cbindgen doesn't evaluate `cfg`, so
-// plumbline-bindgen excludes this module's items by name; keep its exclude list in
-// step with the exports here.
+// Wasm-only shims for the web shell's TS binding — not part of the native C ABI surface.
+// cbindgen doesn't evaluate `cfg`, so plumbline-bindgen excludes this module's items by name;
+// keep its exclude list in step with the exports here.
 #[cfg(target_arch = "wasm32")]
 mod wasm;
 
@@ -78,15 +63,11 @@ mod wire;
 
 // ── token flag bits (mirror the core's `FLAG_*`; exported to bindings) ───────
 //
-// Written as bare literals (not `= corpus::FLAG_*`) so cbindgen can const-fold
-// them into `#define`s in the C header. The `const _` assertions below fail the
-// build if they ever drift from the core's canonical values, so the mirror
-// stays honest without costing the bindings.
-//
-// EVERY flag bit a shell tests belongs here, with its assertion — otherwise a
-// bare literal in a shell answers to nothing while it drifts from the core.
-// `flag_bits_are_exported_with_their_assertion` in `tests.rs` checks the header,
-// the assertions, and both shells' mirrors.
+// Bare literals, not `= corpus::FLAG_*`, so cbindgen can const-fold them into `#define`s in
+// the C header; the `const _` assertions below fail the build if they drift from the core.
+// Every flag bit a shell tests belongs here with its assertion —
+// `flag_bits_are_exported_with_their_assertion` in `tests.rs` checks lib.rs, the header and
+// the shell mirrors.
 
 /// Word supplied by the KJV translators (rendered in italics).
 pub const PLUMBLINE_FLAG_ADDED: u32 = 1;
@@ -96,10 +77,9 @@ pub const PLUMBLINE_FLAG_DIVINE: u32 = 2;
 pub const PLUMBLINE_FLAG_TITLE: u32 = 4;
 /// A paragraph mark (¶) precedes this word.
 pub const PLUMBLINE_FLAG_PARA: u32 = 8;
-/// Display only: this word is an AKJV re-rendering, set by the overlay on the
-/// display list as it passes. NEVER present in `kjv.jsonl`, whose bitfield is a
-/// frozen contract — so a shell reads this bit off a display-list item or a
-/// panel token, not off stored data.
+/// Display only: an AKJV re-rendering, set by the overlay on the display list. Never present
+/// in `kjv.jsonl` (a frozen bitfield), so read it off a display-list item or a panel token
+/// rather than off stored data.
 pub const PLUMBLINE_FLAG_RERENDERED: u32 = 16;
 
 const _: () = assert!(PLUMBLINE_FLAG_ADDED == corpus::FLAG_ADDED);
@@ -112,25 +92,18 @@ const _: () = assert!(PLUMBLINE_FLAG_RERENDERED == akjv::FLAG_RERENDERED);
 /// (`total` in the JSON stays honest above this).
 pub const OCCURRENCE_CAP: usize = 500;
 
-/// The wire-JSON contract version. Bump on any **non-additive** change to the
-/// payload shapes in `wire.rs` (renames/removals/retypes) so typed decoders
-/// can fail loudly instead of silently reading nulls; purely additive fields
-/// do not bump it. Exported to the C header; golden samples are pinned in
-/// `tests.rs`.
-/// Currently 2: the last bump was `rename_all_fields` on the tagged unions in
-/// `wire.rs` (a rename, so it bumped by the rule above). Nothing compares this
-/// constant yet (TODO §H tracks making it a live handshake), so the value is a
-/// record rather than a gate.
+/// The wire-JSON contract version. Bump on any **non-additive** change to the payload shapes
+/// in `wire.rs` (renames/removals/retypes) so typed decoders fail loudly instead of reading
+/// nulls; purely additive fields do not bump it. Exported to the C header; golden samples are
+/// pinned in `tests.rs`. Nothing compares it yet — it is a record, not a gate.
 pub const PLUMBLINE_WIRE_VERSION: u32 = 2;
 
-/// Verses per warm slice on the web's chunked warm-up
-/// (`plumbline_engine_warm_step`). Lives here rather than in `wasm.rs` so the
-/// slicing tests, which cannot call the wasm-only export, drive the same size the
-/// shell does — a test with its own copy of this number can pass at a slice size
-/// the product never uses.
+/// Verses per warm slice on the web's chunked warm-up (`plumbline_engine_warm_step`). Lives
+/// here rather than in `wasm.rs` so the slicing tests, which cannot call the wasm-only export,
+/// drive the same size the shell does.
 ///
-/// `allow(dead_code)` because its two callers are the wasm-only export and the
-/// tests, and a plain host build compiles neither.
+/// `allow(dead_code)`: its two callers are the wasm-only export and the tests, and a plain
+/// host build compiles neither.
 #[allow(dead_code)]
 pub(crate) const WARM_SLICE: usize = 2048;
 
@@ -142,126 +115,97 @@ pub(crate) const WARM_SLICE: usize = 2048;
 /// [`plumbline_engine_free`].
 pub struct PlumblineEngine {
     corpus: Corpus,
-    /// Strong's dictionary — late-loadable (TODO #28): the web boots on the
-    /// corpus ALONE for the fastest possible text-on-screen, and the rest of
-    /// the core pack arrives moments later via `load_core_data`. Unset means
+    /// Strong's dictionary — late-loadable: the web boots on the corpus alone for the fastest
+    /// text-on-screen and the rest of the core pack arrives via `load_core_data`. Unset means
     /// "not here yet": lookups answer empty and fill on the shell's re-fetch.
     strongs: OnceLock<StrongsDict>,
-    /// Whether `strongs` holds a LOCALIZED dictionary rather than the English
-    /// source (`strongs_for`) — the panel labels renderings for the right Bible
-    /// and carries the machine-translation caveat from this.
+    /// Whether `strongs` holds a localized dictionary rather than the English source
+    /// (`strongs_for`) — the panel labels renderings and carries the machine-translation
+    /// caveat from this.
     strongs_localized: std::sync::atomic::AtomicBool,
-    /// The corpus-derived indexes are built LAZILY (TODO #28: boot cost —
-    /// the app opens like Instagram, many times a day; every millisecond of
-    /// open is paid every time). First access builds; `warm_indexes` forces
-    /// them right after the shell hands its UI over, off-thread.
+    /// The corpus-derived indexes build lazily, because open cost is paid on every launch.
+    /// First access builds; `warm_indexes` forces them once the shell has handed its UI over.
     search_ix: OnceLock<SearchIx>,
     /// Partially-folded search index, for the web's sliced warm-up
-    /// (`plumbline_engine_warm_step`). A Mutex because Android may call the
-    /// ABI from more than one thread; the web worker is single-threaded.
+    /// (`plumbline_engine_warm_step`). A Mutex because the ABI may be called from more than
+    /// one thread.
     search_partial: std::sync::Mutex<Option<search::SearchIxBuilder>>,
-    /// Sliced builders for the two indexes a WORD CLICK needs. Warmed at boot
-    /// the same way the search index is, so a click does not build them whole
-    /// on the first tap of every session.
+    /// Sliced builders for the indexes a word click needs, warmed at boot like the search
+    /// index so a click does not build them whole on the first tap of a session.
     occ_partial: std::sync::Mutex<Option<strongs::OccurrenceIxBuilder>>,
     renderings_partial: std::sync::Mutex<Option<renderings::RenderingsBuilder>>,
     concept_partial: std::sync::Mutex<Option<concept::ConceptBuilder>>,
     xref_partial: std::sync::Mutex<Option<crossref::XRefIxBuilder>>,
     leitwort_partial: std::sync::Mutex<Option<burst::LeitwortBuilder>>,
-    /// How far the chunked warm has got. An explicit phase (rather than
-    /// "build the next thing that is missing") guarantees the loop terminates
-    /// even when a build legitimately cannot happen yet.
+    /// How far the chunked warm has got. An explicit phase (rather than "build the next thing
+    /// that is missing") guarantees the loop terminates even when a build cannot happen yet.
     warm_phase: std::sync::atomic::AtomicUsize,
-    /// Whether a SLICED warm is driving this engine. Set by the first
-    /// `warm_next` call and never cleared.
+    /// Whether a sliced warm is driving this engine. Set at open by a slicing shell and never
+    /// cleared.
     ///
-    /// While it is set, a reader's tap must never BUILD a missing index. The
-    /// whole point of slicing is that the work is spread across macrotasks so the
-    /// one thread that answers taps and layouts stays answerable — and a
-    /// `get_or_init` inside a study call throws every bit of that away in a
-    /// single blocking lump. Measured on a phone: **21,966 ms inside one
-    /// `wordStudyBlocks`**, which froze the worker so completely that it also
-    /// stranded its own in-flight downloads.
-    ///
-    /// So the study answers with what is READY. The warm keeps going in the
-    /// background and the shell re-fetches as each index lands, which is the same
-    /// fill-in-later path Strong's has always used before stage 2 arrives.
-    ///
-    /// Android never calls `warm_next` — it uses `plumbline_engine_warm_indexes`,
-    /// which builds everything up front in well under a second — so this stays
-    /// false there and nothing about that shell changes.
+    /// While it is set, a reader's tap must never *build* a missing index: slicing exists so
+    /// the one thread that answers taps and layouts stays answerable, and a `get_or_init`
+    /// inside a study call throws that away in a single blocking lump (measured at 22 s inside
+    /// one `wordStudyBlocks` on a phone, which also stranded its own in-flight downloads). The
+    /// study answers with what is ready and the shell re-fetches as each index lands.
     defer_builds: std::sync::atomic::AtomicBool,
     occ_ix: OnceLock<OccurrenceIx>,
-    /// The rendering lens: code → English renderings and surface word → codes,
-    /// both corpus-derived and immutable after open (like `occ_ix`).
+    /// The rendering lens: code → English renderings and surface word → codes, both
+    /// corpus-derived and immutable after open (like `occ_ix`).
     renderings: OnceLock<Renderings>,
-    /// The data home, if opened from one — required to author (write) study
-    /// data. `None` when opened from bytes (study data is then read-only/empty).
+    /// The data home, if opened from one — required to author (write) study data. `None` when
+    /// opened from bytes, and study data is then read-only/empty.
     home: Option<PathBuf>,
-    /// Personal study data (margin notes, threads, tags, the weave graph),
-    /// loaded from `home` and **reloaded after any authoring write** — so it
-    /// sits behind an RwLock: the README promises `*const PlumblineEngine` is safe
-    /// to share across threads for reads, and a C# shell may author off its UI
-    /// thread while another thread reads.
+    /// Personal study data (margin notes, threads, tags, the weave graph), loaded from `home`
+    /// and reloaded after any authoring write — hence the RwLock: the ABI promises
+    /// `*const PlumblineEngine` is safe to share across threads for reads, and a shell may
+    /// author off one thread while another reads.
     study: std::sync::RwLock<StudyData>,
-    /// R&D tier: the fused OT↔NT bridge plus the optional morphology artifact.
-    /// The artifact loads at open when present in the
-    /// home, but they may also *arrive after open* — the web shell boots on
-    /// the core pack and fetches the R&D pack in the background, then calls
-    /// [`plumbline_engine_load_rnd_data`] — hence `OnceLock` (set-once through
-    /// `&self`, thread-safe): unset means "not (yet) available".
+    /// R&D tier: the fused OT↔NT bridge plus the optional morphology artifact. Loaded at open
+    /// when present in the home, but they may also arrive after it (the web fetches the R&D
+    /// pack in the background, then calls [`plumbline_engine_load_rnd_data`]) — hence
+    /// `OnceLock`, set-once through `&self`. Unset means "not (yet) available".
     bridge: OnceLock<bridge::FusedBridge>,
     morph: OnceLock<morph::MorphData>,
-    /// TSK topical cross-references (parsed lazily from the home — an 8.5 MB
-    /// TSV nobody should pay for at every open).
+    /// TSK topical cross-references, parsed lazily: an 8.5 MB TSV nobody should pay for at
+    /// every open.
     xref_ix: OnceLock<XRefIx>,
-    /// The hymnal, parsed lazily: nobody pays for it before the hymn tab opens.
-    /// Set only from a NON-EMPTY parse (the [`Self::strongs`] stance) — on the
-    /// web `data/hymnal.json` rides the study stage and lands moments AFTER
-    /// open, so a hymn tab opened in that gap probes empty, and caching that
-    /// probe would keep the book empty for the whole session. The file is
-    /// deliberately NOT on the web's eviction list — the first successful read
-    /// can come at any point in a session, so the bytes have to still be there
-    /// when it does.
+    /// The hymnal, parsed lazily. Set only from a NON-EMPTY parse (the [`Self::strongs`]
+    /// stance): on the web `data/hymnal.json` rides the study stage and lands after open, so a
+    /// hymn tab opened in that gap probes empty and caching that probe would keep the book
+    /// empty for the whole session. The file is deliberately not on the web's eviction list —
+    /// the first successful read can come at any point in a session.
     hymnal: OnceLock<hymnal::Hymnal>,
-    /// The devotional catalogue, parsed lazily and on the same terms as the
-    /// hymnal: set only from a NON-EMPTY parse, because `data/devotional.json`
-    /// rides the pack too and a probe that lands before it would otherwise
-    /// cache "no devotionals" for the whole session.
+    /// The devotional catalogue, parsed lazily on the same terms as the hymnal: set only from
+    /// a NON-EMPTY parse, because `data/devotional.json` rides the pack too and a probe that
+    /// lands before it would cache "no devotionals" for the session.
     devotionals: OnceLock<Vec<devotional::Devotional>>,
-    /// The plain-English overlay (the AKJV delta), when the home carries one.
-    /// A READING aid: it re-words the reader's view and nothing else — never a
-    /// memory card, a Present hand-off, or copied text.
+    /// The plain-English overlay (the AKJV delta), when the home carries one. A reading aid:
+    /// it re-words the reader's view and nothing else — never a memory card, a Present
+    /// hand-off, or copied text.
     akjv: OnceLock<akjv::Akjv>,
-    /// Whether the reader has the overlay switched on. Engine state rather than
-    /// a layout argument so a shell cannot end up with one pane modernised and
-    /// the next not; OFF until asked, because the text is the KJV.
+    /// Whether the reader has the overlay switched on. Engine state rather than a layout
+    /// argument, so a shell cannot end up with one pane modernised and the next not; off until
+    /// asked, because the text is the KJV.
     akjv_on: std::sync::atomic::AtomicBool,
-    /// The symbolic concept engine (collocations, distribution, communities)
-    /// and the leitwort scan — corpus-wide sweeps, built lazily like the SIF
-    /// model and cached for the engine's lifetime.
+    /// The symbolic concept engine (collocations, distribution, communities) and the leitwort
+    /// scan — corpus-wide sweeps, built lazily and cached for the engine's lifetime.
     concept: OnceLock<concept::Concept>,
     leitwort: OnceLock<std::collections::HashMap<String, burst::Burst>>,
-    /// Words per chapter for the whole canon — the reading map's denominators.
-    /// Built on first use and cached: the navigator asks for all 1,189 chapters
-    /// every time it opens, and re-walking 31,102 verses per open buys nothing.
+    /// Words per chapter for the whole canon — the reading map's denominators. Cached because
+    /// the navigator asks for all 1,189 chapters every time it opens.
     reading_words: OnceLock<reading::ChapterWords>,
-    /// How long the chapter on screen has really been read (`core::reading::
-    /// DwellTracker`, driven by `plumbline_engine_reading_tick_json`). It lives
-    /// on the engine because it is per-reader state over a clock the core does
-    /// not have: a shell samples once a second and the core decides what that
-    /// second was worth. A Mutex because Android ticks from a coroutine while
-    /// the UI thread reads.
+    /// How long the chapter on screen has really been read (`core::reading::DwellTracker`,
+    /// driven by `plumbline_engine_reading_tick_json`). On the engine because it is per-reader
+    /// state over a clock the core does not have: a shell samples once a second and the core
+    /// decides what that second was worth. A Mutex because ticks and reads may be on different
+    /// threads.
     dwell: std::sync::Mutex<reading::DwellTracker>,
-    /// Remembered text widths, so a run the shell has already measured is never
-    /// measured across the ABI again (see [`font_identity`] and
-    /// `plumbline_layout::memo`). Engine-scoped rather than global: it dies with
-    /// the engine, and each test gets its own.
-    ///
-    /// A Mutex because Android lays out on `Dispatchers.Default` — a pool thread
-    /// that differs from turn to turn, so a thread-local memo would be cold on
-    /// most chapter turns there. The lock is never held across the measurement
-    /// callback itself.
+    /// Remembered text widths, so a run the shell has already measured is never measured
+    /// across the ABI again (see [`font_identity`] and `plumbline_layout::memo`).
+    /// Engine-scoped rather than global: it dies with the engine, and each test gets its own.
+    /// A Mutex rather than a thread-local because a shell may lay out on a pool thread that
+    /// differs from turn to turn; the lock is never held across the measurement callback.
     measure_memo: std::sync::Mutex<MeasureMemo>,
 }
 
@@ -271,22 +215,13 @@ impl PlumblineEngine {
         if let Some(sd) = strongs {
             let _ = strongs_cell.set(sd);
         }
-        // R&D artifacts. The bridge's etymology layer works from the in-memory
-        // dict even without a home; external witnesses + the embedding/morph
-        // sidecars need a home's files. Without a home, no filesystem is
-        // probed at all (a CWD-relative probe would be nondeterministic and a
-        // mild data-injection surface).
-
-        // KJV-ONLY, and this gate is load-bearing rather than an optimisation.
-        // Morphology is keyed by (refKey, TOKEN INDEX) against `kjv1769-tok2`,
-        // and the German corpus tokenizes the same verse into different words at
-        // different indices — so applying it there would attach English grammar
-        // notes to whichever German word happened to sit at that index. Same
-        // argument for Strong's and for the plain-English overlay below, which is
-        // a delta over KJV token runs.
+        // Without a home nothing is probed on disk (a CWD-relative probe would be
+        // nondeterministic and a mild data-injection surface).
         //
-        // Not a version check on the sidecar file: the file is fine, it is the
-        // CORPUS that is a different text.
+        // KJV-only, and load-bearing rather than an optimisation: morphology is keyed by
+        // (refKey, token index) against `kjv1769-tok2`, and another language's corpus
+        // tokenizes the same verse into different words at different indices. Not a version
+        // check on the sidecar — the file is fine, the corpus is a different text.
         let kjv_text = corpus.tokenization_version() == canon::TOKENIZATION_VERSION;
         let morph = OnceLock::new();
         if let (Some(h), true) = (&home, kjv_text) {
@@ -339,26 +274,18 @@ impl PlumblineEngine {
         self.study.write().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// Load the optional R&D artifact (morphology) from the home if it was
-    /// absent at open. Idempotent; nothing loads twice.
-    ///
-    /// The concept embedding no longer loads here — it went with the last thing
-    /// that read it and no longer ships in the pack.
+    /// Load the optional R&D artifact (morphology) from the home if it was absent at open.
+    /// Idempotent; nothing loads twice.
     fn load_rnd_data(&self) {
         self.load_morph_only();
     }
 
-    /// The morphology sidecar alone (~10 MB of JSONL, or 3.3 MB packed, to parse).
+    /// The morphology sidecar alone (~10 MB of JSONL to parse).
     ///
-    /// KJV-ONLY, the same gate `new` applies and for the same reason: morphology
-    /// is keyed by (refKey, TOKEN INDEX) against `kjv1769-tok2`, so on the German
-    /// corpus it would describe whichever word happened to sit at that index.
-    /// [`PanelSource::is_kjv_text`] already withholds the gloss, so what the gate
-    /// was missing here was not correctness but the WORK: a German reader with
-    /// machine analysis on parsed 355,603 entries — in one synchronous block, on
-    /// the only thread that answers taps — to build an index nothing would ever
-    /// read. `new` had the gate; this path is the one the web shell takes, because
-    /// its pack arrives after the engine opens.
+    /// KJV-only, the same gate `new` applies and for the same reason. What the gate buys here
+    /// is the work, not correctness ([`PanelSource::is_kjv_text`] already withholds the
+    /// gloss): without it a non-KJV reader parses 355,603 entries in one synchronous block, on
+    /// the only thread that answers taps, to build an index nothing would read.
     fn load_morph_only(&self) {
         let Some(h) = &self.home else { return };
         if self.morph.get().is_some() || self.corpus.tokenization_version() != canon::TOKENIZATION_VERSION {
@@ -392,17 +319,13 @@ impl PlumblineEngine {
         self.bridge.get()
     }
 
-    /// Load the stage-2 core data (Strong's dictionary; the study data —
-    /// incl. the 1769 margin notes — reloads) once the files have arrived in
-    /// the home. Idempotent; cheap while they are still missing. NOTE: a
-    /// search index built before this call keeps the notes it saw then.
+    /// Load the stage-2 core data (Strong's dictionary; the study data — incl. the 1769 margin
+    /// notes — reloads) once the files have arrived in the home. Idempotent; cheap while they
+    /// are still missing. A search index built before this call keeps the notes it saw then.
     fn load_core_data(&self) {
         let Some(h) = &self.home else { return };
-        // The study data (the 1769 margin notes among it) reloads whatever text
-        // is open. Strong's loads for EITHER corpus — the dictionary is keyed
-        // by code and each corpus carries its own token tags now (the German
-        // corpus since merge-strongs.py), so nothing here is anchored to KJV
-        // token indices.
+        // Strong's loads for any corpus: the dictionary is keyed by code and each corpus
+        // carries its own token tags, so nothing here is anchored to KJV token indices.
         if self.strongs.get().is_none() {
             let (path, is_localized) = strongs_for(&h.join("data"));
             if let Ok(sd) = strongs::load_strongs(path) {
@@ -410,22 +333,16 @@ impl PlumblineEngine {
                 self.strongs_localized.store(is_localized, std::sync::atomic::Ordering::Relaxed);
             }
         }
-        // THE MODERNIZATION BELONGS TO A TEXT, and the OPEN text is what picks
-        // it — not the reader's language. A German reader whose Luther download
-        // has not landed is reading the KJV, and the AKJV is a correct and
-        // useful thing to offer them while they are on it.
-        //
-        // A language whose row names no modernization simply never loads one,
-        // which is what makes `AkjvAvailable()` false and hides the toggle. That
-        // used to be a comparison against the KJV's tokenization here, which
-        // said "this feature is the norm and other texts are the exception"; it
-        // is one English feature among the per-language columns now.
+        // The modernization belongs to a TEXT, so the open text picks it, not the reader's
+        // language: someone whose translation download has not landed is reading the KJV and
+        // the AKJV is the right offer while they are on it. A language whose row names no
+        // modernization loads none, which is what makes `AkjvAvailable()` false and hides the
+        // toggle.
         let open_tok = self.corpus.tokenization_version().to_string();
         if let Some(file) = i18n::Lang::for_tokenization(&open_tok).and_then(|l| l.spec().modernization) {
             if self.akjv.get().is_none() {
-                // Stage 2, beside Strong's: small, and wanted the moment the
-                // reader flips the toggle rather than after a download they
-                // must approve.
+                // Stage 2, beside Strong's: small, and wanted the moment the reader flips the
+                // toggle rather than after a download they must approve.
                 if let Some(a) = akjv::load_akjv(&open_tok, h.join("data").join(file)) {
                     let _ = self.akjv.set(a);
                 }
@@ -444,8 +361,7 @@ impl PlumblineEngine {
         self.akjv_on.load(std::sync::atomic::Ordering::Relaxed).then(|| self.akjv()).flatten()
     }
 
-    /// The search index, built on first use; the reader's notes attach then
-    /// (same content as the old at-open attach — notes searchable either way).
+    /// The search index, built on first use; the reader's notes attach then.
     fn search_ix(&self) -> &SearchIx {
         self.search_ix.get_or_init(|| {
             let mut ix = SearchIx::build(&self.corpus);
@@ -454,10 +370,8 @@ impl PlumblineEngine {
         })
     }
 
-    /// Fold up to `n` more verses into the search index, returning 1 while
-    /// work remains and 0 once it is built and installed. The web shell's
-    /// sliced warm-up (`plumbline_engine_warm_step`); a no-op once the index
-    /// exists, whoever built it.
+    /// Fold up to `n` more verses into the search index, returning 1 while work remains and 0
+    /// once it is built and installed. A no-op once the index exists, whoever built it.
     fn warm_search_slice(&self, n: usize) -> i32 {
         if self.search_ix.get().is_some() {
             return 0;
@@ -486,32 +400,28 @@ impl PlumblineEngine {
         self.defer_builds.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    /// Declare that this shell warms in slices, so nothing may be built inside a
-    /// reader's request.
+    /// Declare that this shell warms in slices, so nothing may be built inside a reader's
+    /// request.
     ///
-    /// MUST BE SET AT OPEN, not when the warm happens to start. Arming it on the
-    /// first `warm_next` looks equivalent and is not: the web's warm begins only
-    /// after stage 2 has been fetched and parsed, which on a phone is ~550 ms
-    /// after text appears — and a reader taps a word inside that window. The flag
-    /// would still be false, the tap would build everything, and the freeze this
-    /// prevents happens anyway. A desktop hides it because stage 2 there takes
-    /// 40 ms and the warm wins the race.
+    /// Must be set AT OPEN, not when the warm happens to start: the web's warm only begins
+    /// once stage 2 is fetched and parsed, ~550 ms after text appears on a phone, and a reader
+    /// taps a word inside that window. Arming it on the first `warm_next` would leave the flag
+    /// false for that tap and the freeze happens anyway. A desktop hides the bug because
+    /// stage 2 takes 40 ms there and the warm wins the race.
     ///
-    /// `allow(dead_code)`: only a slicing shell arms it, and the only slicing
-    /// shell is the web — Android builds everything up front.
+    /// `allow(dead_code)`: only a slicing shell (the web) arms it.
     #[allow(dead_code)]
     pub(crate) fn set_defer_builds(&self, on: bool) {
         self.defer_builds.store(on, std::sync::atomic::Ordering::Relaxed);
     }
 
     // ── "ready" accessors ─────────────────────────────────────────────────────
-    // Each returns the index only if using it costs nothing. Under a sliced warm
-    // that means "only if already built"; otherwise it is the ordinary
-    // build-on-first-use accessor and behaviour is unchanged.
+    // Each returns the index only if using it costs nothing: under a sliced warm, only if
+    // already built; otherwise the ordinary build-on-first-use accessor.
     //
-    // EVERY reader-facing panel path goes through these rather than the builders
-    // above. A single one left pointing at a builder reintroduces the whole
-    // freeze, because a study touches most of them in one call.
+    // Every reader-facing panel path must go through these rather than the builders above — a
+    // study touches most of them in one call, so one left pointing at a builder reintroduces
+    // the whole freeze.
 
     fn occ_ix_ready(&self) -> Option<&OccurrenceIx> {
         if self.deferring() {
@@ -585,31 +495,23 @@ impl PlumblineEngine {
         0
     }
 
-    /// One macrotask of warm-up. Returns 1 while work remains, 0 when the
-    /// indexes a study needs are all in.
+    /// One macrotask of warm-up. Returns 1 while work remains, 0 when the indexes a study
+    /// needs are all in.
     ///
-    /// `slice` is [`WARM_SLICE`] on every shipped path; it is a parameter only so
-    /// tests can drive smaller steps.
+    /// `slice` is [`WARM_SLICE`] on every shipped path; a parameter only so tests can drive
+    /// smaller steps. Without this warm every index is built on first use, and none survives
+    /// the tab, so the first word click of a session pays for all of them at once. The sliced
+    /// phases come first because they are the biggest; what stays a single build measured
+    /// small enough to be one (the bridge, 3 ms), so a tap between phases is still answered.
     ///
-    /// This is the whole point of the boot warm: every one of these is built on
-    /// FIRST USE otherwise, and none of them survives the tab, so without it the
-    /// reader's first word click of every session pays for all of them at once.
-    /// The sliced phases come first because they are the biggest; what is left as
-    /// a single build is only what measured small enough to be one — the bridge,
-    /// at 3 ms — so a tap between phases is still answered. Re-running after the
-    /// R&D pack lands picks up the SIF model.
-    ///
-    /// `allow(dead_code)` for the same reason as [`WARM_SLICE`]: the only callers
-    /// are the wasm-only export and the tests, and a plain host build compiles
-    /// neither. The allow covers the whole warm cluster this roots — the
-    /// `warm_*_slice` helpers and the `*_partial` / `warm_phase` fields they
-    /// touch — because rustc treats an allowed item as live and walks on from it.
+    /// `allow(dead_code)` for the same reason as [`WARM_SLICE`], and it covers the whole warm
+    /// cluster this roots (the `warm_*_slice` helpers and the `*_partial` / `warm_phase`
+    /// fields) because rustc treats an allowed item as live and walks on from it.
     #[allow(dead_code)]
     fn warm_next(&self, slice: usize) -> i32 {
         use std::sync::atomic::Ordering;
-        // A shell that warms in slices has promised to keep this thread
-        // answerable, so from here on nothing may be built inside a reader's tap.
-        // See `defer_builds`.
+        // A slicing shell has promised to keep this thread answerable, so from here on nothing
+        // may be built inside a reader's tap. See `defer_builds`.
         self.defer_builds.store(true, Ordering::Relaxed);
         loop {
             let phase = self.warm_phase.load(Ordering::Relaxed);
@@ -637,10 +539,9 @@ impl PlumblineEngine {
         }
     }
 
-    /// Advance the concept model by one budgeted stage-slice. 1 while work
-    /// remains. The heaviest thing the warm does — twelve stages over the
-    /// corpus, the co-occurrence counts, PPMI, kNN and label propagation — and
-    /// as one call it blocked the worker for ~640ms.
+    /// Advance the concept model by one budgeted stage-slice. 1 while work remains. The
+    /// heaviest thing the warm does — twelve stages over the corpus (co-occurrence counts,
+    /// PPMI, kNN, label propagation) — and ~640 ms of blocked worker as one call.
     fn warm_concept_slice(&self, n: usize) -> i32 {
         if self.concept.get().is_some() {
             return 0;
@@ -659,11 +560,9 @@ impl PlumblineEngine {
         0
     }
 
-    /// Parse `n` more rows of the cross-reference TSV. 1 while work remains.
-    ///
-    /// 344k rows, 89 ms in one call on the maintainer's desktop — a phone's whole
-    /// warm-chunk budget, spent with the worker unable to answer a tap. Sliced,
-    /// like the three phases before it.
+    /// Parse `n` more rows of the cross-reference TSV. 1 while work remains. 344k rows, 89 ms
+    /// as one call on a desktop — a phone's whole warm-chunk budget with the worker unable to
+    /// answer a tap.
     fn warm_xref_slice(&self, n: usize) -> i32 {
         if self.xref_ix.get().is_some() {
             return 0;
@@ -676,8 +575,8 @@ impl PlumblineEngine {
             // No home: the same empty index `xref_ix()` would have made.
             None => crossref::XRefIxBuilder::empty(),
         });
-        // Rows, not verses: at ~12 references per source verse a verse-sized
-        // slice would be a twelfth of the work the other phases do per call.
+        // Rows, not verses: at ~12 references per source verse a verse-sized slice would be a
+        // twelfth of the work the other phases do per call.
         if b.feed(n * 8) {
             return 1;
         }
@@ -687,11 +586,9 @@ impl PlumblineEngine {
         0
     }
 
-    /// Advance leitwort discovery by one budgeted slice. 1 while work remains.
-    ///
-    /// Two cursored stages (positions over the corpus, then the burst scan over
-    /// the codes) — 83 ms as a single call, measured the same day as the xref
-    /// parse above.
+    /// Advance leitwort discovery by one budgeted slice. 1 while work remains. Two cursored
+    /// stages (positions over the corpus, then the burst scan over the codes), 83 ms as a
+    /// single call.
     fn warm_leitwort_slice(&self, n: usize) -> i32 {
         if self.leitwort.get().is_some() {
             return 0;
@@ -739,13 +636,11 @@ impl PlumblineEngine {
         })
     }
 
-    /// The hymnal, parsed from the home on first use — but NEVER cached-empty
-    /// (the same stance as [`Self::strongs`], for the same reason). On the web
-    /// `data/hymnal.json` rides the study stage, which lands moments AFTER the
-    /// engine opens; a reader who taps the hymn tab in that window must get the
-    /// book on the shell's re-fetch, not an empty tab for the whole session.
-    /// Unreadable data also answers empty — the ABI degrades, the pack checks
-    /// catch bad data at build time.
+    /// The hymnal, parsed from the home on first use — but never cached-empty: on the web
+    /// `data/hymnal.json` lands after the engine opens, and a reader who taps the hymn tab in
+    /// that window must get the book on the shell's re-fetch rather than an empty tab for the
+    /// session. Unreadable data also answers empty; the pack checks catch bad data at build
+    /// time.
     fn hymnal(&self) -> &hymnal::Hymnal {
         if let Some(book) = self.hymnal.get() {
             return book;
@@ -762,11 +657,8 @@ impl PlumblineEngine {
         }
     }
 
-    /// The devotional catalogue, parsed from the home on first use — never
-    /// cached-empty, the [`Self::hymnal`] stance and for the same reason: the
-    /// file arrives with the pack, and a probe in the gap before it lands must
-    /// not fix "no devotionals" for the session. A reader whose first run opens
-    /// the new-believer booklet is exactly that probe.
+    /// The devotional catalogue, parsed on first use and never cached-empty — the
+    /// [`Self::hymnal`] stance, for the same reason.
     fn devotionals(&self) -> &[devotional::Devotional] {
         if let Some(all) = self.devotionals.get() {
             return all;
@@ -806,7 +698,7 @@ struct StudyData {
     threads: Vec<LoadedThread>,
     tags: Vec<LoadedTag>,
     weaves: Vec<LoadedWeave>,
-    /// The reader's personal per-verse notes (Tier 0 #3), keyed by verse.
+    /// The reader's personal per-verse notes, keyed by verse.
     user_notes: std::collections::HashMap<VRef, usernote::LoadedNote>,
 }
 
@@ -825,9 +717,9 @@ fn load_study(home: &Option<PathBuf>) -> StudyData {
     }
 }
 
-// The ABI promises `*const PlumblineEngine` is safe to share across threads for
-// reads while authoring may happen on another thread — which is exactly
-// `Send + Sync`. Fails to compile if a field ever loses that property.
+// The ABI promises `*const PlumblineEngine` is safe to share across threads for reads while
+// authoring may happen on another — exactly `Send + Sync`. Fails to compile if a field ever
+// loses that property.
 fn _assert_engine_is_send_sync() {
     fn assert<T: Send + Sync>() {}
     assert::<PlumblineEngine>();
@@ -855,10 +747,9 @@ pub struct PlumblineLayoutConfig {
     pub para_spacing: f32,
     /// Nonzero: start every verse on a fresh line (verse-per-line mode).
     pub verse_break: u32,
-    /// Nonzero: paint the leading verse numbers (the default). Zero lays the
-    /// chapter out as prose — and it is a LAYOUT input rather than something a
-    /// shell can skip at paint time, because the number's width and its gap
-    /// belong to the line whether or not anything is drawn in them.
+    /// Nonzero: paint the leading verse numbers (the default). Zero lays the chapter out as
+    /// prose — a layout input rather than something a shell can skip at paint time, because
+    /// the number's width and its gap belong to the line whether or not anything is drawn.
     pub verse_numbers: u32,
 }
 
@@ -873,39 +764,30 @@ impl From<PlumblineLayoutConfig> for LayoutConfig {
             para_spacing: c.para_spacing,
             verse_break: c.verse_break != 0,
             verse_numbers: c.verse_numbers != 0,
-            // Overwritten by the caller from the open corpus's language; the
-            // ABI carries no direction. See `plumbline_engine_layout_chapter`.
+            // Overwritten from the open corpus's language; the ABI carries no direction.
+            // See `plumbline_engine_layout_chapter`.
             rtl: false,
         }
     }
 }
 
-/// Advance-width callback: given the caller's context pointer and a
-/// NUL-terminated UTF-8 run of text, return its width in device pixels in the
-/// reader's scripture font. The shell backs this with its native text stack so
-/// the hit regions this crate computes line up exactly with painted glyphs.
-///
-/// Nullable (`Option<fn>`): a null callback makes layout return null.
+/// Advance-width callback: given the caller's context pointer and a NUL-terminated UTF-8 run
+/// of text, return its width in device pixels in the reader's scripture font — backed by the
+/// caller's own text stack, so the hit regions this crate computes line up with painted
+/// glyphs. Nullable (`Option<fn>`): a null callback makes layout return null.
 ///
 /// # Contract — the callback MUST be total
-/// It must **not** throw or panic across the boundary and should return a
-/// **finite, non-negative** width. This crate's [`catch_unwind`] firewall only
-/// catches *Rust* panics; a foreign exception unwinding out of this callback is
-/// undefined behaviour — on .NET it fast-fails the process, on JNA it is
-/// swallowed and reported as `0.0`. A returned `NaN`/negative is clamped to
-/// `0.0` here (a degraded but safe layout) rather than corrupting line-breaking.
+/// It must not throw or panic across the boundary and should return a finite, non-negative
+/// width. The [`catch_unwind`] firewall catches only *Rust* panics; a foreign exception
+/// unwinding out of this callback is undefined behaviour. A `NaN`/negative is clamped to `0.0`
+/// here rather than corrupting line-breaking.
 ///
 /// # Contract — the config must describe the font the callback measures with
-/// Widths are **memoized on this side of the ABI** (see [`font_identity`]), and
-/// nothing in this ABI names a typeface. So a shell that changes the font the
-/// callback measures with must also move `line_height` or `space_width` in the
-/// [`PlumblineLayoutConfig`] it passes with it. Both shipped shells do so by
-/// construction, because they derive those two BY MEASURING in the current font
-/// — the web's `space_width` is `measure(" ")` through this very callback, and
-/// Android's is `Paint.measureText("n n") − measureText("nn")` off the same Paint,
-/// with `line_height` coming from that font's own metrics. A shell that switched
-/// typeface while holding both bit-identical would be handed the previous
-/// typeface's widths: a mis-laid-out chapter.
+/// Widths are memoized on this side of the ABI (see [`font_identity`]) and nothing in this ABI
+/// names a typeface, so a shell that changes the font the callback measures with must also
+/// move `line_height` or `space_width` in the [`PlumblineLayoutConfig`] it passes. Deriving
+/// both by measuring in the current font satisfies this by construction; a shell that switched
+/// typeface while holding both bit-identical would be handed the previous typeface's widths.
 pub type PlumblineMeasureFn = Option<extern "C" fn(ctx: *mut c_void, text: *const c_char) -> f32>;
 
 /// Adapts a C measurement callback to the [`Measure`] trait the layout wants.
@@ -920,12 +802,10 @@ impl Measure for FfiMeasure {
     fn text_width(&self, text: &str) -> f32 {
         let w = match CString::new(text) {
             Ok(c) => (self.f)(self.ctx, c.as_ptr()),
-            // Scripture text carries no interior NUL; if it ever did, a zero
-            // width is a harmless degrade rather than a crash.
+            // Scripture text carries no interior NUL; a zero width degrades rather than crashes.
             Err(_) => 0.0,
         };
-        // Defend line-breaking against a misbehaving callback: a NaN or negative
-        // width would poison the pen arithmetic, so clamp to a safe 0.0.
+        // A NaN or negative width from a misbehaving callback would poison the pen arithmetic.
         if w.is_finite() && w >= 0.0 {
             w
         } else {
@@ -934,41 +814,32 @@ impl Measure for FfiMeasure {
     }
 }
 
-/// The identity of the font the shell is measuring with, as far as this ABI can
-/// see it — the key the width memo is held under. Two layouts that agree on it
-/// may share remembered widths; anything else re-measures.
+/// The identity of the font the shell is measuring with, as far as this ABI can see it — the
+/// key the width memo is held under. Two layouts that agree on it share remembered widths.
 ///
-/// Nothing in this ABI names a typeface or a size, so the identity is the only
-/// two config fields a shell derives FROM the font it measures with:
-///
-///  - `space_width` — both shells obtain it by measuring in the current font, the
-///    web literally by calling the measure callback with `" "` at every layout, so
-///    it is a live probe of the text stack rather than a stored setting. That is
-///    what makes it notice a webfont that finished loading between two layouts.
-///  - `line_height` — that font's own extent times the reader's line spacing.
+/// Nothing in this ABI names a typeface or a size, so the identity is the two config fields a
+/// shell derives FROM the font it measures with: `space_width` (a live probe of the text stack
+/// — the web calls the measure callback with `" "` at every layout, which is what notices a
+/// webfont that finished loading between two layouts) and `line_height` (that font's extent
+/// times the reader's line spacing).
 ///
 /// Deliberately NOT in it:
 ///
-///  - The **callback's own address**. JNA allocates a native trampoline per
-///    `Callback` instance and `StudyEngine.LayoutChapter` builds a fresh
-///    `MeasureCallback` inside every call, so on Android that address changes from
-///    one chapter turn to the next (and can be reused after GC) — keying on it
-///    would empty the memo on every turn of the gold-standard shell. `measure_ctx`
-///    is null on Android and 0 on the web, so it discriminates nothing either.
-///  - `width`, `verse_break` and `verse_numbers`, none of which can change a
-///    glyph's advance — they move boxes around, and a box is measured the same
-///    wherever it lands. Leaving them out is what makes a rotation, a margin
-///    drag, a verse-per-line toggle or turning the numbers off re-lay out the
-///    chapter with **zero** crossings — the case the memo exists for.
-///    `para_indent`, `para_spacing` and `verse_num_gap` are arithmetic on the
-///    two fields above and would add nothing.
-///  - The AKJV overlay. It changes the TEXT, and the text is the memo's key, so a
-///    re-worded verse simply misses.
+///  - The **callback's own address**, nor `measure_ctx`. A binding may allocate a fresh
+///    trampoline per call (and reuse addresses after GC), so keying on it would empty the memo
+///    on every chapter turn.
+///  - `width`, `verse_break`, `verse_numbers` — none can change a glyph's advance, they only
+///    move boxes around. Leaving them out is what makes a rotation, a margin drag, a
+///    verse-per-line toggle or hiding the numbers re-lay out with zero crossings, which is the
+///    case the memo exists for. `para_indent`, `para_spacing` and `verse_num_gap` are
+///    arithmetic on the two fields above.
+///  - The AKJV overlay: it changes the TEXT, and the text is the memo's key, so a re-worded
+///    verse simply misses.
 fn font_identity(cfg: &PlumblineLayoutConfig) -> u64 {
-    // Packed rather than hashed: two f32s fit a u64 exactly, so this identity is
-    // lossless and there is no collision to reason about. Bit equality is the
-    // right test — a value that differs at all was computed from different font
-    // state, and the cost of an unnecessary clear is one slow layout.
+    // Packed rather than hashed: two f32s fit a u64 exactly, so the identity is lossless and
+    // there is no collision to reason about. Bit equality is the right test — a value that
+    // differs at all came from different font state, and an unnecessary clear costs one slow
+    // layout.
     ((cfg.line_height.to_bits() as u64) << 32) | cfg.space_width.to_bits() as u64
 }
 
@@ -979,29 +850,21 @@ fn guard<T>(default: T, f: impl FnOnce() -> T) -> T {
     catch_unwind(AssertUnwindSafe(f)).unwrap_or(default)
 }
 
-/// Guard for the authoring calls, whose result string is null on success and an
-/// owned error message otherwise. A panic surfaces as an error (not a false
-/// success), and the error string is only allocated on the panic path.
+/// Guard for the authoring calls, whose result string is null on success and an owned error
+/// message otherwise. A panic surfaces as an error, not a false success.
 fn guard_err(f: impl FnOnce() -> *mut c_char) -> *mut c_char {
     catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|_| out_string("internal error".to_string()))
 }
 
-/// The engine's own UTC stamp, in the frozen wire form
-/// `YYYY-MM-DDThh:mm:ssZ` — for the mutations whose shell caller sends none.
+/// The engine's own UTC stamp, in the frozen wire form `YYYY-MM-DDThh:mm:ssZ` — for the
+/// mutations whose caller sends none.
 ///
-/// **This is the only clock in the product's Rust.** The core is pure and takes
-/// every timestamp from its caller (`crates/core/src/civil.rs` says so), which is
-/// what keeps its tests deterministic; the shells send one for the authoring
-/// calls that CREATE something (`added`). But `updated` (docs/STABLE-IDS.md) has
-/// to move on every mutating save, including the several that carry no stamp at
-/// all — setting a thread's notes, clearing an entry's note, dropping a tag
-/// member — and an `updated` that only sometimes moves is worse than none: a
-/// future importer choosing between two copies would trust a stale one.
-///
-/// So the clock sits here, at the edge that already owns files and handles,
-/// rather than in the core or in seven new ABI parameters. Both shipped targets
-/// have a real one: Android natively, and the browser's WASI shim answers
-/// `clock_time_get(CLOCKID_REALTIME)` from `Date`. A clock that somehow reads
+/// The only clock in the product's Rust. The core is pure and takes every timestamp from its
+/// caller, which keeps its tests deterministic, and shells send one for the authoring calls
+/// that create something (`added`). But `updated` must move on every mutating save, including
+/// the several that carry no stamp (setting a thread's notes, clearing an entry's note,
+/// dropping a tag member), and an `updated` that only sometimes moves is worse than none. So
+/// the clock sits here, at the edge that already owns files and handles. A clock reading
 /// before the epoch yields the epoch rather than a negative stamp.
 fn now_stamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1018,8 +881,7 @@ fn out_string(s: String) -> *mut c_char {
     }
 }
 
-/// Serialize a wire DTO to a caller-freed JSON C string (null on the — for
-/// these plain data types, impossible — serialization error).
+/// Serialize a wire DTO to a caller-freed JSON C string; null on a serialization error.
 fn out_json<T: serde::Serialize>(value: &T) -> *mut c_char {
     match serde_json::to_string(value) {
         Ok(s) => out_string(s),
@@ -1050,7 +912,7 @@ unsafe fn set_err(out_err: *mut *mut c_char, msg: String) {
     }
 }
 
-// ── version probe (kept from the stub) ─────────────────────────────────────────
+// ── version probe ─────────────────────────────────────────────────────────────
 
 /// The Plumbline core version as a caller-freed NUL-terminated UTF-8 string.
 /// Never null.
@@ -1072,39 +934,31 @@ pub unsafe extern "C" fn plumbline_string_free(ptr: *mut c_char) {
 
 // ── engine lifecycle ────────────────────────────────────────────────────────────
 
-/// The corpus file for a language, under `home` — the path, not a promise that
-/// it is there.
-///
-/// One place, so the engine, the hydrator and any tool agree. The file comes
-/// from the language's row in the registry (`plumbline_core::i18n`) — English
-/// `data/kjv.jsonl`, German `data/luther1912.jsonl`, Spanish `data/rv1909.jsonl`
-/// (`data-prep/README.md`). Whether it can actually be opened is
-/// [`open_corpus`]'s question.
+/// The corpus file for a language, under `home` — the path, not a promise that it is there
+/// ([`open_corpus`] asks that). One place, so the engine, the hydrator and any tool agree; the
+/// file name comes from the language's row in `plumbline_core::i18n`.
 pub fn corpus_for(home: &str, lang: i18n::Lang) -> PathBuf {
     PathBuf::from(home).join("data").join(lang.corpus().file)
 }
 
-/// The Strong's dictionary for the active language: the localized one when the
-/// language's row names it and the pack shipped it (machine-translated
-/// definitions + renderings derived from that language's own tagged corpus —
-/// BIBLIOGRAPHY.md), else the English source. Same file shape either way; the
-/// bool says which, so the panel can label the renderings for the right Bible
-/// and carry the machine-translation caveat.
+/// The Strong's dictionary for the active language: the localized one when the language's row
+/// names it and the pack shipped it (machine-translated definitions + renderings from that
+/// language's own tagged corpus), else the English source. Same file shape either way; the
+/// bool says which, so the panel can label renderings for the right Bible and carry the
+/// machine-translation caveat.
 fn strongs_for(data: &std::path::Path) -> (PathBuf, bool) {
     strongs_for_lang(data, i18n::active())
 }
 
-/// [`strongs_for`] for an EXPLICIT language — what a second engine opened on
-/// another text needs, since the active language is the UI's and a pane's text
-/// language is now its own (see [`plumbline_engine_open_lang`]).
+/// [`strongs_for`] for an explicit language — what a second engine opened on another text
+/// needs, since the active language is the UI's and a pane's text language is its own (see
+/// [`plumbline_engine_open_lang`]).
 ///
-/// `localizedLexiconOff` still applies: it is a preference about DEFINITIONS
-/// ("give me Strong's own English"), not about which Bible is on screen, so it
-/// holds for every pane the reader opens.
+/// `localizedLexiconOff` still applies: it is a preference about definitions, not about which
+/// Bible is on screen, so it holds for every pane.
 fn strongs_for_lang(data: &std::path::Path, lang: i18n::Lang) -> (PathBuf, bool) {
     let base = data.join(i18n::Lang::En.spec().lexicon.map(|l| l.file).unwrap_or("strongs.json"));
-    // Read here, at pick time, because the toggle reloads the app exactly like a
-    // language change does.
+    // Read at pick time, because the toggle reloads the app exactly like a language change.
     if !config::load().0.localized_lexicon_off {
         if let Some(lex) = lang.spec().lexicon {
             let local = data.join(lex.file);
@@ -1118,23 +972,20 @@ fn strongs_for_lang(data: &std::path::Path, lang: i18n::Lang) -> (PathBuf, bool)
 
 /// The corpus for `lang`, falling back to the KJV when it will not open.
 ///
-/// BY TRYING, not by testing for the file, and the difference is not academic:
-/// the web's home is a WASI shim over an in-memory tree where `Path::exists` does
-/// not answer usefully, so an existence check silently sent every German reader
-/// to the English text (caught by e2e/language.spec.ts). "Can this be opened" is
-/// also the question actually being asked.
+/// By TRYING, not by testing for the file: the web's home is a WASI shim over an in-memory
+/// tree where `Path::exists` does not answer usefully, so an existence check silently sends
+/// every non-English reader to the English text.
 ///
-/// The fallback is the ordinary case rather than an error path: the German text
-/// is an optional download, so a reader who switches language before fetching it
-/// gets a German interface over the English text and a Bible either way.
+/// The fallback is the ordinary case rather than an error path — a translation is an optional
+/// download, so a reader who switches language before fetching it gets a localized interface
+/// over the English text, and a Bible either way.
 fn open_corpus(home: &str, lang: i18n::Lang) -> Result<Corpus, plumbline_core::Error> {
     let path = corpus_for(home, lang);
     match corpus::load_corpus(&path) {
         Ok(c) => Ok(c),
         Err(e) if lang != i18n::Lang::En => {
-            // The reader is owed a Bible, not a diagnosis — but somebody
-            // debugging a device deserves to know which text they are looking at
-            // and why it is not the one they asked for.
+            // The reader is owed a Bible, not a diagnosis; someone debugging a device is owed
+            // the reason the text is not the one they asked for.
             eprintln!("plumbline: {} unavailable ({e}); opening the KJV", path.display());
             corpus::load_corpus(corpus_for(home, i18n::Lang::En))
         }
@@ -1161,15 +1012,9 @@ pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mu
             set_err(out_err, "home path is null or not valid UTF-8".into());
             return ptr::null_mut();
         };
-        // WHICH TEXT. The reader's language decides, and the language was set by
-        // `plumbline_i18n_set_language` before this call — both shells do that in
-        // their startup, before anything reads a book name.
-        //
-        // FALLS BACK TO THE KJV when the German corpus is not on the device, and
-        // that is the common case rather than an error: the German text is an
-        // optional download, so a reader who has switched language but not yet
-        // fetched it gets a German interface over the English text instead of a
-        // dead app. The shell offers the download; nothing here fails.
+        // Which text: the reader's language decides, set by `plumbline_i18n_set_language`
+        // before this call. Falls back to the KJV when that corpus is not on the device — see
+        // [`open_corpus`]; the shell offers the download and nothing here fails.
         let corpus = match open_corpus(home, i18n::active()) {
             Ok(c) => c,
             Err(e) => {
@@ -1177,10 +1022,9 @@ pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mu
                 return ptr::null_mut();
             }
         };
-        // Stage-1 boots (web) may not have strongs.json yet — open on the
-        // corpus alone; load_core_data brings the dictionary in later. A file
-        // that EXISTS but fails to parse stays a hard error. A German reader
-        // gets strongs-de.json when the pack ships it (`strongs_for`).
+        // Stage-1 boots (web) may not have strongs.json yet — open on the corpus alone and let
+        // `load_core_data` bring the dictionary in later. A file that EXISTS but fails to
+        // parse stays a hard error.
         let (strongs_path, strongs_is_localized) = strongs_for(&PathBuf::from(home).join("data"));
         let strongs = if strongs_path.exists() {
             match strongs::load_strongs(&strongs_path) {
@@ -1199,27 +1043,24 @@ pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mu
     })
 }
 
-/// Open a SECOND engine on a named language's text — what a per-pane language
-/// rides on: German beside English, without the UI language moving.
+/// Open a SECOND engine on a named language's text — what a per-pane language rides on: one
+/// text beside another, without the UI language moving.
 ///
-/// The same home, so the reader's own data (threads, tags, weaves, notes) is
-/// the SAME data — every text sits at the KJV's verse addresses, so a refKey
-/// means one verse in all of them and nothing needs mapping. After an authoring
-/// write, call [`plumbline_engine_load_core_data`] on this handle too, or its
-/// study view stays as it was when it opened.
+/// The same home, so the reader's own data (threads, tags, weaves, notes) is the same data:
+/// every text sits at the KJV's verse addresses, so a refKey means one verse in all of them
+/// and nothing needs mapping. After an authoring write, call
+/// [`plumbline_engine_load_core_data`] on this handle too, or its study view stays as it was
+/// when it opened.
 ///
-/// TWO DIFFERENCES from [`plumbline_engine_open`], both deliberate:
+/// Two deliberate differences from [`plumbline_engine_open`]: the language is a parameter, not
+/// the global the UI language lives in; and there is NO English fallback, because the caller
+/// asked for one specific text to put beside another and handing back the one already on
+/// screen would paint English under a pane labelled otherwise. A missing text is an error the
+/// shell can act on — it is the shell that offers the download.
 ///
-/// 1. The language is a PARAMETER, not the global the UI language lives in.
-/// 2. There is NO English fallback. `plumbline_engine_open` falls back because
-///    a reader is owed a Bible; here the caller asked for one specific text to
-///    put beside another, and quietly handing back the one already on screen
-///    would paint English under a pane labelled Deutsch. A missing text is an
-///    error the shell can act on — it is the shell that offers the download.
-///
-/// Returns null on failure (unknown language code, or the text is not on the
-/// device); `out_err` behaves as in [`plumbline_engine_open`]. Free it with
-/// [`plumbline_engine_free`] like any other engine.
+/// Returns null on failure (unknown language code, or the text is not on the device);
+/// `out_err` behaves as in [`plumbline_engine_open`]. Free it with [`plumbline_engine_free`]
+/// like any other engine.
 ///
 /// # Safety
 /// `home` and `lang` are valid NUL-terminated UTF-8; `out_err` is null or a
@@ -1238,8 +1079,8 @@ pub unsafe extern "C" fn plumbline_engine_open_lang(
             set_err(out_err, "home path or language is null or not valid UTF-8".into());
             return ptr::null_mut();
         };
-        // STRICT: `Lang::parse` reads an unknown code as English, which is right
-        // for a UI language and wrong here for the same reason the fallback is.
+        // Strict: `Lang::parse` reads an unknown code as English, which is right for a UI
+        // language and wrong here for the same reason the fallback is.
         let Some(lang) = i18n::Lang::shipped(code) else {
             set_err(out_err, format!("this build does not ship the language `{code}`"));
             return ptr::null_mut();
@@ -1270,9 +1111,9 @@ pub unsafe extern "C" fn plumbline_engine_open_lang(
     })
 }
 
-/// Open an engine from in-memory bytes — for shells that bundle the data as
-/// assets/resources (decision #3): the `kjv.jsonl` text and the `strongs.json`
-/// object, each as a length-delimited byte buffer (need not be NUL-terminated).
+/// Open an engine from in-memory bytes — for shells that bundle the data as assets: the
+/// `kjv.jsonl` text and the `strongs.json` object, each as a length-delimited byte buffer
+/// (need not be NUL-terminated).
 ///
 /// Returns null on failure; `out_err` behaves as in [`plumbline_engine_open`].
 ///
@@ -1458,13 +1299,11 @@ pub unsafe extern "C" fn plumbline_engine_token_json(
 
 // ── the plain-English overlay ────────────────────────────────────────────────────
 
-/// Switch the AKJV overlay on or off for this engine. Off by default: the text
-/// is the KJV, and the overlay is a reading aid the reader opts into.
+/// Switch the AKJV overlay on or off for this engine. Off by default: the text is the KJV, and
+/// the overlay is a reading aid the reader opts into.
 ///
-/// Affects the READER only. Memory cards, Present, copied text and shared links
-/// are the KJV whatever this says — a modernised word must never end up on
-/// someone's memory card or in a hand-off, or the overlay has quietly become a
-/// second translation.
+/// Affects the READER only — memory cards, Present, copied text and shared links stay the KJV
+/// whatever this says, or the overlay has quietly become a second translation.
 ///
 /// # Safety
 /// `engine` is a live engine or null.
@@ -1486,10 +1325,9 @@ pub unsafe extern "C" fn plumbline_engine_akjv_available(engine: *const Plumblin
     engine.as_ref().is_some_and(|e| e.akjv().is_some())
 }
 
-/// What the AKJV does to one token, as `{"akjv":"you shall","kjv":"thou shalt"}`
-/// — the line a word study shows under the headword. Null when the token is not
-/// re-rendered, or on a bad ref. `kjv` is the run's ORIGINAL words, which is the
-/// whole point: the reader can always see what was replaced.
+/// What the AKJV does to one token, as `{"akjv":"you shall","kjv":"thou shalt"}` — the line a
+/// word study shows under the headword. Null when the token is not re-rendered, or on a bad
+/// ref. `kjv` is the run's original words, so the reader can always see what was replaced.
 ///
 /// # Safety
 /// `engine` is valid; `ref_key` is null or a valid NUL-terminated UTF-8 string.
@@ -1542,9 +1380,8 @@ pub unsafe extern "C" fn plumbline_engine_layout_chapter(
         let (Some(engine), Some(book), Some(measure)) = (engine.as_ref(), opt_str(book), measure) else {
             return ptr::null_mut();
         };
-        // The ABI takes u32 to match the bindings' `uint`; a value outside the
-        // corpus's u16 chapter domain simply cannot exist (return null, don't
-        // wrap it into a different real chapter).
+        // The ABI takes u32 to match the bindings' `uint`; a value outside the corpus's u16
+        // chapter domain cannot exist — return null rather than wrapping it into a real one.
         let Ok(chapter) = u16::try_from(chapter) else {
             return ptr::null_mut();
         };
@@ -1553,10 +1390,8 @@ pub unsafe extern "C" fn plumbline_engine_layout_chapter(
             return ptr::null_mut();
         }
         let shell = FfiMeasure { f: measure, ctx: measure_ctx };
-        // The overlay is applied HERE, on the way into the layout, so the
-        // corpus itself is never touched and a verse the AKJV leaves alone
-        // costs nothing (`overlay_verse` returns None and the original is laid
-        // out in place).
+        // The overlay is applied here, on the way into the layout, so the corpus is never
+        // touched and a verse the AKJV leaves alone costs nothing.
         let overlaid: Vec<plumbline_core::corpus::Verse>;
         let verses = match engine.akjv_view() {
             Some(a) => {
@@ -1565,38 +1400,23 @@ pub unsafe extern "C" fn plumbline_engine_layout_chapter(
             }
             None => verses,
         };
-        // Measure through the engine's memo. Counted from `data/kjv.jsonl`:
-        // 58% of a cold chapter's measurements are of a run this
-        // layout already measured (Gen 1: 828 runs, 229 distinct), 84% over twenty
-        // consecutive chapters through one memo, and a re-layout at the same font
-        // measures nothing at all. It sits below the ABI, so Android's JNA upcalls
-        // and the web's wasm→JS crossings both shrink from one implementation —
-        // and the web's `measureCalls()` diagnostic stays honest, because a memo
-        // hit never reaches the callback that increments it.
+        // Measure through the engine's memo: ~58% of a cold chapter's measurements repeat a
+        // run this layout already measured, 84% over twenty consecutive chapters, and a
+        // re-layout at the same font measures nothing. The web's `measureCalls()` diagnostic
+        // stays honest, because a memo hit never reaches the callback that increments it.
         let m = Memoized::new(&engine.measure_memo, font_identity(&cfg), &shell);
-        // DIRECTION IS DERIVED FROM THE OPEN TEXT, not taken from the shell.
-        //
-        // It could have been a field on `PlumblineLayoutConfig`, and that would
-        // be an ABI break for a fact neither shell is in a position to know
-        // better than the engine: the corpus's own tokenization stamp names its
-        // language, and the language's row says which way it reads. A shell
-        // that passed direction could disagree with the text it is showing —
-        // which is exactly what happens to a reader whose Arabic download has
-        // not landed yet and who is therefore looking at the KJV.
-        //
-        // Not part of `font_identity`, deliberately: the memo caches WIDTHS,
-        // and a word is the same width whichever way the line runs. The mirror
-        // happens after every measurement is in.
+        // Direction is derived from the open TEXT, not passed by the shell: the corpus's
+        // tokenization stamp names its language and the language's row says which way it
+        // reads, so a shell passing direction could disagree with the text it is showing (a
+        // reader whose Arabic download has not landed is looking at the KJV). Deliberately not
+        // part of `font_identity` — the memo caches widths, and a word is the same width
+        // whichever way the line runs.
         let mut layout = LayoutConfig::from(cfg);
         let text_lang = plumbline_core::i18n::Lang::for_tokenization(engine.corpus.tokenization_version());
         layout.rtl = text_lang.is_some_and(|l| l.is_rtl());
-        // AND SO IS THE INTER-TOKEN GAP, for the same reason and by the same
-        // route. The shell measures a space in the reader's font and passes
-        // its width, which is right for every spaced script — but Chinese is
-        // written unspaced and its corpora tokenize one character per token
-        // (`build-cuv.py`), so the space the shell measured must not be laid
-        // between them. Zeroed here rather than shipped as an ABI field: the
-        // corpus knows its script, the shell doesn't need to.
+        // The inter-token gap likewise. A shell measures a space in the reader's font, which
+        // is right for every spaced script — but Chinese is written unspaced and its corpora
+        // tokenize one character per token, so that space must not be laid between them.
         if text_lang.is_some_and(|l| l.script() == plumbline_core::i18n::Script::Han) {
             layout.space_width = 0.0;
         }
@@ -1823,12 +1643,11 @@ pub unsafe extern "C" fn plumbline_engine_search_json(
     })
 }
 
-/// [`plumbline_engine_search_json`] narrowed to a scope — the search screen's
-/// chips. `scope` is `all` | `ot` | `nt` | `book:<osis>` |
-/// `chapter:<osis>:<ch>`; anything else (or null) searches everything.
+/// [`plumbline_engine_search_json`] narrowed to a scope. `scope` is `all` | `ot` | `nt` |
+/// `book:<osis>` | `chapter:<osis>:<ch>`; anything else (or null) searches everything.
 ///
-/// A REFERENCE query still answers `goto` whatever the scope: the reader typed
-/// an address, and a chip must not refuse to take them there.
+/// A reference query still answers `goto` whatever the scope — the reader typed an address,
+/// and a scope chip must not refuse to take them there.
 ///
 /// # Safety
 /// `engine` is valid; `query` is a valid NUL-terminated UTF-8 string; `scope`
@@ -1919,15 +1738,13 @@ pub unsafe extern "C" fn plumbline_engine_suggested_weaves_json(engine: *const P
 
 // ── R&D tier: read (morphology, fused bridge) ────────────────────────────────
 //
-// These consume the offline artifacts loaded at open (see `data-prep`). Each
-// returns null when its artifact is absent (or the engine/ref is invalid), so a
-// shell shows the section exactly when it exists — no training happens here.
+// These consume the offline artifacts loaded at open (see `data-prep`). Each returns null when
+// its artifact is absent, so a shell shows the section exactly when it exists.
 
 /// The fused OT↔NT bridge partners of a Strong's code as JSON:
-/// `{"code","partners":[{code,sources,prior}]}`, ranked by trust prior. The
-/// etymology layer works from the dictionary alone, so this is available even
-/// for a bytes-opened engine (external witnesses need a home). Null on a null
-/// engine / invalid code.
+/// `{"code","partners":[{code,sources,prior}]}`, ranked by trust prior. The etymology layer
+/// works from the dictionary alone, so this is available even for a bytes-opened engine
+/// (external witnesses need a home). Null on a null engine / invalid code.
 ///
 /// # Safety
 /// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
@@ -1946,9 +1763,8 @@ pub unsafe extern "C" fn plumbline_engine_bridge_partners_json(
             .unwrap_or_default()
             .into_iter()
             .map(|p| {
-                // Authority provenance, classified once here (overlay `Tier`):
-                // the additive tier set + research-grade flag travel with each
-                // partner so non-Rust shells need not reimplement the mapping.
+                // Provenance classified once here, so the tier set and research-grade flag
+                // travel with each partner and no shell reimplements the mapping.
                 let tiers = bridge::tiers_of(&p.sources).into_iter().map(|t| t.wire_name().to_string()).collect();
                 let research_grade = p.sources.iter().any(|s| bridge::research_grade(s));
                 wire::WireBridgePartner { code: p.code, sources: p.sources, prior: p.prior, tiers, research_grade }
@@ -1987,11 +1803,10 @@ pub unsafe extern "C" fn plumbline_engine_morph_json(
 
 // ── study data: authoring (write) ──────────────────────────────────────────────
 //
-// These mutate on-disk study data through the cross-platform `core::store`
-// atomic writer, then reload the engine's in-memory copies. Each returns **null
-// on success** and an owned error string on failure (free it with
-// `plumbline_string_free`). All require an engine opened from a home directory
-// (`plumbline_engine_open`); an engine opened from bytes returns an error.
+// These mutate on-disk study data through `core::store`'s atomic writer, then reload the
+// engine's in-memory copies. Each returns **null on success** and an owned error string on
+// failure (free it with `plumbline_string_free`). All require an engine opened from a home
+// directory; an engine opened from bytes returns an error.
 
 /// Add the whole verse `ref_key` to the thread named `name` (created on first
 /// use). `note` may be null; `added` is a caller-supplied UTC timestamp.
@@ -2039,9 +1854,8 @@ pub unsafe extern "C" fn plumbline_engine_thread_add(
 }
 
 /// Delete the thread named `name` — its file and every entry on it. Matched
-/// case-insensitively, like `plumbline_engine_thread_add`. A name with no thread
-/// is a success (the caller wanted it gone; it is gone). Null on success, else an
-/// owned error string.
+/// case-insensitively, like `plumbline_engine_thread_add`. A name with no thread is a success.
+/// Null on success, else an owned error string.
 ///
 /// # Safety
 /// `engine` is valid; `name` is null or valid NUL-terminated UTF-8.
@@ -2159,10 +1973,8 @@ pub unsafe extern "C" fn plumbline_engine_tag_remove(
 }
 
 /// Delete the whole tag named `name` — its file and every member on it. Matched
-/// case-insensitively, like `plumbline_engine_tag_add`. A name with no tag is a
-/// success (the caller wanted it gone; it is gone). The members' verses are the
-/// canon's, not the tag's — nothing else is touched. Null on success, else an
-/// owned error string.
+/// case-insensitively, like `plumbline_engine_tag_add`. A name with no tag is a success. Null
+/// on success, else an owned error string.
 ///
 /// # Safety
 /// `engine` is valid; `name` is null or valid NUL-terminated UTF-8.
@@ -2189,14 +2001,12 @@ pub unsafe extern "C" fn plumbline_engine_tag_delete(engine: *mut PlumblineEngin
     })
 }
 
-/// Rename the tag `from` to `to`, KEEPING ITS IDENTITY. Matched
-/// case-insensitively, like the other tag calls. A change of case only is a
-/// legal rename onto itself.
+/// Rename the tag `from` to `to`, keeping its identity. Matched case-insensitively, like the
+/// other tag calls; a change of case only is a legal rename onto itself.
 ///
-/// Refuses a blank new name, and refuses a name another tag already answers to —
-/// that is a MERGE, which is destructive and has to be asked for by name
-/// (`plumbline_engine_tag_merge`) rather than fallen into because two names
-/// collided. A `from` that names no tag is a success with nothing done.
+/// Refuses a blank new name, and refuses a name another tag already answers to — that is a
+/// merge, which is destructive and must be asked for by name (`plumbline_engine_tag_merge`)
+/// rather than fallen into. A `from` that names no tag is a success with nothing done.
 ///
 /// Null on success, else an owned error string.
 ///
@@ -2229,11 +2039,9 @@ pub unsafe extern "C" fn plumbline_engine_tag_rename(
     })
 }
 
-/// Set or clear the tag's CATEGORY — the grouping heading the tag lists file it
-/// under. An empty (or blank) `category` clears it. The management screen's
-/// verb: nothing on the reading path calls this. A `name` that answers to no
-/// tag is a success with nothing done, and setting the category a tag already
-/// carries writes nothing.
+/// Set or clear the tag's category — the grouping heading the tag lists file it under. An
+/// empty (or blank) `category` clears it. A `name` that answers to no tag is a success with
+/// nothing done, and setting the category a tag already carries writes nothing.
 ///
 /// Null on success, else an owned error string.
 ///
@@ -2266,14 +2074,12 @@ pub unsafe extern "C" fn plumbline_engine_tag_set_category(
     })
 }
 
-/// Fold the tag `from` into the tag `into`, then delete `from`. Members already
-/// in `into` are not duplicated, and the SURVIVOR's copy of a shared member wins
-/// — letting the source overwrite would discard a note the reader wrote on the
-/// tag they chose to keep.
+/// Fold the tag `from` into the tag `into`, then delete `from`. Members already in `into` are
+/// not duplicated, and the survivor's copy of a shared member wins — letting the source
+/// overwrite would discard a note the reader wrote on the tag they chose to keep.
 ///
-/// DESTRUCTIVE: the source tag's file is removed. Refuses a merge of a tag into
-/// itself (source and destination would be one file, written and then deleted)
-/// and refuses a name that no tag answers to.
+/// Destructive: the source tag's file is removed. Refuses a merge of a tag into itself (source
+/// and destination would be one file, written and then deleted) and refuses an unknown name.
 ///
 /// Null on success, else an owned error string.
 ///
@@ -2353,16 +2159,14 @@ pub unsafe extern "C" fn plumbline_engine_weave_add_link(
     })
 }
 
-/// Weave a tag's passages into a canon-ordered **chain** of links — the
-/// accumulate-then-organize flow: the reader tags a topic over time (e.g.
-/// "Rapture"), then turns the tag — or a chosen subset of its members — into a
-/// weave to read as one thread through the canon. Re-running after the tag
-/// grows just adds the new edges (find-or-create + link dedup).
+/// Weave a tag's passages into a canon-ordered **chain** of links: the reader tags a topic
+/// over time, then turns the tag — or a chosen subset of its members — into a weave to read as
+/// one thread through the canon. Re-running after the tag grows adds only the new edges
+/// (find-or-create + link dedup).
 ///
-/// `refs_json` is null to take every verse member, else a JSON array of
-/// refKeys selecting a subset (non-members are ignored). `weave_name` is null
-/// to reuse the tag's name. Returns null on success, else a caller-freed
-/// error string.
+/// `refs_json` is null to take every verse member, else a JSON array of refKeys selecting a
+/// subset (non-members are ignored). `weave_name` is null to reuse the tag's name. Returns
+/// null on success, else a caller-freed error string.
 ///
 /// # Safety
 /// `engine` is a valid engine from `plumbline_engine_open*`; string params are null
@@ -2433,10 +2237,10 @@ fn nth_suggested(weaves: &[LoadedWeave], index: usize) -> Option<usize> {
     weaves.iter().enumerate().filter(|(_, lw)| weave::is_suggested(lw)).nth(index).map(|(i, _)| i)
 }
 
-/// **Approve** the `index`-th suggested weave: promote it into `home/weaves`
-/// with all links approved (merging into a same-named weave there if present)
-/// and remove the suggestion. `index` is the ordinal from
-/// `plumbline_engine_suggested_weaves_json`. Null on success, else an owned error.
+/// Approve the `index`-th suggested weave: promote it into `home/weaves` with all links
+/// approved (merging into a same-named weave there if present) and remove the suggestion.
+/// `index` is the ordinal from `plumbline_engine_suggested_weaves_json`. Null on success, else
+/// an owned error.
 ///
 /// # Safety
 /// `engine` is a valid engine pointer.
@@ -2463,9 +2267,8 @@ pub unsafe extern "C" fn plumbline_engine_weave_approve(engine: *mut PlumblineEn
     })
 }
 
-/// **Reject** the `index`-th suggested weave: delete its file. `index` is the
-/// ordinal from `plumbline_engine_suggested_weaves_json`. Null on success, else an
-/// owned error.
+/// Reject the `index`-th suggested weave: delete its file. `index` is the ordinal from
+/// `plumbline_engine_suggested_weaves_json`. Null on success, else an owned error.
 ///
 /// # Safety
 /// `engine` is a valid engine pointer.
@@ -2492,11 +2295,10 @@ pub unsafe extern "C" fn plumbline_engine_weave_reject(engine: *mut PlumblineEng
     })
 }
 
-/// **Delete** the `index`-th weave in the library — its file and every link on
-/// it. `index` is the flat-library ordinal (`plumbline_engine_weaves_json`, the
-/// `weave:i` link verb) — NOT the suggested ordinal `plumbline_engine_weave_reject`
-/// takes. It reaches a suggestion too: deleting one is the same act as
-/// rejecting it. Null on success, else an owned error.
+/// Delete the `index`-th weave in the library — its file and every link on it. `index` is the
+/// flat-library ordinal (`plumbline_engine_weaves_json`, the `weave:i` link verb), NOT the
+/// suggested ordinal `plumbline_engine_weave_reject` takes. It reaches a suggestion too:
+/// deleting one is the same act as rejecting it. Null on success, else an owned error.
 ///
 /// # Safety
 /// `engine` is a valid engine pointer.
@@ -2594,9 +2396,9 @@ pub unsafe extern "C" fn plumbline_engine_thread_entry_set_note(
     })
 }
 
-/// Drop entry `index` from the thread named `name`. Null on success, else an
-/// owned error. The thread SURVIVES its last entry — deleting the thread itself
-/// is [`plumbline_engine_thread_remove`], asked for deliberately.
+/// Drop entry `index` from the thread named `name`. Null on success, else an owned error. The
+/// thread survives its last entry — deleting the thread itself is
+/// [`plumbline_engine_thread_remove`].
 ///
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -2627,13 +2429,10 @@ pub unsafe extern "C" fn plumbline_engine_thread_entry_remove(
     })
 }
 
-/// Move entry `from` to position `to` in the thread named `name`. Null on
-/// success, else an owned error.
-///
-/// A thread's ORDER is the argument it makes, so this is a reorder rather than
-/// a sort. `to` past the end clamps to the last position, so "move the last one
-/// down" is a no-op instead of an error the shell has to special-case — and a
-/// no-op does not rewrite the file.
+/// Move entry `from` to position `to` in the thread named `name`. Null on success, else an
+/// owned error. `to` past the end clamps to the last position, so "move the last one down" is
+/// a no-op rather than an error the shell must special-case — and a no-op does not rewrite the
+/// file.
 ///
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -2697,8 +2496,7 @@ pub unsafe extern "C" fn plumbline_engine_weave_set_notes(
     })
 }
 
-// ── shell-parity endpoints (margin notes, TSK, weave library, concept, gloss,
-//    span links, config) — see docs/FEATURE-MANIFEST.md ─────────────────────────
+// ── margin notes, TSK, weave library, concept, gloss, span links, config ─────
 
 /// A verse's 1769 translators' margin notes as JSON, or null when the verse
 /// has none (or the engine was opened from bytes).
@@ -2763,11 +2561,10 @@ pub unsafe extern "C" fn plumbline_engine_weaves_json(engine: *const PlumblineEn
     })
 }
 
-/// Every weave link as a deduped canonical verse pair, each endpoint located
-/// (ref key + book/chapter/verse) and flagged `resolved` when both ends are in
-/// the corpus. The one derivation behind the ambient connector lines and the
-/// chord map, so a shell neither dedupes nor parses ref keys itself. Never null
-/// on a live engine (empty library → empty list).
+/// Every weave link as a deduped canonical verse pair, each endpoint located (ref key +
+/// book/chapter/verse) and flagged `resolved` when both ends are in the corpus — the one
+/// derivation behind the connector lines and the chord map, so a shell neither dedupes nor
+/// parses ref keys itself. Never null on a live engine (empty library → empty list).
 ///
 /// # Safety
 /// `engine` is a live engine (or null → null).
@@ -2779,14 +2576,13 @@ pub unsafe extern "C" fn plumbline_engine_link_pairs_json(engine: *const Plumbli
     })
 }
 
-/// The canon overview segmentation: the 8 sections as `(label, first, last)`
-/// book indices over the 66 books, plus the OT/NT divide (39). Static data
-/// frozen in `core::reference` — served here so a non-Rust shell consumes the
-/// one source instead of re-hardcoding the bands. Never null on a live engine.
+/// The canon overview segmentation: the 8 sections as `(label, first, last)` book indices over
+/// the 66 books, plus the OT/NT divide (39). Static data frozen in `core::reference`, served
+/// here so no shell re-hardcodes the bands. Never null on a live engine.
 ///
 /// # Safety
-/// `engine` is a live engine (or null → null); the payload does not depend on
-/// engine state, but the arg keeps the call shape uniform.
+/// `engine` is a live engine (or null → null); the payload does not depend on engine state,
+/// but the arg keeps the call shape uniform.
 #[no_mangle]
 pub unsafe extern "C" fn plumbline_engine_canon_segments_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
@@ -2834,11 +2630,10 @@ pub unsafe extern "C" fn plumbline_engine_hymn_json(
     })
 }
 
-/// The book-to-book weave chord map: canon-ordered book-pair counts over the
-/// deduped link pairs (`{pairs:[{a,b,count}], max, otNtDivide, bookCount}`),
-/// where `a`/`b` are book indices (`a <= b`). The one fold behind the "Weave
-/// map" popup, so a shell lays out ribbons without folding pairs or deriving the
-/// max. Never null on a live engine (empty library → empty pairs, max 1).
+/// The book-to-book weave chord map: canon-ordered book-pair counts over the deduped link
+/// pairs (`{pairs:[{a,b,count}], max, otNtDivide, bookCount}`), where `a`/`b` are book indices
+/// (`a <= b`), so a shell lays out ribbons without folding pairs or deriving the max. Never
+/// null on a live engine (empty library → empty pairs, max 1).
 ///
 /// # Safety
 /// `engine` is a live engine (or null → null).
@@ -2850,14 +2645,12 @@ pub unsafe extern "C" fn plumbline_engine_chord_map_json(engine: *const Plumblin
     })
 }
 
-/// One laid-out page of the constellation (the weave-library overview popup):
-/// lanes with nodes + edges as **fractions**, plus the pin/paging state already
-/// resolved into a caption. The shell holds the transient `page` and `pins`
-/// (weave indices, the same handles the lanes carry) and passes them in;
-/// everything derived — usable filter, largest-first order, per-verse degree,
-/// jitter, lane assignment, paging — lives here. `pins_json` is a JSON array of
-/// weave indices (e.g. `"[3,7]"`); null / empty / malformed means no pins.
-/// Never null on a live engine.
+/// One laid-out page of the constellation (the weave-library overview popup): lanes with
+/// nodes + edges as fractions, plus the pin/paging state resolved into a caption. The shell
+/// holds the transient `page` and `pins` (weave indices, the handles the lanes carry) and
+/// passes them in; everything derived — usable filter, largest-first order, per-verse degree,
+/// jitter, lane assignment, paging — lives here. `pins_json` is a JSON array of weave indices
+/// (e.g. `"[3,7]"`); null / empty / malformed means no pins. Never null on a live engine.
 ///
 /// # Safety
 /// `engine` is a live engine (or null → null); `pins_json` is null or valid
@@ -2920,8 +2713,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_json(
                 })
                 .collect(),
             by_book: stat.by_book.clone(),
-            // Same name filter as the radial map: a concept's neighbours are
-            // concepts (see `name_noise`).
+            // A concept's neighbours are concepts (see `name_noise`).
             collocates: wire::scored_to_wire(
                 ce.collocates(code, 48).into_iter().filter(|(c, _)| !name_noise(e, c)).take(12).collect(),
             ),
@@ -2931,15 +2723,13 @@ pub unsafe extern "C" fn plumbline_engine_concept_json(
     })
 }
 
-/// The proper nouns that stay in a concept neighbourhood. In this corpus the
-/// divine name and Christ *are* concepts, not incidental names — everything
-/// the book says about salvation runs through them.
+/// The proper nouns that stay in a concept neighbourhood: the divine name and Christ are
+/// concepts here, not incidental names.
 const CONCEPT_KEEP_NAMES: &[&str] = &["H3068", "H3069", "H3050", "H136", "G2424", "G5547"];
 
-/// Whether `code` is a proper noun that has no business ringing a concept:
-/// "faith" surrounded by Ephraim, Jerusalem and Shechem reads as noise rather
-/// than meaning. Names stay fully reachable in word study,
-/// concordance and search; only the collocate lists drop them.
+/// Whether `code` is a proper noun that has no business ringing a concept — "faith" surrounded
+/// by Ephraim, Jerusalem and Shechem reads as noise. Only the collocate lists drop these;
+/// names stay reachable in word study, concordance and search.
 fn name_noise(e: &PlumblineEngine, code: &str) -> bool {
     !CONCEPT_KEEP_NAMES.contains(&code) && e.strongs().get(code).is_some_and(strongs::is_proper_noun)
 }
@@ -2965,19 +2755,17 @@ pub unsafe extern "C" fn plumbline_engine_gloss(engine: *const PlumblineEngine, 
 
 // ── the study-panel content model ─────────────────────────────────────────────
 //
-// One Rust producer (`plumbline_core::panel`) builds the typed block list for every
-// panel view; this projects the engine's data into it and serves the blocks as
-// JSON. `full` (Full study vs simple reader) is a shell setting, so the endpoints
-// that gate on it take a `full` flag — the FFI itself is mode-agnostic.
+// `plumbline_core::panel` builds the typed block list for every panel view; this projects the
+// engine's data into it and serves the blocks as JSON. `full` (Full study vs simple reader) is
+// a shell setting, so the endpoints that gate on it take a `full` flag.
 
-/// How many concordance verses a panel card lists before an "… N more" tail
-/// (matches the shells' prior cap).
+/// How many concordance verses a panel card lists before an "… N more" tail.
 const PANEL_OCC_CAP: usize = 300;
 
-/// A verse's text as `(text, hit)` segments for the word-usage card:
-/// concatenated, the segments are the verse verbatim (tokens joined with a
-/// single space, pre/post punctuation in place); `hit` picks the tokens the
-/// card emphasizes, and nothing that is not scripture appears in any segment.
+/// A verse's text as `(text, hit)` segments for the word-usage card: concatenated, the
+/// segments are the verse verbatim (tokens joined with a single space, pre/post punctuation in
+/// place); `hit` picks the tokens the card emphasizes, and nothing that is not scripture
+/// appears in any segment.
 fn verse_segs(v: &corpus::Verse, hit: &dyn Fn(&corpus::Token) -> bool) -> Vec<(String, bool)> {
     let mut segs: Vec<(String, bool)> = Vec::new();
     let mut plain = String::new();
@@ -3002,10 +2790,9 @@ fn verse_segs(v: &corpus::Verse, hit: &dyn Fn(&corpus::Token) -> bool) -> Vec<(S
     segs
 }
 
-/// Build a usage view over ascending verse indices: whole-corpus distribution
-/// and testament split, then the scope filter and the requested page of
-/// verbatim lines. Shared by the surface-word and original-word lenses, which
-/// differ only in their postings and their `hit` predicate.
+/// Build a usage view over ascending verse indices: whole-corpus distribution and testament
+/// split, then the scope filter and the requested page of verbatim lines. Shared by the
+/// surface-word and original-word lenses, which differ only in postings and `hit` predicate.
 fn usage_over(
     corpus: &Corpus,
     all: &[usize],
@@ -3070,8 +2857,8 @@ fn usage_over(
 }
 
 impl PanelSource for PlumblineEngine {
-    /// Whether the open text is the KJV — the same question `new` asks before it
-    /// wires morphology and the overlay, and for the same reason.
+    /// Whether the open text is the KJV — the same question `new` asks before it wires
+    /// morphology and the overlay, and for the same reason.
     fn is_kjv_text(&self) -> bool {
         self.corpus.tokenization_version() == canon::TOKENIZATION_VERSION
     }
@@ -3152,9 +2939,26 @@ impl PanelSource for PlumblineEngine {
     fn word_usage(&self, word: &str, scope: &str, page: u32) -> Option<panel::WordUsageView> {
         let ix = self.search_ix_ready()?;
         let folded = search::fold_word(word);
-        let all = ix.word_verses(&folded);
-        let key = folded.clone();
-        Some(usage_over(&self.corpus, all, scope, page, folded, &move |t| search::fold_word(&t.word) == key))
+        // "rulers" answers with "ruler" too. The stemmer and the stem table are
+        // the search's own (`SearchIx::stem_group`, the variant tier's), so this
+        // screen and a search for the same word agree about what a form is.
+        //
+        // ENGLISH ONLY, deliberately. `stem_word` is English suffix rules —
+        // possessive, plural, -ing/-ed — and the index applies it to whatever
+        // corpus is loaded. On Arabic, Hindi and Chinese it is a no-op (nothing
+        // matches those suffixes), but on German and French it fires on a quarter
+        // of the vocabulary and merges words that are not forms of each other.
+        // A reader of those gets exact matches, which is the honest answer until
+        // a stemmer for their language exists.
+        let (all, group) = if self.is_kjv_text() {
+            let words: std::collections::HashSet<String> = ix.stem_group(&folded).iter().cloned().collect();
+            (ix.stem_verses(&folded), words)
+        } else {
+            (ix.word_verses(&folded).to_vec(), std::collections::HashSet::from([folded.clone()]))
+        };
+        // Membership rather than re-stemming per token: the group is fixed for
+        // the whole card, and this runs over every token of every verse painted.
+        Some(usage_over(&self.corpus, &all, scope, page, folded, &move |t| group.contains(&search::fold_word(&t.word))))
     }
     fn code_usage(&self, code: &str, scope: &str, page: u32) -> Option<panel::WordUsageView> {
         let ix = self.search_ix_ready()?;
@@ -3380,9 +3184,8 @@ impl PanelSource for PlumblineEngine {
     }
     fn search_scoped(&self, query: &str, scope: &str) -> panel::SearchView {
         let study = self.study_read();
-        // An unparseable token searches EVERYTHING rather than nothing: a
-        // shell that sends a scope this build does not know still gets an
-        // answer to the reader's query.
+        // An unparseable token searches everything rather than nothing, so a shell sending a
+        // scope this build does not know still gets an answer.
         let scope = search::SearchScope::parse(scope).unwrap_or_default();
         match search::run_search_scoped(&self.corpus, &study.notes, self.search_ix(), query, &scope) {
             Some(search::SearchAnswer::GoTo { book, chapter, verse }) => {
@@ -3439,10 +3242,9 @@ pub unsafe extern "C" fn plumbline_engine_word_study_blocks_json(
     })
 }
 
-/// [`plumbline_engine_word_study_blocks_json`] with per-tier gates instead of the
-/// legacy Simple/Full flag: `gates` bit 0 = curated-scholarship (human)
-/// analysis, bit 1 = learned/statistical (machine) analysis. The text and the
-/// reader's own data are always on.
+/// [`plumbline_engine_word_study_blocks_json`] with per-tier gates instead of the Simple/Full
+/// flag: `gates` bit 0 = curated-scholarship (human) analysis, bit 1 = learned/statistical
+/// (machine) analysis. The text and the reader's own data are always on.
 ///
 /// # Safety
 /// `engine` is a live engine; `ref_key` is a valid NUL-terminated UTF-8 string.
@@ -3694,9 +3496,8 @@ pub unsafe extern "C" fn plumbline_engine_search_blocks_scoped_json(
 /// How many occurrence verses the english-gloss tally samples.
 const GLOSS_SAMPLE: usize = 80;
 
-/// The modal KJV rendering of a code — what an English reader recognises
-/// ("world" for κόσμος) rather than Strong's etymological headword. Ported
-/// verbatim from the GTK shell so every shell shows the same chips.
+/// The modal KJV rendering of a code — what an English reader recognises ("world" for κόσμος)
+/// rather than Strong's etymological headword.
 fn english_gloss(e: &PlumblineEngine, code: &str) -> Option<String> {
     let mut tally: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
     let occ = e.occ_ix_ready()?;
@@ -3718,7 +3519,7 @@ fn english_gloss(e: &PlumblineEngine, code: &str) -> Option<String> {
         ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         return Some(ranked.swap_remove(0).0);
     }
-    // No tagged occurrence — distil the dictionary as a last resort.
+    // No tagged occurrence — distil the dictionary instead.
     let entry = e.strongs().get(code)?;
     entry.def.as_deref().and_then(distil_gloss).or_else(|| entry.kjv.as_deref().and_then(distil_gloss))
 }
@@ -3751,9 +3552,8 @@ fn distil_gloss(raw: &str) -> Option<String> {
     }
 }
 
-/// Author a weave link carrying word spans — the Full-study "pin a word in
-/// each pane, widen, ＋ link" flow. Span bounds are token indices; pass a
-/// negative bound for a span-less side. Null on success, else an owned error.
+/// Author a weave link carrying word spans. Span bounds are token indices; pass a negative
+/// bound for a span-less side. Null on success, else an owned error.
 ///
 /// # Safety
 /// `engine` is a live engine; string params are null or valid NUL-terminated
@@ -3811,12 +3611,10 @@ pub unsafe extern "C" fn plumbline_engine_weave_add_link_spans(
     })
 }
 
-/// Parse a panel link URI into the typed verb the shell dispatches on
-/// (`{verb, …}`; see `plumbline_core::panel::parse_link`) — the one verb vocabulary,
-/// so a non-Rust shell routes clicks through the core instead of re-splitting
-/// the URI string and risking drift from what the panel emits. Engine-
-/// independent. Null for an unknown verb or malformed payload (a shell then
-/// ignores the click).
+/// Parse a panel link URI into the typed verb the shell dispatches on (`{verb, …}`; see
+/// `plumbline_core::panel::parse_link`) — the one verb vocabulary, so a shell routes clicks
+/// through the core instead of re-splitting the URI and drifting from what the panel emits.
+/// Engine-independent. Null for an unknown verb or malformed payload.
 ///
 /// # Safety
 /// `uri` is null or valid NUL-terminated UTF-8 for the call.
@@ -3828,10 +3626,9 @@ pub unsafe extern "C" fn plumbline_route_link_json(uri: *const c_char) -> *mut c
     })
 }
 
-// ── config / session (engine-independent; shared with the GTK shell) ──────────
+// ── config / session (engine-independent) ─────────────────────────────────────
 
-/// Load the cross-platform shell config (`%APPDATA%\plumbline\config.json` on
-/// Windows) as JSON: `{studyMode, bodySize, openPanes, activePane, firstRun}`.
+/// Load the shell config as JSON: `{studyMode, bodySize, openPanes, activePane, firstRun}`.
 /// `firstRun` is true only when no config file existed. Never null.
 #[no_mangle]
 pub extern "C" fn plumbline_config_load_json() -> *mut c_char {
@@ -3863,12 +3660,12 @@ pub unsafe extern "C" fn plumbline_config_save_json(json: *const c_char) -> *mut
     })
 }
 
-// ── Tier 0: copy, personal notes, themes, warming, guide ─────────────────────
+// ── copy, personal notes, themes, warming, guide ─────────────────────────────
 
-/// Clipboard text for a verse (or its chapter, for the `chapter*` kinds) in one
-/// of the shapes `plumbline_core::export::CopyKind` names (`verse` / `verseRef` /
-/// `verseMarkdown` / `chapter` / `chapterMarkdown`). Plain text, not JSON; null
-/// on a bad ref, an unknown kind, or a verse the corpus lacks. Caller-freed.
+/// Clipboard text for a verse (or its chapter, for the `chapter*` kinds) in one of the shapes
+/// `plumbline_core::export::CopyKind` names (`verse` / `verseRef` / `verseMarkdown` /
+/// `chapter` / `chapterMarkdown`). Plain text, not JSON; null on a bad ref, an unknown kind,
+/// or a verse the corpus lacks. Caller-freed.
 ///
 /// # Safety
 /// `engine` is a live engine; the string args are null or valid NUL-terminated
@@ -3921,9 +3718,8 @@ pub unsafe extern "C" fn plumbline_engine_user_note_json(
     })
 }
 
-/// All the reader's personal notes as JSON (`{notes:[…]}`), in canonical reading
-/// order — for the gutter marks and a "your notes" browser. Never null on a live
-/// engine (no notes → empty list).
+/// All the reader's personal notes as JSON (`{notes:[…]}`), in canonical reading order. Never
+/// null on a live engine (no notes → empty list).
 ///
 /// # Safety
 /// `engine` is a live engine (or null → null).
@@ -3999,15 +3795,12 @@ pub unsafe extern "C" fn plumbline_theme_palette_json(theme: *const c_char) -> *
     })
 }
 
-/// Which SEATING a local date and hour fall in — `"sunday-morning"`,
-/// `"sunday-evening"`, `"wednesday-evening"` or `"other"`. Engine-independent,
-/// never null.
+/// Which seating a local date and hour fall in — `"sunday-morning"`, `"sunday-evening"`,
+/// `"wednesday-evening"` or `"other"`. Engine-independent, never null.
 ///
-/// The shells pass their OWN local date (`YYYY-MM-DD`) and hour (0–23), because
-/// the core has no clock and no timezone: a slot computed in UTC would put a
-/// Sunday-evening service in Monday for half the world. The RULE lives here so
-/// the two shells cannot drift on when a service is, which is exactly the kind
-/// of thing that would be written twice and quietly diverge.
+/// The caller passes its own local date (`YYYY-MM-DD`) and hour (0–23), because the core has
+/// no clock and no timezone: a slot computed in UTC would put a Sunday-evening service in
+/// Monday for half the world. The rule lives here so no shell reimplements it.
 ///
 /// # Safety
 /// `date` is null or valid NUL-terminated UTF-8 for the call.
@@ -4041,29 +3834,23 @@ pub unsafe extern "C" fn plumbline_session_slot_at(
     })
 }
 
-/// EVERY user-visible string, for one language, in ONE call:
+/// Every user-visible string, for one language, in ONE call:
 /// `{"lang","strings":{id: text, …},"languages":[{"code","endonym"}]}`.
 ///
-/// The whole catalogue at once, deliberately. A shell asks at startup and holds
-/// the map; a call per string would be thousands of round trips across the wasm
-/// boundary to render one screen.
+/// The whole catalogue at once, deliberately: a shell asks at startup and holds the map, where
+/// a call per string would be thousands of round trips across the wasm boundary to render one
+/// screen.
 ///
-/// Takes BOTH the reader's setting and the device's locale, and resolves them
-/// here rather than in each shell: an empty setting means "follow the device"
-/// (`Config::language`), and that rule implemented twice is a rule that
-/// disagrees with itself once. Either may be null. Both tolerate a region tag —
-/// a browser reporting `de-CH` gets German — and anything unrecognised falls
-/// through to English, so an unsupported locale gets a working app rather than
-/// an error. The reply's `lang` says which one won.
+/// Takes both the reader's setting and the device's locale and resolves them here rather than
+/// in each shell — an empty setting means "follow the device" (`Config::language`). Either may
+/// be null. Both tolerate a region tag (`de-CH` gets German) and anything unrecognised falls
+/// through to English, so an unsupported locale gets a working app rather than an error; the
+/// reply's `lang` says which one won. Strings absent from the resolved language fall back to
+/// English key by key.
 ///
-/// Strings absent from the resolved language fall back to English key by key,
-/// so every id the shell asks for resolves to something printable.
+/// `languages` rides along because a language picker needs the list, each labelled in itself.
 ///
-/// `languages` rides along because a language picker needs the list, each
-/// labelled in ITSELF — someone looking for German is looking for "Deutsch".
-///
-/// Engine-independent: the shells need their chrome before an engine exists.
-/// Never null.
+/// Engine-independent: a shell needs its chrome before an engine exists. Never null.
 ///
 /// # Safety
 /// `chosen` and `device` are null or valid NUL-terminated UTF-8 for the call.
@@ -4077,21 +3864,17 @@ pub unsafe extern "C" fn plumbline_i18n_catalog_json(chosen: *const c_char, devi
 
 /// Set the language the ENGINE writes in, and answer with the code it resolved.
 ///
-/// A shell calls this ONCE, at startup, alongside
-/// `plumbline_i18n_catalog_json`. The catalogue covers what a shell spells; this
-/// covers what the CORE spells — every book name and every reference it hands
-/// back, in the table of contents, search hits, weave endpoints, note headers,
-/// thread entries, the reading map. Without it a German reader gets a German
-/// interface listing a book called Genesis, which is worse than either language
-/// on its own.
+/// Call once, at startup, alongside `plumbline_i18n_catalog_json`. The catalogue covers what a
+/// shell spells; this covers what the core spells — every book name and reference it hands
+/// back, in the table of contents, search hits, weave endpoints, note headers, thread entries,
+/// the reading map.
 ///
-/// Two calls rather than one on purpose. Resolving a language and choosing one
-/// are different acts, and a getter with a global side effect would mean every
-/// test that asked for a catalogue silently repainted the whole process.
+/// Two calls rather than one on purpose: resolving a language and choosing one are different
+/// acts, and a getter with a global side effect would mean every test that asked for a
+/// catalogue repainted the whole process.
 ///
-/// Same arguments and same rule as the catalogue call: an empty or unknown
-/// `chosen` falls through to `device`, and an unknown device is English.
-/// Caller-freed; never null.
+/// Same arguments and rule as the catalogue call: an empty or unknown `chosen` falls through
+/// to `device`, and an unknown device is English. Caller-freed; never null.
 ///
 /// # Safety
 /// `chosen` and `device` are null or valid NUL-terminated UTF-8 for the call.
@@ -4104,10 +3887,10 @@ pub unsafe extern "C" fn plumbline_i18n_set_language(chosen: *const c_char, devi
     })
 }
 
-/// Force the lazy analytics indexes (concept engine, leitwort scan) to build
-/// now — call once on a background thread at startup in Full mode so the first
-/// study click doesn't stall. Safe to call from any thread (the builds are
-/// `OnceLock`-guarded) and idempotent. Null on success, else an owned error.
+/// Force the lazy analytics indexes (concept engine, leitwort scan) to build now — call once
+/// on a background thread at startup in Full mode so the first study click doesn't stall. Safe
+/// from any thread (the builds are `OnceLock`-guarded) and idempotent. Null on success, else
+/// an owned error.
 ///
 /// # Safety
 /// `engine` is a live engine (or null → an error string).
@@ -4128,11 +3911,10 @@ pub unsafe extern "C" fn plumbline_engine_warm_indexes(engine: *const PlumblineE
     })
 }
 
-/// Load the stage-2 core data (Strong's dictionary + a study reload for the
-/// 1769 margin notes) once those files have arrived in the home — the web
-/// boots on the corpus alone (TODO #28: text on screen is the north star)
-/// and calls this when the rest of the core pack lands. Idempotent, cheap
-/// when nothing is missing. Null on success, else an owned error.
+/// Load the stage-2 core data (Strong's dictionary + a study reload for the 1769 margin notes)
+/// once those files have arrived in the home — the web boots on the corpus alone and calls
+/// this when the rest of the core pack lands. Idempotent, cheap when nothing is missing. Null
+/// on success, else an owned error.
 ///
 /// # Safety
 /// `engine` is a live engine (or null → an error string).
@@ -4147,12 +3929,10 @@ pub unsafe extern "C" fn plumbline_engine_load_core_data(engine: *const Plumblin
     })
 }
 
-/// Load the optional R&D artifact (the morphology sidecar) from the engine's
-/// home if it was absent at open. The web shell boots on the core data pack for
-/// a fast first paint, fetches the R&D pack in the background, writes the files
-/// into the home, then calls this. Idempotent (nothing loads twice), cheap when
-/// the file is still missing, safe from any thread. Null on success, else an
-/// owned error.
+/// Load the optional R&D artifact (the morphology sidecar) from the engine's home if it was
+/// absent at open — the web fetches the R&D pack in the background, writes it into the home,
+/// then calls this. Idempotent, cheap when the file is still missing, safe from any thread.
+/// Null on success, else an owned error.
 ///
 /// # Safety
 /// `engine` is a live engine (or null → an error string).
@@ -4167,7 +3947,7 @@ pub unsafe extern "C" fn plumbline_engine_load_rnd_data(engine: *const Plumbline
     })
 }
 
-// ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ─────────
+// ── memorization: SRS cards, drills, coverage + activity ─────────────────────
 
 /// Grade the verse `verse_ref` at `now` (RFC3339 UTC), creating its SRS card on
 /// first review; SM-2 reschedules and appends to the review log. `grade` is one
@@ -4243,14 +4023,13 @@ pub unsafe extern "C" fn plumbline_engine_memory_add(
     })
 }
 
-/// Start memorizing the passage `start_ref`…`through_ref` (inclusive) as ONE
-/// card — the whole section recalled in one go, rather than a card per verse.
-/// The card is keyed and listed by `start_ref`.
+/// Start memorizing the passage `start_ref`…`through_ref` (inclusive) as ONE card, keyed and
+/// listed by `start_ref`.
 ///
-/// `through_ref` must name a later verse of the same chapter; anything else
-/// seeds a plain single-verse card. Already memorizing `start_ref` is a no-op,
-/// so re-running with a different end does NOT silently re-span the card —
-/// remove it first. Null on success, else an owned error.
+/// `through_ref` must name a later verse of the same chapter; anything else seeds a plain
+/// single-verse card. Already memorizing `start_ref` is a no-op, so re-running with a
+/// different end does NOT re-span the card — remove it first. Null on success, else an owned
+/// error.
 ///
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -4274,8 +4053,7 @@ pub unsafe extern "C" fn plumbline_engine_memory_add_passage(
         let (Some(start), Some(through)) = (VRef::parse_ref_key(sr), VRef::parse_ref_key(tr)) else {
             return out_string("bad ref".to_string());
         };
-        // Every verse must actually exist, or the drill would prompt for text
-        // the reader can never see.
+        // Both ends must exist, or the drill prompts for text the reader can never see.
         if engine.corpus.verse(&start).is_none() || engine.corpus.verse(&through).is_none() {
             return out_string("no such verse".to_string());
         }
@@ -4341,8 +4119,8 @@ pub unsafe extern "C" fn plumbline_engine_memory_card_json(
     })
 }
 
-/// Verses due for review at `now` (RFC3339), reading order — the study queue, as
-/// `{refs:[...]}`. Never null on a live engine (empty when nothing is due).
+/// Verses due for review at `now` (RFC3339), in reading order, as `{refs:[...]}`. Never null
+/// on a live engine (empty when nothing is due).
 ///
 /// # Safety
 /// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
@@ -4398,11 +4176,10 @@ pub unsafe extern "C" fn plumbline_engine_memory_activity_json(engine: *const Pl
     })
 }
 
-/// What a memorize card is drilled and scored against: `(label, text, verses)`.
-/// A passage card's verses are joined into one continuous text, so the drill
-/// prompts for — and the check scores — the whole chunk. A ref with no card yet
-/// (or the engine with no home) falls back to the single verse, which is what
-/// every card was before passages existed. None if the verse doesn't exist.
+/// What a memorize card is drilled and scored against: `(label, text, verses)`. A passage
+/// card's verses are joined into one continuous text, so the drill prompts for — and the check
+/// scores — the whole chunk. A ref with no card yet (or an engine with no home) falls back to
+/// the single verse. None if the verse doesn't exist.
 fn memory_span(e: &PlumblineEngine, vref: &VRef) -> Option<(String, String, u32)> {
     let card = e.home.as_ref().and_then(|h| memory::load_cards(h).0.remove(vref));
     let refs = card.as_ref().map_or_else(|| vec![vref.clone()], memory::Card::verses);
@@ -4500,14 +4277,10 @@ unsafe fn parse_target(kind: *const c_char, value: *const c_char) -> Result<TagT
 #[cfg(test)]
 mod tests;
 
-/// The width memo, exercised through the real C entry point rather than through
-/// `plumbline_layout`'s own tests: what is at stake here is the *wiring* — that
-/// the memo lives on the engine and so survives between two
-/// [`plumbline_engine_layout_chapter`] calls, and that [`font_identity`] notices a
-/// font change the shell only reveals through its config.
-///
-/// (These live in `lib.rs` rather than `tests.rs` because the module they cover
-/// is here; the mechanism itself is tested in `crates/layout/src/memo.rs`.)
+/// The width memo through the real C entry point. What is under test is the wiring: that the
+/// memo lives on the engine and so survives between two [`plumbline_engine_layout_chapter`]
+/// calls, and that [`font_identity`] notices a font change the shell only reveals through its
+/// config. The mechanism itself is tested in `crates/layout/src/memo.rs`.
 #[cfg(test)]
 mod measure_memo_over_the_abi {
     use super::*;
@@ -4522,18 +4295,16 @@ mod measure_memo_over_the_abi {
         r#"{"b":"Gen","c":1,"t":[["","And","",[],0],["","the","",[],0],["","Spirit","",[],0],["","of","",[],0],["","God","",["H430"],0],["","moved",".",[],0]],"v":2}"#,
     );
 
-    /// One increment is one crossing of the C ABI — a canvas `measureText` on the
-    /// web, a `Paint` upcall on Android, and exactly what the web shell's
-    /// `measureCalls()` diagnostic counts.
+    /// One increment is one crossing of the C ABI — a canvas `measureText` on the web, and
+    /// what the web shell's `measureCalls()` diagnostic counts.
     static CROSSINGS: AtomicUsize = AtomicUsize::new(0);
-    /// Every run that crossed, in order — so "measured only once" can be checked
-    /// as a fact about the text, not just a total.
+    /// Every run that crossed, in order — so "measured only once" is checkable as a fact about
+    /// the text, not just a total.
     static SEEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
-    /// The pretend font: px per character. A shell changes this without telling
-    /// the ABI, exactly as a text-size change does.
+    /// The pretend font: px per character. A shell changes this without telling the ABI,
+    /// exactly as a text-size change does.
     static CHAR_W: AtomicU32 = AtomicU32::new(10);
-    /// These tests share the statics above, and `cargo test` runs them in
-    /// parallel.
+    /// These tests share the statics above, and `cargo test` runs them in parallel.
     static SERIAL: Mutex<()> = Mutex::new(());
 
     extern "C" fn counting_measure(_ctx: *mut c_void, text: *const c_char) -> f32 {
@@ -4566,8 +4337,8 @@ mod measure_memo_over_the_abi {
         }
     }
 
-    /// Lay Gen 1 out through the ABI and return the width of the box painting
-    /// `word`, plus how many runs crossed during this call.
+    /// Lay Gen 1 out through the ABI and return the width of the box painting `word`, plus how
+    /// many runs crossed during this call.
     unsafe fn lay_out(engine: *mut PlumblineEngine, cfg: PlumblineLayoutConfig, word: &str) -> (f32, usize) {
         let before = CROSSINGS.load(Ordering::Relaxed);
         let book = CString::new("Gen").unwrap();
@@ -4605,8 +4376,8 @@ mod measure_memo_over_the_abi {
         unsafe {
             let engine = open();
 
-            // 12 runs are laid out (2 verse numbers + 10 tokens) but "the" and
-            // "God" each occur twice, so only 10 distinct ones may cross.
+            // 12 runs are laid out (2 verse numbers + 10 tokens) but "the" and "God" each
+            // occur twice, so only 10 distinct ones may cross.
             let (god, cold) = lay_out(engine, cfg(20.0, 5.0, 10_000.0), "God");
             assert_eq!(god, 30.0);
             assert_eq!(cold, 10, "one crossing per DISTINCT run, not per token");
@@ -4616,15 +4387,13 @@ mod measure_memo_over_the_abi {
             once.dedup();
             assert_eq!(once.len(), seen.len(), "a run crossed twice: {seen:?}");
 
-            // The same chapter again, same font: the memo is on the ENGINE, so
-            // this is free.
+            // The same chapter again, same font: the memo is on the engine, so this is free.
             let (again, warm) = lay_out(engine, cfg(20.0, 5.0, 10_000.0), "God");
             assert_eq!(warm, 0, "a re-layout must not cross at all");
             assert_eq!(again, god);
 
-            // A narrower column re-wraps the chapter without re-measuring a
-            // glyph: `width` is deliberately outside the font identity, which is
-            // what makes a rotation or a margin drag free too.
+            // A narrower column re-wraps without re-measuring a glyph: `width` is deliberately
+            // outside the font identity, which is what makes a rotation or margin drag free.
             let (narrow, resized) = lay_out(engine, cfg(20.0, 5.0, 200.0), "God");
             assert_eq!(resized, 0, "a resize measures nothing new");
             assert_eq!(narrow, god);
@@ -4641,16 +4410,15 @@ mod measure_memo_over_the_abi {
             let (small, _) = lay_out(engine, cfg(20.0, 5.0, 10_000.0), "God");
             assert_eq!(small, 30.0);
 
-            // The reader bumps the text size: the shell measures with a bigger
-            // font and passes the line height + space advance it derived from
-            // that same font. Nothing else tells this ABI anything changed.
+            // The reader bumps the text size: the shell measures with a bigger font and passes
+            // the line height + space advance derived from it. Nothing else tells the ABI.
             CHAR_W.store(20, Ordering::Relaxed);
             let (big, crossings) = lay_out(engine, cfg(40.0, 10.0, 10_000.0), "God");
             assert_eq!(big, 60.0, "the new size's width, not the remembered one");
             assert_eq!(crossings, 10, "every run is re-measured at the new size");
 
-            // …and the new widths are what is remembered now: going back to the
-            // small size re-measures rather than serving these.
+            // …and the new widths are what is remembered now: going back to the small size
+            // re-measures rather than serving these.
             CHAR_W.store(10, Ordering::Relaxed);
             let (back, recrossed) = lay_out(engine, cfg(20.0, 5.0, 10_000.0), "God");
             assert_eq!(back, 30.0);

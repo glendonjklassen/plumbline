@@ -1,20 +1,11 @@
 //! Reader text layout + per-word hit-testing.
 //!
-//! This is the load-bearing idea from the architecture plan (README §For
-//! developers / CLAUDE.md §Architecture): overlay's reader
-//! (`ReaderView.hs`) lays out and hit-tests **every word individually** so
-//! Strong's clicks, hover cards, and cross-pane weave connectors all ride on
-//! one layout. We keep that layout in shared Rust — but instead of forcing a
-//! shaping engine (cosmic-text) on every platform, the *algorithm* (greedy
-//! line-breaking, word-rectangle assembly, hit-testing) lives here and takes
-//! text **measurements as input**. Each native UI supplies a [`Measure`]
-//! backed by its own excellent text stack (Pango on GTK, DirectWrite on WinUI,
-//! Android's text engine) and paints at the positions this crate computes.
-//!
-//! The payoff: the hard bookkeeping is written once and unit-tested with
-//! synthetic metrics; per-word hit regions are always consistent with what the
-//! platform actually painted (same engine measured and drew them); and native
-//! text quality is preserved per platform.
+//! The algorithm (greedy line-breaking, word-rectangle assembly, hit-testing)
+//! lives here and takes text measurements as input: a shell supplies a
+//! [`Measure`] backed by its own text stack, gets back a display list of
+//! positioned boxes, paints them, and sends taps back for hit-testing. Because
+//! the same engine measured and drew the text, hit regions always agree with
+//! what was painted.
 
 use plumbline_core::corpus::{Verse, FLAG_PARA, FLAG_TITLE};
 use plumbline_core::VRef;
@@ -23,14 +14,12 @@ pub mod memo;
 
 pub use memo::{MeasureMemo, Memoized};
 
-/// Something that can measure the advance width of a run of text in the
-/// reader's scripture font at the current size. Implemented by each UI over
-/// its native text stack; a synthetic monospace impl backs the tests.
+/// Measures the advance width of a run of text in the reader's scripture font at
+/// the current size. Implemented by each shell over its native text stack; a
+/// synthetic monospace impl backs the tests.
 ///
-/// A measurement is expensive where it matters — on both shipped shells it is a
-/// call out of Rust into the platform's text stack — and scripture repeats
-/// itself, so callers should wrap their impl in [`Memoized`] rather than
-/// caching in their own language (see [`memo`] for the counted redundancy).
+/// A measurement is a call out of Rust into the shell's text stack, and scripture
+/// repeats itself, so callers should wrap their impl in [`Memoized`].
 pub trait Measure {
     /// Advance width of `text` in device pixels.
     fn text_width(&self, text: &str) -> f32;
@@ -54,18 +43,15 @@ pub struct LayoutConfig {
     /// Start every verse on a fresh line (verse-per-line reading mode)
     /// instead of flowing verses continuously.
     pub verse_break: bool,
-    /// Paint the small leading verse numbers. Off is the "just the text"
-    /// reading mode — and it belongs HERE rather than in a shell's paint step,
-    /// because a number a shell declines to draw still holds its own width and
-    /// its gap: the text would flow around an invisible marker, which is worse
-    /// than the number it was hiding.
+    /// Paint the small leading verse numbers. Decided here rather than in a
+    /// shell's paint step: a number a shell declines to draw still holds its
+    /// width and gap, so the text would flow around an invisible marker.
     pub verse_numbers: bool,
     /// Lay the line out right to left, for a script that reads that way.
     ///
-    /// Set from the reading language's registry row (`i18n::Lang::is_rtl`) and
-    /// not from the shell's own idea of direction: a German reader whose Luther
-    /// download has not landed is reading the KJV, and it is the TEXT that
-    /// decides which way its lines run.
+    /// Set from the reading language's registry row (`i18n::Lang::is_rtl`), not
+    /// from the shell's own idea of direction: the open corpus decides, since a
+    /// reader whose translation has not downloaded is still reading the KJV.
     pub rtl: bool,
 }
 
@@ -135,13 +121,9 @@ pub struct DisplayList {
     pub height: f32,
     /// The column width the layout targeted.
     pub width: f32,
-    /// Whether these boxes were mirrored for a right-to-left text.
-    ///
-    /// Carried OUT rather than left for the shell to work out again. A painter
-    /// has to know it — the platform places a trailing full stop on the side its
-    /// context's direction says, and for Arabic that is the left — and the only
-    /// answer that cannot disagree with these coordinates is the one that came
-    /// with them.
+    /// Whether these boxes were mirrored for a right-to-left text. Carried out
+    /// with the coordinates so a painter cannot disagree with them: the platform
+    /// places a trailing full stop on the side the context's direction says.
     pub rtl: bool,
 }
 
@@ -155,7 +137,7 @@ pub struct Hit {
 
 impl DisplayList {
     /// Resolve a point to the word under it, if any (verse numbers and gaps
-    /// return `None`). This is what a native UI calls on click/hover.
+    /// return `None`). What a shell calls on click/hover.
     pub fn hit_test(&self, px: f32, py: f32) -> Option<Hit> {
         self.items.iter().find_map(|it| {
             if it.contains(px, py) {
@@ -204,16 +186,14 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
             pen.newline(cfg);
         }
 
-        // Verse number marker. Wrap it together with the first word — a
-        // number alone at the end of a line orphans it from its verse.
-        // Numbers off: no marker, no gap, and no wrap check for a box that is
-        // not there (`num_w` of zero would still reserve `verse_num_gap`).
+        // Verse number marker, wrapped together with the first word so a number
+        // never orphans at the end of a line. Numbers off: no marker, no gap and
+        // no wrap check (a zero `num_w` would still reserve `verse_num_gap`).
         let num = verse.verse.to_string();
         let num_w = if cfg.verse_numbers { m.text_width(&num) } else { 0.0 };
-        // Measure the first token once: text_width is a native shaping call
-        // (Pango/DirectWrite) and render() heap-allocates. The result is reused
-        // for both the number/first-word wrap check here and placing the word
-        // at ti == 0 below, instead of measuring it twice per verse.
+        // Measure the first token once — `text_width` crosses into the shell and
+        // `render()` allocates — and reuse it for the wrap check here and for
+        // placing the word at ti == 0 below.
         let mut first_measured = verse.tokens.first().map(|t| {
             let text = t.render();
             let w = m.text_width(&text);
@@ -257,11 +237,10 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
                 }
             };
 
-            // A token that renders to nothing paints nothing, and must not
-            // consume a space. The AKJV overlay blanks the interior tokens of a
-            // re-rendered run (its first token carries the whole replacement)
-            // rather than removing them, so that `ti` stays the CORPUS token
-            // index and every Strong's lookup still resolves.
+            // A token that renders to nothing paints nothing and consumes no
+            // space. The AKJV overlay blanks the interior tokens of a re-rendered
+            // run rather than removing them, so `ti` stays the corpus token index
+            // and Strong's lookups still resolve.
             if text.is_empty() {
                 continue;
             }
@@ -285,32 +264,17 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
         }
     }
 
-    // RIGHT-TO-LEFT IS ONE MIRROR OVER THE FINISHED LIST, and it is worth
-    // saying why that is the whole of it rather than a rewritten line-breaker.
+    // Right-to-left is one mirror over the finished list. Widths do not depend
+    // on direction, so the greedy fill above already put the right words on each
+    // line; only each box's origin is wrong, and `width - x - w` reflects it.
+    // Hit-testing needs no change — `contains` is pure geometry and the boxes
+    // mirror with the text.
     //
-    // The greedy fill above is a pure width computation: it asks the shell for
-    // each word's advance and packs words until the next one will not fit.
-    // Widths do not depend on direction, so the SET of words on each line and
-    // the point at which each line breaks are already correct for Arabic.
-    // Only the origin each box was assigned is wrong, and `width - x - w`
-    // reflects every box about the column's centre line. Word order comes out
-    // right to left, the ragged edge lands on the line-END side, and the
-    // paragraph indent set at `para_indent` indents from the right for free.
-    //
-    // HIT-TESTING NEEDS NO CHANGE AT ALL — `PlacedItem::contains` is pure
-    // geometry and the boxes mirror along with the text, so a tap lands on the
-    // word under the finger without anything downstream knowing about
-    // direction.
-    //
-    // This is enough because the corpus is enough: `data/svd1865.jsonl` has no
-    // Latin letters and no digits in any of its 31,102 verses (`check-svd.py`
-    // compares every one against the source), so there is no bidirectional run
-    // for the Unicode Bidirectional Algorithm to resolve. A verse number is its
-    // own box the shell draws separately, and a multi-digit one renders left to
-    // right inside itself because the platform shapes that string on its own.
-    // The day a corpus arrives with a Latin quotation inside an Arabic verse,
-    // this becomes wrong and needs UAX #9 — a mirror would reverse that run's
-    // word order — and it will be visible the moment it happens.
+    // A mirror suffices only because the RTL corpus carries no Latin letters and
+    // no digits (`data/svd1865.jsonl`, verified by `check-svd.py`), so there is
+    // no bidirectional run for UAX #9 to resolve. A corpus with a Latin quotation
+    // inside an Arabic verse would need UAX #9: a mirror reverses that run's
+    // word order.
     if cfg.rtl {
         for it in &mut items {
             it.x = cfg.width - it.x - it.w;
@@ -321,9 +285,8 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
     DisplayList { items, height, width: cfg.width, rtl: cfg.rtl }
 }
 
-/// A convenience: does a token carry a superscription flag? (Psalm titles are
-/// often styled differently by the UI.) Re-exported so shells don't reach into
-/// `plumbline_core` just for the constant.
+/// Does a token carry a superscription flag (psalm titles, often styled
+/// differently)? Here so shells need not reach into `plumbline_core` for it.
 pub fn is_title_flag(flags: u32) -> bool {
     flags & FLAG_TITLE != 0
 }
@@ -333,8 +296,8 @@ mod tests {
     use super::*;
     use plumbline_core::corpus;
 
-    /// Monospace measurement: every character is `char_w` wide. Deterministic,
-    /// so layout is exactly predictable in tests.
+    /// Monospace measurement: every character is `char_w` wide, so layout is
+    /// exactly predictable.
     struct Mono {
         char_w: f32,
     }
@@ -359,24 +322,21 @@ mod tests {
         r#"{"b":"Gen","c":1,"t":[["","فِي","",[],8],["","ٱلْبَدْءِ","",[],0],["","خَلَقَ","",[],0],["","ٱللهُ","",[],0],["","ٱلسَّمَاوَاتِ","",[],0],["","وَٱلْأَرْضَ",".",[],0]],"v":1}"#,
     );
 
-    /// The CUV corpus's own first verse: per-character tokens, the full stop
-    /// glued into the last token's `post` (`build-cuv.py`).
+    /// The CUV corpus's first verse: per-character tokens, the full stop glued
+    /// into the last token's `post` (`build-cuv.py`).
     const CHINESE: &str = concat!(
         r#"{"format":"x","tokenization":"cuv1919t-tok1","verses":1}"#,
         "\n",
         r#"{"b":"Gen","c":1,"t":[["","起","",[],0],["","初","",[],0],["","神","",[],0],["","創","",[],0],["","造","",[],0],["","天","",[],0],["","地","。",[],0]],"v":1}"#,
     );
 
-    /// A Han corpus is laid out by the same greedy fill with `space_width`
-    /// zeroed — the FFI derives that from the open corpus's tokenization
-    /// stamp, exactly as it derives `rtl`. This pins the two properties that
-    /// make per-character tokenization sufficient for Chinese: characters set
-    /// SNUG (each box starts where the last ended — a visible gap between
-    /// every pair of characters is the failure a spaced-script default would
-    /// ship), and a narrow column breaks between any two characters, because
-    /// break opportunities ARE token boundaries here. Kinsoku rides in the
-    /// tokens: the glued 。 is inside its character's box and can never open
-    /// a line.
+    /// A Han corpus uses the same greedy fill with `space_width` zeroed (the FFI
+    /// derives that from the tokenization stamp, as it derives `rtl`). Fails
+    /// against a spaced-script default: characters must set snug (each box
+    /// starting where the last ended, no gap between every pair) and a narrow
+    /// column must break between any two, since break opportunities are token
+    /// boundaries here. Kinsoku rides in the tokens — the glued 。 is inside its
+    /// character's box and can never open a line.
     #[test]
     fn cjk_sets_snug_and_breaks_between_any_two_characters() {
         let c = corpus::from_str(CHINESE).unwrap();
@@ -403,17 +363,11 @@ mod tests {
         assert!(second.y > first_y);
     }
 
-    /// Right-to-left is the same layout, reflected.
-    ///
-    /// WHAT WOULD FAIL WITHOUT THE MIRROR: every assertion here. The reader
-    /// would get Arabic packed from the left edge rightwards, which puts the
-    /// first word of the verse where an Arabic reader looks for the last —
-    /// legible words in the wrong order, the failure that is easiest to ship
-    /// because each individual word still renders perfectly.
-    ///
-    /// The three properties are checked separately on purpose, because a mirror
-    /// that got any one of them wrong would still look plausible in a
-    /// screenshot.
+    /// Right-to-left is the same layout, reflected. Without the mirror every
+    /// assertion here fails: Arabic packs from the left edge rightwards, putting
+    /// the verse's first word where a reader looks for its last while each
+    /// individual word still renders perfectly. The properties are checked
+    /// separately because a mirror that got one wrong would still look plausible.
     #[test]
     fn rtl_mirrors_the_line_without_relaying_it_out() {
         let c = corpus::from_str(ARABIC).unwrap();
@@ -427,26 +381,24 @@ mod tests {
         let a = layout_chapter(verses, &m, &ltr);
         let b = layout_chapter(verses, &m, &rtl);
 
-        // 1. THE LINE BREAKS ARE THE SAME. Widths do not depend on direction,
-        //    so the same words share a line in both — this is the claim that
-        //    lets the greedy fill stay untouched.
+        // 1. The line breaks are the same — the claim that lets the greedy fill
+        //    stay untouched.
         assert!(a.items.len() > 6, "the sample must wrap for this test to mean anything");
         assert_eq!(a.height, b.height);
         let ys: Vec<f32> = a.items.iter().map(|i| i.y).collect();
         let ys_rtl: Vec<f32> = b.items.iter().map(|i| i.y).collect();
         assert_eq!(ys, ys_rtl, "a word changed line when the direction flipped");
 
-        // 2. EVERY BOX IS REFLECTED, and stays inside the column.
+        // 2. Every box is reflected, and stays inside the column.
         for (l, r) in a.items.iter().zip(&b.items) {
             assert_eq!(r.text, l.text, "the mirror reordered the item list");
             assert_eq!(r.x, ltr.width - l.x - l.w);
             assert!(r.x >= -0.01 && r.x + r.w <= ltr.width + 0.01, "{:?} left the column", r.text);
         }
 
-        // 3. THE LINE BEGINS AT THE RIGHT EDGE, which is the thing a reader
-        //    would notice and no coordinate assertion above actually states.
-        //    The verse number leads, exactly as it leads on the left in
-        //    English, with the verse's first word inboard of it.
+        // 3. The line begins at the right edge — what a reader would notice, and
+        //    what no coordinate assertion above states. The verse number leads,
+        //    with the verse's first word inboard of it.
         let first = b.items.iter().find(|i| i.text == "فِي").unwrap();
         let last = b.items.iter().find(|i| i.text.starts_with("وَٱلْأَرْضَ")).unwrap();
         assert!(first.x > last.x, "the verse reads left to right");
@@ -457,7 +409,7 @@ mod tests {
             b.items.iter().filter(|i| i.y == first.y && i.word().is_some()).fold(f32::MIN, |acc, i| acc.max(i.x));
         assert_eq!(first.x, rightmost_word, "the verse's first word is not the rightmost word on its line");
 
-        // 4. HIT-TESTING FOLLOWS THE BOXES with no direction logic of its own.
+        // 4. Hit-testing follows the boxes, with no direction logic of its own.
         let hit = b.hit_test(first.x + 1.0, first.y + 1.0).expect("no word under the first word's box");
         assert_eq!(hit.token_index, 0);
     }
@@ -519,9 +471,9 @@ mod tests {
         let m = Mono { char_w: 8.0 };
         let cfg = LayoutConfig { width: 10_000.0, ..Default::default() };
         let dl = layout_chapter(&verses, &m, &cfg);
-        // The paragraph line starts with Gen 2:1's *verse number* at the
-        // indent, its first word right after — the number must not strand at
-        // the end of the previous line (the pre-fix behavior).
+        // The paragraph line starts with Gen 2:1's verse number at the indent,
+        // its first word right after: the number must not strand at the end of
+        // the previous line.
         let num = dl
             .items
             .iter()
@@ -546,9 +498,8 @@ mod para_tests {
         }
     }
 
-    /// Two verses; verse 2's FIRST word carries ¶ — the verse number must
-    /// move to the new indented line with its verse, not strand at the end
-    /// of the previous one.
+    /// Verse 2's first word carries ¶: the verse number must move to the new
+    /// indented line with its verse, not strand at the end of the previous one.
     #[test]
     fn paragraph_break_carries_the_verse_number() {
         let sample = concat!(
@@ -615,10 +566,8 @@ mod para_tests {
         assert_eq!(num2.y, wide.y, "the number wraps as a unit with its word");
     }
 
-    /// Numbers off reclaims the space they held. Not just "no number item":
-    /// the gap after it has to go too, or every verse would start behind an
-    /// invisible marker — which is exactly why this lives in the layout and
-    /// not in a shell's paint step.
+    /// Numbers off reclaims the space they held: not just the number box but its
+    /// gap, or every verse starts behind an invisible marker.
     #[test]
     fn verse_numbers_off_emits_none_and_reclaims_their_width() {
         let sample = concat!(
@@ -654,7 +603,7 @@ mod para_tests {
         // The text starts at the margin, not behind a ghost marker…
         let alpha = without.items.iter().find(|it| it.text == "alpha").unwrap();
         assert_eq!(alpha.x, 0.0);
-        // …and the saving is CUMULATIVE along the line: by verse 2 the text has
+        // …and the saving is cumulative along the line: by verse 2 the text has
         // moved left by both numbers' width plus both gaps (each "N" is 10 wide
         // under Mono, and the gap is 4).
         let beta_with = with.items.iter().find(|it| it.text == "beta").unwrap();

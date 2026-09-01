@@ -1,17 +1,20 @@
 //! Plain-text search over the canonical corpus, plus reference jumps and
 //! query-by-Strong's-code.
 //!
-//! Ported from overlay `Search.hs`. The inverted index is one fold over the
-//! corpus at startup. A single-word query is answered in four ranked tiers
-//! (exact → morphological variants → other renderings of the same Strong's
-//! lemma → near spellings); a multi-word query is a phrase match, falling back
-//! to every-word-in-any-order. A query that reads as a reference (`John 3:16`,
-//! `1 Cor 13`, `psalms`) becomes a jump. A bare Strong's code (`H430`) lists
-//! every verse tagged with it.
+//! Ported from overlay `Search.hs` (as are the individual functions below).
+//! The inverted index is one fold over the corpus at startup. A query that
+//! reads as a reference (`John 3:16`, `1 Cor 13`, `psalms`) becomes a `GoTo`
+//! jump; everything else answers `Hits`. A single word runs four ranked tiers —
+//! exact → stem variants → other renderings of the same Strong's lemma → near
+//! spellings — and the first tier to produce anything names the answer; a
+//! multi-word query is a phrase match falling back to every-word-in-any-order;
+//! a bare Strong's code lists every verse tagged with it. Margin notes are
+//! searched alongside the exact tier. Rows are capped at [`HIT_CAP`] in
+//! tier-then-canon order while the total stays honest.
 //!
 //! The morphology *form-predicate* path (`tense:aorist voice:passive`) needs
-//! the optional morphology layer and so is answered here only with a "needs
-//! the morphology layer" placeholder; `plumbline-rnd` will extend it.
+//! the optional morphology layer, so it answers with a placeholder here;
+//! `plumbline-rnd` will extend it.
 
 use crate::canon;
 use crate::corpus::{Corpus, Verse};
@@ -26,10 +29,9 @@ pub const HIT_CAP: usize = 200;
 const NT_FIRST_ORDER: usize = 39;
 
 /// Where a search looks — the search screen's scope chips. Every scope is a
-/// CONTIGUOUS run of canonical verse indices (the corpus is in canon order),
-/// so filtering is one range test per posting and the honest `total` counts
-/// only what the scope covers. A reference query ignores the scope on
-/// purpose: "John 3" is navigation, not filtering.
+/// contiguous run of canonical verse indices (the corpus is in canon order), so
+/// filtering is one range test per posting and `total` counts only what the
+/// scope covers. A reference query ignores the scope: it is navigation.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SearchScope {
     #[default]
@@ -42,13 +44,10 @@ pub enum SearchScope {
     OldTestament,
     /// Matthew–Revelation.
     NewTestament,
-    /// A contiguous span of chapters, INCLUSIVE at both ends — "John 3–8",
-    /// "Genesis 1 – Deuteronomy 34".
-    ///
-    /// The shells' range picker and their canon presets (Law, Gospels,
-    /// Letters…) both land here: a preset is a span over a
-    /// [`crate::reference::CANON_SEGMENTS`] row, so there is no second list of
-    /// groupings to drift from the canon strip's.
+    /// A contiguous span of chapters, inclusive at both ends. The range picker
+    /// and the canon presets (Law, Gospels, Letters…) both land here — a preset
+    /// is a span over a [`crate::reference::CANON_SEGMENTS`] row, so there is no
+    /// second list of groupings to drift from the canon strip's.
     Span { from_book: String, from_chapter: u16, to_book: String, to_chapter: u16 },
 }
 
@@ -330,6 +329,39 @@ impl SearchIx {
     /// original-word lens, from the same table the code query tier answers.
     pub fn lemma_verses(&self, code: &str) -> &[usize] {
         self.lemma_idxs(code)
+    }
+
+    /// The indexed words sharing `folded`'s stem — `["ruler", "rulers"]` for
+    /// either of them. Empty when the word is not indexed at all.
+    ///
+    /// The same table the search's variant tier reads ([`variant_idxs`]), exposed
+    /// so the word-usage card can answer "this word and its other forms" without
+    /// a second stemming pass or a second index.
+    pub fn stem_group(&self, folded: &str) -> &[String] {
+        self.stems.get(&stem_word(folded)).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// Every verse (ascending, deduped) containing ANY word in `folded`'s stem
+    /// group — the word itself included.
+    ///
+    /// Returns owned postings, unlike [`word_verses`](Self::word_verses): this is
+    /// a merge of several lists and there is no stored slice to hand back. Sorted
+    /// and deduped here so callers can treat it exactly like a postings slice —
+    /// `usage_over` binary-searches it per book.
+    pub fn stem_verses(&self, folded: &str) -> Vec<usize> {
+        let group = self.stem_group(folded);
+        // The overwhelmingly common case is a group of one, where the merge is a
+        // copy of a list we already hold.
+        if group.len() <= 1 {
+            return self.word_idxs(folded).to_vec();
+        }
+        let mut out: Vec<usize> = Vec::new();
+        for w in group {
+            out.extend_from_slice(self.word_idxs(w));
+        }
+        out.sort_unstable();
+        out.dedup();
+        out
     }
 
     fn word_idxs(&self, w: &str) -> &[usize] {
@@ -1757,6 +1789,44 @@ mod tests {
             }
             _ => panic!("expected hits"),
         }
+    }
+
+    /// The stem group and its merged postings — what the word-usage card reads to
+    /// answer "rulers" with "ruler" as well.
+    ///
+    /// Asserted from BOTH forms, because the card can be opened from either, and
+    /// a table keyed by the word rather than by the stem would answer only one of
+    /// them. The postings are asserted as a merged set rather than a count, so a
+    /// union that forgot to sort (and thus broke `usage_over`'s per-book binary
+    /// search) fails here rather than silently mis-counting a book.
+    #[test]
+    fn the_stem_group_gathers_every_form_from_any_of_them() {
+        let c = corpus::from_str(SAMPLE).unwrap();
+        let ix = ix_of(&c);
+
+        // "blessed" (Gen 1:2) and "blessing" (Gen 1:3) both stem to "bless".
+        for form in ["blessed", "blessing"] {
+            let mut group: Vec<&str> = ix.stem_group(form).iter().map(String::as_str).collect();
+            group.sort_unstable();
+            assert_eq!(group, ["blessed", "blessing"], "from {form}");
+            // Both verses, from either form, ascending.
+            let verses = ix.stem_verses(form);
+            assert_eq!(verses.len(), 2, "from {form}: {verses:?}");
+            assert!(verses.windows(2).all(|w| w[0] < w[1]), "ascending and deduped: {verses:?}");
+            // And it is a superset of the exact postings, never a replacement.
+            for v in ix.word_verses(form) {
+                assert!(verses.contains(v), "{form}: exact posting {v} lost");
+            }
+        }
+
+        // A word with no other form is its own group, and the merge is exactly
+        // the exact postings — the common case must not gain or lose anything.
+        assert_eq!(ix.stem_group("shepherd"), ["shepherd"]);
+        assert_eq!(ix.stem_verses("shepherd"), ix.word_verses("shepherd").to_vec());
+
+        // A word the corpus does not have answers empty rather than panicking.
+        assert!(ix.stem_group("aardvark").is_empty());
+        assert!(ix.stem_verses("aardvark").is_empty());
     }
 
     #[test]

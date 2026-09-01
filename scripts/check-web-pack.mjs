@@ -3,17 +3,14 @@
 //
 //   node scripts/check-web-pack.mjs
 //
-// Why this exists: the producer (scripts/build-web-pack.mjs) is plain JS outside
-// apps/web and outside its tsconfig, so `npm run check` type-checks the loader's
-// PackManifest interface without ever seeing the code that writes the JSON. A
-// mismatch — a stage the loader doesn't switch on, an entry with no hash, a file
-// no stage claims — shows up only as an e2e boot timeout with no diagnostic,
-// which is the slowest possible feedback loop for the change most likely to have
-// one. This makes it a fast, loud, local failure instead.
+// The producer (scripts/build-web-pack.mjs) sits outside apps/web's tsconfig, so
+// `npm run check` type-checks the loader's PackManifest interface without ever
+// seeing the code that writes the JSON. A mismatch — a stage the loader doesn't
+// switch on, an entry with no hash, a file no stage claims — otherwise shows up
+// only as an e2e boot timeout with no diagnostic.
 //
-// It also verifies INTEGRITY: every entry's hash is re-derived from the bytes on
-// disk. That is what makes the hash trustworthy enough to key URLs on and to
-// verify downloads against.
+// It also verifies integrity: every entry's hash is re-derived from the bytes on
+// disk, which is what makes the hash trustworthy enough to key URLs on.
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -70,7 +67,7 @@ for (const f of manifest.files) {
     fail(`${at}: unknown role ${JSON.stringify(f.role)}`);
   }
   // The retired v1 tier flags. Loud, because a half-migrated producer is worse
-  // than an old one: the loader would silently mis-tier the file.
+  // than an old one: the loader would mis-tier the file silently.
   for (const dead of ["stock", "rnd", "cache"]) {
     if (dead in f) fail(`${at}: carries retired v1 flag \`${dead}\` — use stage/seedOnce/role`);
   }
@@ -96,29 +93,20 @@ if (roles.length !== 1) {
   fail(`the corpusCache is stage ${roles[0].stage}; it must be "text" or the reader waits for it`);
 }
 
-// EVERY OTHER LANGUAGE'S CORPUS, same shape and the same two things to get
-// wrong — checked per code rather than for German by name, so a language added
-// to the registry is checked by having been added.
+// Every other language's corpus, checked per code rather than by name so a
+// language added to the registry is checked by having been added. Two things to
+// get wrong:
 //
-// One must NOT claim `corpusCache`: that role is how the loader finds the text
-// to open at boot, and a second file claiming it would make which language
-// opens depend on manifest order.
-//
-// STAGE, and the two ways it goes wrong are opposite failures:
-//
-//   a Bible on `text`     — every reader waits behind three corpora, ~9 MB, to
-//                           see a word of the one they actually opened;
-//   a Bible on `optional` — a phone set to Arabic opens in Arabic and shows the
-//                           reader the English KJV, because their Bible is a
-//                           download gated behind a Settings screen. This is
-//                           what `corpus` exists to stop, and asserting it here
-//                           is what keeps a future language from regressing to
-//                           it by being added the old way.
-//
-//   a dictionary NOT on `optional`
-//                         — machine-translated lexicography downloaded for
-//                           everyone. It stays an ask; `strongs_for` serves the
-//                           English definitions until the reader makes it.
+//   the role  — none of them may claim `corpusCache`, which is how the loader
+//               finds the text to open at boot; a second claimant would make
+//               which language opens depend on manifest order.
+//   the stage — a Bible on `text` makes every reader wait behind ~9 MB of
+//               corpora to see a word of the one they opened; a Bible on
+//               `optional` shows an Arabic device the English KJV, its own
+//               Bible gated behind a Settings screen. A dictionary anywhere but
+//               `optional` downloads machine-translated lexicography for
+//               everyone, when `strongs_for` already serves the English
+//               definitions.
 for (const [role, entries] of byRole) {
   const code = role.slice(role.indexOf(":") + 1);
   const corpus = role.startsWith("corpus:");
@@ -137,9 +125,8 @@ for (const [role, entries] of byRole) {
   }
 }
 
-// The suggested-weave bundle is found by role, like the corpus cache, and it
-// must stay OFF the automatic path: it is the one thing in the pack a reader
-// has to ask for, and a stage slip would silently put 110 KB back on boot.
+// The suggested-weave bundle is found by role, like the corpus cache, and must
+// stay off the automatic path: a stage slip puts 110 KB back on boot.
 const sugg = manifest.files.filter((f) => f.role === "suggestedWeaves");
 if (sugg.length > 1) {
   fail(`expected at most one role:"suggestedWeaves" entry, found ${sugg.length}`);
@@ -161,9 +148,8 @@ for (const raw of ["data/kjv.jsonl", "data/luther1912.jsonl"]) {
   }
 }
 
-// The concept embedding must NOT ship either. Removed 2026-07-30 with the two
-// features that read it ("verses like this" and the concept map), so any entry
-// here is 3.08 MB of download that nothing in the engine will ever open.
+// The concept embedding must NOT ship either: nothing in the engine reads it,
+// so any entry here is 3.08 MB of download that will never be opened.
 for (const p of seen) {
   if (p.startsWith("data/concept-vectors.")) {
     fail(`${p} is in the pack — the concept embedding was removed 2026-07-30 and has no reader`);
@@ -171,12 +157,10 @@ for (const p of seen) {
 }
 
 // Every stage must be non-empty: an empty "text" stage means nothing to boot on.
-//
-// EXCEPT `corpus`, which is empty in a legitimate checkout: each non-English
-// Bible is built by its own data-prep pipeline, and the pack builder skips one
-// whose source JSONL is absent. A tree that has only run the KJV pipeline is
-// not broken — and failing here would make every other check in this file
-// unreachable for the person most likely to need them.
+// Except `corpus`, which is legitimately empty — each non-English Bible is built
+// by its own data-prep pipeline and the pack builder skips one whose source
+// JSONL is absent, so failing here would make every other check unreachable for
+// a tree that has only run the KJV pipeline.
 for (const st of STAGES) {
   if (st === "corpus") continue;
   if (!manifest.files.some((f) => f.stage === st)) fail(`no files in stage "${st}"`);

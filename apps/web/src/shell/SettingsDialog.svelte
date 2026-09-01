@@ -1,6 +1,6 @@
 <script lang="ts">
-  // One Settings dialog (Android IA): analysis switches, theme, text size /
-  // margin / line-spacing sliders, copy format, bundled stock set.
+  // One Settings dialog: analysis switches, theme, text size / margin /
+  // line-spacing sliders, copy format, bundled stock set.
   import { getSession } from "../state/session.svelte";
   import { shippedBase } from "../lib/locale";
   import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_SCRIPT } from "../engine/fonts.generated";
@@ -27,32 +27,24 @@
 
   const s = getSession();
 
-  // ── backup / restore: the authored home dirs as a zip, the same layout the
-  //    Android backup writes — one archive restores across devices. ──────────
-  // Must stay in step with engine/home.ts's USER_DIRS and the Android shell's
-  // BACKUP_DIRS: a dir missing from this restore filter is a dir that exports
+  // Backup / restore: the authored home dirs as a zip. Must stay in step with
+  // engine/home.ts's USER_DIRS — a dir missing from this restore filter exports
   // into the zip and is then silently dropped on the way back in.
   const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", "reading/", "plans/", "devotionals/", ".config/"];
 
-  // Archives written before the Plumbline rename carry the config under
-  // ".config/pure-study/"; the live home reads ".config/plumbline/". Remapped on
-  // restore only — nothing ever writes the old name back. Without this an older
-  // backup silently drops the user's settings (the authored dirs above are
-  // unaffected: their names never moved).
+  // Pre-rename archives carry the config under ".config/pure-study/"; the live
+  // home reads ".config/plumbline/". Remapped on restore only — nothing writes
+  // the old name back. Without this an older backup drops the user's settings.
   const LEGACY_CONFIG = ".config/pure-study/";
   const currentConfigPath = (p: string): string =>
     p.startsWith(LEGACY_CONFIG) ? ".config/plumbline/" + p.slice(LEGACY_CONFIG.length) : p;
 
-  // A restore that fails after it has muted this session's writes cannot be
-  // reported IN that session: `s.restoring` silences every config persist and
-  // `home.freeze()` silences every authoring persist, and neither has an undo
-  // (the worker has a `freeze` op and nothing that lifts it). A session left
-  // standing there takes notes, tags and threads all day, looks like it saved
-  // them, and keeps none. So a failure past that point reloads regardless, and
-  // the message rides across the reload — the reader is owed an explanation,
-  // not a blink.
+  // Once a restore has muted this session's writes (`s.restoring` + `freeze()`,
+  // neither of which has an undo) the session can no longer save anything, so a
+  // failure past that point must reload regardless — and the message rides
+  // across the reload in sessionStorage.
   const RESTORE_FAILED = "plumbline:restoreFailed";
-  /** A failed restore to tell the reader about, blocking (see below). */
+  /** A failed restore to tell the reader about, blocking. */
   let restoreFailed = $state<string | null>(null);
   // Read on mount, and this dialog is mounted for the whole session, so the
   // notice lands whether or not Settings was open when the page came back.
@@ -67,7 +59,7 @@
   }
 
   /** The configured Sunday service start as an `<input type="time">` value —
-   *  "HH:MM", or "" when never set (the before-noon rule stands). */
+   *  "HH:MM", or "" when never set. */
   function serviceTimeValue(): string {
     const m = s.config.sundayService;
     if (typeof m !== "number") return "";
@@ -77,8 +69,8 @@
   function setServiceTime(e: Event): void {
     const v = (e.currentTarget as HTMLInputElement).value;
     if (!v) {
-      // Cleared: back to the before-noon rule. undefined drops the key from
-      // the snapshot, so the file loses it rather than storing a null.
+      // Cleared: back to the before-noon rule. undefined drops the key from the
+      // snapshot, so the file loses it rather than storing a null.
       s.config.sundayService = undefined;
     } else {
       const [h, m] = v.split(":").map(Number);
@@ -101,23 +93,15 @@
       a.download = name;
       a.click();
       URL.revokeObjectURL(a.href);
-      // The file is NAMED, so a reader who looked away while the browser saved
-      // it knows what to go and find. Handing the anchor to the browser is the
-      // last thing we can see — there is no completion signal for a download —
-      // so this says what we did, not that the file is on the device.
+      // There is no completion signal for a download, so the toast names the
+      // file and says what we did, not that it landed on the device.
       const n = files.size - 1;
       s.showToast(plural("settings.backedUp.one", "settings.backedUp.other", n, { name }));
     } catch (err) {
-      // A toast, and deliberately NOT the blocking notice a failed restore gets.
-      // A backup that fails is not a data-loss event: nothing was written, the
-      // reader's own study data is exactly as it was, and they are standing in
-      // this dialog looking at the button that is also the repair. A restore
-      // failure has to block because it can land on a reloaded page with the
-      // phone already in a pocket; this one cannot.
-      // What it must not do is stay silent. Unguarded, a rejection anywhere
-      // above — the export, the zip write, the browser refusing the save — made
-      // the button do nothing at all, which is indistinguishable from a browser
-      // that saved the file somewhere the reader hasn't looked.
+      // A toast, not the blocking notice a failed restore gets: nothing was
+      // written and the reader is looking at the button that is also the repair.
+      // It must not stay silent, though — unguarded, a rejection made the button
+      // look like a browser that saved the file somewhere unnoticed.
       const why = err instanceof Error ? err.message : String(err);
       s.showToast(t("settings.backupFailed", { why }));
     }
@@ -148,9 +132,8 @@
       s.restoring = true;
       await s.rpc.freeze(); // the debounced authoring persist must not fire either
       await idbApply("user", safe);
-      // The close-safe theme cache is a mirror of THIS session's config; the
-      // restored home carries its own theme, and the boot reconcile would
-      // otherwise trust the stale cache over it. Drop it so the restore wins.
+      // The close-safe theme cache mirrors THIS session's config; the boot
+      // reconcile would trust it over the restored home's own theme.
       try {
         localStorage.removeItem("plumbline:themeChoice");
       } catch {
@@ -179,24 +162,13 @@
   }
 
   function toggleGate(key: "humanAnalysis" | "machineAnalysis"): void {
-    // `!== true`, not `=== false`. The tiers are opt-in, so an ABSENT value means
-    // off — and `undefined === false` is false, which left the first click on a
-    // never-set toggle doing nothing at all.
+    // `!== true`, not `=== false`: the tiers are opt-in, so an absent value means
+    // off, and `undefined === false` left the first click doing nothing.
     s.config[key] = s.config[key] !== true;
     s.saveConfig();
-    // Machine tier switched on: pull the deferred R&D pack in (no-op if the
-    // idle path already did).
+    // Machine tier on: pull the deferred R&D pack in (no-op if idle already did).
     if (key === "machineAnalysis" && s.config[key] === true) void s.ensureRnd();
   }
-  /** Choose a language, or `""` to go back to following the device.
-   *
-   *  RELOADS, like the bundled-study-set toggle above, and for a sharper reason
-   *  than "it is simpler". The string table itself is reactive and would repaint
-   *  on the spot — but book names do not come from it. They come from the TOC,
-   *  which the engine hands over once on the boot reply and which
-   *  `session.svelte.ts` PINS in its cache precisely because it cannot change
-   *  while a session runs. Swapping the chrome and leaving "Genesis" in the
-   *  passage navigator would be a half-translated app that looks like a bug. */
   /** The switch in progress: which language, and how far its Bible has come
    *  (null fraction = nothing to download). Drives the full-screen overlay at
    *  the bottom of this file. */
@@ -207,26 +179,17 @@
     say: (id: string, args?: Record<string, string | number>) => string;
   } | null>(null);
 
+  /** Choose a language, or `""` to follow the device. Reloads: book names come
+   *  from the TOC, which the engine hands over once on boot and session.svelte.ts
+   *  pins, so a live swap would leave "Genesis" in the passage navigator.
+   *
+   *  Flush, then await, then reload — `flushConfig` only posts the save, and a
+   *  reload in the same tick tears the page down before the worker writes it.
+   *  The overlay goes up before any await (this can take seconds), and speaks the
+   *  TARGET language, so the sentence is fetched from its catalogue up front. */
   async function setLanguage(code: string): Promise<void> {
     if ((s.config.language ?? "") === code) return;
     s.config.language = code;
-    // FLUSH, THEN AWAIT, THEN RELOAD. `flushConfig` posts the save and returns;
-    // the worker still has to write it into the home and persist that to
-    // IndexedDB, and a reload fired in the same tick tears the page down first —
-    // so the reader picks German, watches the app reload, and gets English back.
-    // The RPC is ordered, so awaiting the flush is awaiting the save with it.
-    // (Caught by e2e/language.spec.ts, which is the only thing that ever
-    // exercised this: every other setting here takes effect without a reload.)
-    // THE OVERLAY GOES UP FIRST, before any await. Everything below can take
-    // seconds — a config flush, a 2 MB download, a reload — and without it the
-    // reader taps Deutsch and watches an unchanged English screen do nothing. It
-    // is full-screen rather than a line in this dialog because the reader's
-    // attention is on what they just tapped.
-    // IN THE LANGUAGE BEING SWITCHED TO, not the one being left — "Wechsel zu
-    // Deutsch…", not "Switching to Deutsch". The reader has already asked for
-    // that language; answering in the old one is the app lagging behind its own
-    // reader. `t()` still reads the live table, so the sentence is fetched from
-    // the target catalogue up front.
     const target = await s.rpc
       .static("i18nCatalog", code, deviceLocale())
       .then((c: any) => c?.strings ?? null)
@@ -239,11 +202,9 @@
       say,
     };
 
-    // THE SPLASH AFTER THE RELOAD MUST SPEAK THE NEW LANGUAGE. `i18n.svelte.ts`
-    // seeds it from this key, and it is only written when a catalogue ARRIVES —
-    // which is after the boot the splash belongs to. So without this the reader
-    // sees: German overlay, English splash, German app. Three languages in one
-    // gesture, and the reason the transition read as broken.
+    // The splash after the reload seeds itself from this key. It is otherwise
+    // only written when a catalogue arrives — after the boot the splash belongs
+    // to — so without this the reader gets an English splash mid-switch.
     try {
       localStorage.setItem("plumbline.lang", code || shippedBase(navigator.languages?.[0] ?? "en") || "en");
     } catch {
@@ -252,32 +213,12 @@
 
     s.flushConfig();
     await s.rpc.flush();
-    // THE TEXT, not just the interface. A language with its own Bible needs it
-    // on the device, and picking the language IS the ask — a separate "download
-    // German scripture" row would be a second decision about one intention.
-    //
-    // Failure is not fatal and must not block the switch: `corpus_for` in the
-    // core falls back to the KJV, so a reader with no connection gets a German
-    // interface over the English text and can try again by re-picking. Silent
-    // beyond the bar, because the alternative is an error about a download they
-    // did not explicitly start.
-    //
-    // WHICH LANGUAGES HAVE ONE is the engine's answer, not this file's: the
-    // catalogue's language list carries the corpus role. This was
-    // `if (code === "de")` once, and then — worse — `if (needsPack(code))`,
-    // which read the DOWNLOAD list: when the Bibles started shipping with the
-    // app, that list emptied for a language with no dictionary, Arabic skipped
-    // this block entirely, and the reload below raced the background download
-    // of the very text being switched to. A phone that lost the race booted
-    // from a pin that had never heard of the Van Dyck and opened the Arabic
-    // interface over the English KJV (maintainer's own, v0.63.0 launch day).
-    //
-    // So the question here is not "is there something to download" — usually
-    // there is not, the background pass has long finished — it is "is that
-    // Bible REALLY on this device, right now, before I reload into it". The
-    // state call answers from the depot; the install is a no-op wait when the
-    // bytes already landed, a short download when they are mid-flight, and the
-    // full fetch on the upgrade path where the old pin hides the language.
+    // The text too, not just the interface. Failure must not block the switch —
+    // `corpus_for` falls back to the KJV. The gate is `hasOwnBible` (the
+    // catalogue's corpus role), never the DOWNLOAD list, which empties for a
+    // language with no dictionary and let the reload race the very download it
+    // needed. The question is "is that Bible on this device right now", so ask
+    // the depot and install only if it is absent.
     if (hasOwnBible(code)) {
       const state = await s.rpc.langPackState(code).catch(() => null);
       if (state?.available && !state.installed) {
@@ -300,8 +241,7 @@
 
   /** No `applyTheme()` here: the choice IS the input, and App.svelte's writer
    *  effects paint whatever it resolves to. A second caller would be a second
-   *  owner of the same pixels — which is how the bar and the page came to
-   *  disagree in the first place. */
+   *  owner of the same pixels. */
   function setTheme(theme: string): void {
     s.config.theme = theme;
     s.saveConfig();
@@ -310,17 +250,16 @@
     s.config[key] = v;
     s.saveConfig();
   }
-  /** The style knobs back to the shipped values (core::config's defaults, the
-   *  golden file): size, spacing, margins, both faces, and the theme. Nothing
-   *  else — the reading aids and the reader's data are not "style". */
+  /** The style knobs back to core::config's shipped defaults: size, spacing,
+   *  margins, both faces, theme. Nothing else — reading aids and the reader's
+   *  data are not "style". */
   async function defaultStyle(): Promise<void> {
     setTheme("system");
     setNum("bodySize", 20);
     setNum("sideMargin", 28);
     setNum("lineSpacing", 1.35);
     if ((s.config.chromeFont ?? DEFAULT_FONT) !== DEFAULT_FONT) s.setChromeFont(DEFAULT_FONT);
-    // Last and guarded: the text face relayouts the chapter, so skip it when it
-    // is already the shipped one.
+    // Last and guarded: the text face relayouts the chapter.
     if ((s.config.textFont ?? DEFAULT_FONT) !== DEFAULT_FONT) await setTextFont(DEFAULT_FONT);
   }
   async function toggleBundled(): Promise<void> {
@@ -329,19 +268,16 @@
     location.reload(); // the engine re-opens with/without the stock set
   }
 
-  // ── the suggested weaves, on request ────────────────────────────────────
-  // 194 machine-proposed links that ship inside the APK but are a download
-  // here: too big for the boot path of a phone that may never open the weave
-  // library, and genuinely optional — they are suggestions to judge, not text.
+  // The suggested weaves, on request: 194 machine-proposed links, a download
+  // rather than boot payload for a reader who may never open the weave library.
   let suggested = $state<{ available: boolean; installed: boolean; gzBytes: number } | null>(null);
   let installing = $state(false);
   let suggestedError = $state("");
   $effect(() => {
     void s.rpc.suggestedState().then(
       (st) => (suggested = st),
-      // A pack with no bundle answers `available: false` rather than throwing,
-      // so reaching here means the worker itself is unreachable — in which case
-      // the row simply does not appear.
+      // A pack with no bundle answers `available: false` rather than throwing, so
+      // reaching here means the worker is unreachable and the row does not appear.
       () => (suggested = null),
     );
   });
@@ -351,9 +287,6 @@
     try {
       await s.rpc.installSuggested();
       suggested = await s.rpc.suggestedState();
-      // The weave library is one of the reads `authored` invalidates, and the
-      // worker fires it — but this dialog holds its own copy of nothing, so
-      // there is no reload to do here.
     } catch (e) {
       suggestedError =
         e instanceof Error && e.message ? t("settings.downloadFailedWhy", { why: e.message }) : t("settings.downloadFailed");
@@ -362,22 +295,15 @@
     }
   }
 
-  // The reader's home church left this dialog for the SHARE screen, where a
-  // shared link's payload is set beside the QR that carries it.
-
-  // ── offline completeness ────────────────────────────────────────────────
-  // The reader's answer to "will this work with no signal?" — and the repair
-  // when it wouldn't have.
+  // Offline completeness: the answer to "will this work with no signal?", and
+  // the repair when it wouldn't have.
   let offline = $state<OfflineSurvey | null>(null);
   let offlineBusy = $state(false);
   let offlineProgress = $state(0);
   const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
-  // "On this device" is a claim about BYTES, and only about bytes — NOT about
-  // whether this SESSION has finished preparing what it already downloaded.
-  // Otherwise a phone holding every byte is told "Still to download: the
-  // analysis pack" for the whole time the engine is busy parsing it.
-  // Downloading and preparing are different waits and the reader is owed the
-  // difference.
+  // A claim about bytes only, never about whether this session has finished
+  // PREPARING them — otherwise a phone holding every byte is told "still to
+  // download" for as long as the engine is parsing. See `preparingNote`.
   const offlineComplete = $derived(!!offline && offline.missing.length === 0);
   /** What is still missing, in a sentence — the text itself never is. */
   const offlineSummary = $derived.by(() => {
@@ -404,8 +330,8 @@
     offlineBusy = true;
     offlineProgress = 0;
     try {
-      // The machine tier first: it is the piece deliberately left out on
-      // phones, and loading it also puts its files in the cache.
+      // The machine tier first: the piece left out on phones, and loading it
+      // also puts its files in the cache.
       if (s.rndState !== "ready") await s.ensureRnd();
       offline = await completeOffline((f) => (offlineProgress = f));
     } catch {
@@ -416,24 +342,16 @@
     }
   }
 
-  // Fresh timings whenever the dialog opens: the background stages keep
-  // appending to the boot trace (Strong's, warm steps, the analysis pack),
-  // and the turn split describes whichever chapter was last laid out — turn
-  // a few pages, then open this.
-  //
-  // Read with PERF OFF too, which is the whole of D-20: `fromPin` — did this
-  // launch come off the device with no request? — is measured by nothing, boot.ts
-  // just records the rung it took, and the `diagnostics` op is not PERF-gated
-  // either. So the bug-report header below reads the same in a release build as
-  // in a measuring one; with the flag off the numbers alongside it come back
-  // empty and zeroed, and `reportMeasurements` refuses to print them.
+  // Fresh timings whenever the dialog opens: background stages keep appending to
+  // the boot trace. Read with PERF OFF too — `diagnostics` is not gated, so the
+  // report header is identical in a release build; the numbers come back zeroed
+  // there and `reportMeasurements` refuses to print them.
   let diag = $state<WorkerDiagnostics | null>(null);
   let copied = $state(false);
   $effect(() => {
     if (!s.showSettings) return;
-    // ONE round trip, so the trace, the stall total and the per-file costs are
-    // all from the same instant. Three separate reads drift while the background
-    // load is still running, which is exactly when someone is reading this.
+    // One round trip, so trace, stall total and per-file costs share an instant;
+    // separate reads drift while the background load is still running.
     void s.rpc
       .diagnostics()
       .then((d) => {
@@ -441,16 +359,14 @@
         s.bootTrace = d.trace;
         s.turnTrace = d.turn;
       })
-      // A dead worker rejects every call, and this one now runs in every session
-      // rather than only in a measuring build. Nothing in the header needs it
-      // (version, build, engine and pack version are all held on this thread), so
-      // a failure here costs the reader one warm-boot note — it must not become an
-      // unhandled rejection while they are reporting the very crash that caused it.
+      // A dead worker rejects every call and this runs in every session. Nothing
+      // in the header needs it, so a failure must not become an unhandled
+      // rejection while the reader is reporting the crash that caused it.
       .catch(() => {});
   });
 
-  /** kilobytes, counts and milliseconds all shared one " ms" suffix, so the
-   *  panel confidently reported `home evict after open (KB)  36367 ms`. */
+  /** The trace mixes kilobytes, counts and milliseconds under one label column;
+   *  without this every row is suffixed " ms". */
   function unitOf(label: string): string {
     if (/\(KB\)$/.test(label)) return " KB";
     if (/^(worker font faces|items|wasm→JS)/.test(label)) return "";
@@ -458,31 +374,22 @@
   }
 
   /** The header of a bug report: which build, which data, what kind of device.
-   *
-   *  NOT PERF-gated, and no line in here may become so (D-20). Every value below
-   *  is a fact the app knows whatever the perf switch says — so flipping PERF
-   *  cannot change one character of this, and a release build with measurement
-   *  off still pastes something answerable.
-   *
-   *  Screenshots are not the fallback: they cost a round trip every time and cut
-   *  off exactly the rows that mattered. */
+   *  Not PERF-gated, and no line in here may become so — a release build with
+   *  measurement off must still paste something answerable. */
   function reportHeader(): string[] {
     const nav = navigator as any;
     const c = nav.connection ?? {};
     const L: string[] = [];
     L.push(`Plumbline ${__APP_VERSION__} · build ${__BUILD_ID__} · engine ${s.engineVersion}`);
     // The pack version off the SESSION (it arrives in BootInfo), not out of the
-    // diagnostics round trip: the two are the same `manifest.version`, and this
-    // one is still there when the worker is gone — which is when a report matters
-    // most. `fromPin` has no such twin, and needs none: boot.ts records the rung
-    // it took whether or not anything is being timed.
+    // diagnostics round trip: same `manifest.version`, but still there when the
+    // worker is gone — which is when a report matters most.
     L.push(`data pack ${s.packVersion || "?"}${diag?.fromPin ? " (warm: stage 1 off the device)" : ""}`);
     L.push("");
     L.push("DEVICE");
     L.push(`  ua              ${navigator.userAgent}`);
-    // The browser's OWN estimate. Recorded so nobody ever again derives a
-    // connection speed by dividing a byte count by a wall clock that was mostly
-    // this thread being busy.
+    // The browser's OWN estimate — a byte count over a wall clock measures this
+    // thread being busy, not the connection.
     L.push(`  connection      ${c.effectiveType ?? "?"} · downlink ${c.downlink ?? "?"} Mbps · rtt ${c.rtt ?? "?"} ms · saveData ${c.saveData ?? false}`);
     L.push(`  cpu threads     ${navigator.hardwareConcurrency ?? "?"}`);
     L.push(`  device memory   ${nav.deviceMemory ?? "?"} GB`);
@@ -492,13 +399,9 @@
     return L;
   }
 
-  /** The measured half of a report — present only when this build measured
-   *  itself. Missing whole rather than zeroed: with PERF off the stall meter is
-   *  never started and no engine call is timed, so `total 0 ms across 0 stalls`
-   *  would read as a device that never stalled instead of one nobody watched, and
-   *  the boot trace would be just those pushes that happen not to be gated — a
-   *  trace missing its stages, which is worse than no trace. One line says which
-   *  kind of build it was, so nobody reads silence as good news. */
+  /** The measured half of a report. Missing whole rather than zeroed: with PERF
+   *  off nothing is timed, and `total 0 ms across 0 stalls` reads as a device that
+   *  never stalled rather than one nobody watched. */
   function reportMeasurements(): string[] {
     if (!PERF) return ["", "(this build is not measuring itself — no boot trace, no stall meter)"];
     const L: string[] = [];
@@ -507,9 +410,8 @@
       L.push("ENGINE THREAD UNAVAILABLE");
       L.push(`  total           ${Math.round(diag.stall.totalMs)} ms across ${diag.stall.count} stalls`);
       L.push(`  worst single    ${Math.round(diag.stall.worstMs)} ms`);
-      // Reported, and EXCLUDED from the numbers above. A hidden tab has its
-      // timers and its downloads frozen by the browser, and counting that as
-      // engine work invented a 25-second stall on a launch that did none.
+      // Reported, and excluded from the numbers above: a hidden tab has its
+      // timers and downloads frozen, which counts as engine work otherwise.
       L.push(`  page hidden     ${Math.round(diag.stall.hiddenMs)} ms (excluded above)`);
       L.push("  (time this thread could not answer a tap, a layout, OR its own downloads)");
       if (diag.slowCalls.length) {
@@ -543,11 +445,8 @@
   function report(): string {
     return [...reportHeader(), ...reportMeasurements()].join("\n");
   }
-  /** Shown as well as copied. The clipboard can be refused (see below), and
-   *  "select the text and copy it by hand" needs text on the screen to select —
-   *  in a release build this is the only such text, since the diagnostic tables
-   *  render only in a measuring build. Derived, so what the reader reads is what
-   *  the button copies. */
+  /** Shown as well as copied — the clipboard can be refused, and copying by hand
+   *  needs text on screen. Derived, so what is read is what is copied. */
   const reportText = $derived(report());
 
   async function copyReport(): Promise<void> {
@@ -558,8 +457,7 @@
       setTimeout(() => (copied = false), 2000);
     } catch {
       // Clipboard needs a secure context and a user gesture, and some phone
-      // browsers refuse anyway. Falling back to a share sheet beats a dead
-      // button, and failing that the reader can still select the text.
+      // browsers refuse anyway; fall back to the share sheet, then to the toast.
       try {
         await navigator.share?.({ text });
       } catch {
@@ -568,9 +466,8 @@
     }
   }
 
-  // Tokens only: the label is looked up at RENDER, so a language change
-  // repaints the picker instead of leaving last language's words beside a
-  // live control. Keep in step with core::theme::ThemeChoice and the worker's
+  // Tokens only: the label is looked up at render, so a language change repaints
+  // the picker. Keep in step with core::theme::ThemeChoice and the worker's
   // THEME_TOKENS.
   const themes = [
     "system",
@@ -614,30 +511,17 @@
     phosphor: "themePhosphor",
     "high-contrast": "themeHighContrast",
   };
-  // Straight off the generated registry, so a family added to
-  // scripts/subset-fonts.mjs appears in both pickers with no edit here — and a
-  // face can never be offered that has no files behind it. The LABEL is the
-  // typeface's own name (core::font::Font::name): a proper noun, so it is not in
-  // the i18n catalogue and does not change with the language.
+  // The faces this language can be read in, straight off the generated registry
+  // so a family added to scripts/subset-fonts.mjs appears here with no edit. The
+  // label is the typeface's own name — a proper noun, so not in the catalogue.
   //
-  // FILTERED BY SCRIPT, which is the one thing the registry cannot express as a
-  // plain list. Amiri is the only bundled face with any Arabic in it, so it is
-  // the only one offered to a reader of a right-to-left language — and it is
-  // offered to nobody else, because its Latin is not why it is here.
+  // Filtered by SCRIPT (`core::font::Font::offered_for` is the same rule in
+  // Rust): per-glyph fallback would paint Arabic in Amiri whatever was picked,
+  // and since `FONT_SCALE` reads off the SELECTED token, offering Inter to an
+  // Arabic reader would render Amiri at Inter's 0.87 — a mislabelled size slider.
   //
-  // Not cosmetic. Per-glyph fallback would render Arabic scripture in Amiri
-  // whatever the reader picked, so the only thing the other five would actually
-  // change is the SIZE: `FONT_SCALE` is read off the SELECTED token, so an
-  // Arabic reader who picked Inter would get Amiri at 0.87 — a ratio calibrated
-  // to Inter's x-height and meaningless for naskh. The picker would be a
-  // mislabelled size slider. `core::font::Font::offered_for` is the same rule in
-  // Rust and the reason this one is safe to state here.
-  // The faces this LANGUAGE can be read in. When that is exactly one, the two
-  // pickers below are not rendered at all — a dropdown holding a single row is
-  // a control that cannot do anything, and offering it reads as broken rather
-  // than restrained (maintainer, 2026-08-28). The app adopts the lone face
-  // itself: `readerFace` in lib/i18n.svelte.ts resolves every applied token to
-  // the script face under an RTL language, so nothing here needs choosing.
+  // When exactly one face qualifies the pickers are not rendered at all;
+  // `readerFace` in lib/i18n.svelte.ts resolves applied tokens to the script face.
   const fonts = $derived(
     Object.keys(FONT_CSS_FAMILY).filter((tok) => FONT_SCRIPT[tok] === script()),
   );
@@ -645,9 +529,9 @@
 
   let fontBusy = $state(false);
   async function setTextFont(token: string): Promise<void> {
-    // Awaited, and the control is disabled while it runs: the face has to be in
-    // BOTH the worker (which measures) and this thread (which paints) before the
-    // relayout, and on a slow connection that is a real download.
+    // Awaited with the control disabled: the face must be in both the worker
+    // (which measures) and this thread (which paints) before the relayout, and
+    // on a slow connection that is a real download.
     fontBusy = true;
     try {
       await s.setTextFont(token);
@@ -673,16 +557,12 @@
   >
     <h2>{t("settings.title")}</h2>
     <div class="content">
-      <!-- FIRST, above everything: it is the setting that decides what the rest
-           of this dialog is written in, and a reader who cannot read the labels
-           should not have to hunt past twenty of them to find it. -->
+      <!-- First: it decides what the rest of this dialog is written in, and a
+           reader who cannot read the labels must not have to hunt for it. -->
       <p class="label">{t("settings.language")}</p>
       <p class="desc-note">{t("settings.languageDesc")}</p>
-      <!-- A dropdown, like the theme's: a radio column grows a row per language
-           and had begun to dominate the dialog's opening screen. The options
-           are ENDONYMS, always — someone looking for German is looking for
-           "Deutsch", and they are looking for it in a dialog they may not be
-           able to read a word of. -->
+      <!-- Options are ENDONYMS, always — someone looking for German is looking
+           for "Deutsch", in a dialog they may not be able to read. -->
       <select
         class="dropdown"
         aria-label={t("settings.language")}
@@ -695,12 +575,9 @@
         {/each}
       </select>
       {#if hasOwnLexicon()}
-        <!-- The escape hatch from a machine-translated dictionary back to the
-             English original (the maintainer's ask: the AI translation must be
-             opt-out-able). Shown for any language that HAS one of its own,
-             asked of the engine's registry rather than by comparing against
-             "de". Reloads like the language itself: the dictionary is picked
-             when the engine opens. -->
+        <!-- Escape hatch from a machine-translated dictionary back to the English
+             original. Shown for any language the registry says has one of its
+             own. Reloads: the dictionary is picked when the engine opens. -->
         <label class="toggle">
           <span class="body">
             <span class="name">{t("settings.baseLexicon")}</span>
@@ -714,13 +591,9 @@
         </label>
       {/if}
       {#if s.akjvAvailable}
-        <!-- Out of Advanced (2026-08-16): a new or curious reader deciding how
-             the words should read must not have to open a disclosure to decide
-             it. A CHOICE, not a switch, so each option can say plainly what it
-             costs. Still a reading aid over the SAME text, not a version
-             picker: the words stay the KJV's everywhere it matters (memorize,
-             Present, copy, share), and every marked word tells you what it
-             replaced. -->
+        <!-- A choice, not a switch, so each option can say what it costs. Still a
+             reading aid over the SAME text, not a version picker: the words stay
+             the KJV's for memorize, Present, copy and share. -->
         <hr />
         <p class="label">{t("settings.wording")}</p>
         <label class="radio rich">
@@ -853,8 +726,7 @@
       </div>
       <p class="desc-note">{t("settings.defaultStyleDesc")}</p>
       <hr />
-      <!-- Backup lives with the everyday settings, not behind Advanced: keeping
-           your own data is a basic act, not a power tool (maintainer, 2026-08-24). -->
+      <!-- Backup lives with the everyday settings, not behind Advanced. -->
       <p class="label">{t("settings.data")}</p>
       <div class="row">
         <button class="action" onclick={backup}>{t("settings.backup")}</button>
@@ -868,11 +740,9 @@
       <details class="advanced">
         <summary>{t("settings.advanced")}</summary>
         <p class="desc-note">{t("settings.advancedDesc")}</p>
-      <!-- The two typography switches. Both default ON and both are written as
-           an explicit boolean, so `!== false` is the read everywhere: an absent
-           key is a config from before the setting existed, not an opt-out.
-           Numbers are a LAYOUT input (the worker re-lays the chapter out);
-           italics are paint-only, so that toggle repaints without a relayout. -->
+      <!-- Both typography switches default ON, so `!== false` is the read: an
+           absent key is a config from before the setting existed, not an opt-out.
+           Numbers are a layout input (the worker re-lays out); italics repaint. -->
       <label class="toggle">
         <span class="body">
           <span class="name">{t("settings.verseNumbers")}</span>
@@ -954,21 +824,13 @@
         </label>
       {/each}
       <hr />
-      <!-- WHICH THREAD THE GOSPEL BUTTON OPENS. Share's one button, and the
-           first-run path of the same name, walk a thread — the stock Romans
-           Road unless the reader has built their own. Set here rather than on
-           Share because it is a preference, not the act of sharing.
+      <!-- Which thread the gospel button opens. The stored value is the thread's
+           NAME, and the empty option means the default rather than "none" —
+           storing "Romans Road" would freeze a name the reader can change.
 
-           The stored value is the thread's NAME, and the empty option means the
-           default rather than "none": storing "Romans Road" explicitly would
-           freeze the name of a thread the reader can rename.
-
-           The displayed value goes through the same existence check the resolver
-           applies: a chosen thread that has since been deleted BEHAVES as the
-           default, so the control shows the default — a select displaying a
-           blank (the browser's answer to a value with no option) would look
-           broken, and showing the stale name would promise a thread that is
-           gone. -->
+           The displayed value repeats the resolver's existence check: a deleted
+           thread behaves as the default, so the control must show the default
+           rather than a blank select or a stale name. -->
       <p class="label">{t("settings.gospelThread")}</p>
       <p class="desc-note">{t("settings.gospelThreadDesc")}</p>
       <select
@@ -991,8 +853,6 @@
       <label class="toggle">
         <span class="body">
           <span class="name">{t("settings.bundled")}</span>
-          <!-- The reload note is WEB ONLY: Android applies it without one, so it
-               is its own key rather than a second copy of the sentence. -->
           <span class="desc">{t("settings.bundledDesc")} {t("settings.bundledReloads")}</span>
         </span>
         <input type="checkbox" checked={s.bundledOn} onchange={toggleBundled} />
@@ -1020,20 +880,6 @@
         {/if}
       {/if}
       <hr />
-      <label class="toggle">
-        <span class="body">
-          <span class="name">{t("settings.presentAsNew")}</span>
-          <span class="desc">{t("settings.presentAsNewDesc")}</span>
-        </span>
-        <input
-          type="checkbox"
-          checked={s.config.presentSharesAsNew !== false}
-          onchange={() => {
-            s.config.presentSharesAsNew = s.config.presentSharesAsNew === false;
-            s.saveConfig();
-          }}
-        />
-      </label>
       <hr />
       <p class="label">{t("settings.offline")}</p>
       <div class="offline">
@@ -1061,9 +907,8 @@
           {#if preparingNote}
             <span class="off-note">{preparingNote}</span>
           {/if}
-          <!-- "It is all downloaded" and "it will still be there" are different
-               claims, and only the first one is ours to make: browsers evict
-               storage under pressure. Say which of the two is true. -->
+          <!-- "All downloaded" and "it will still be there" are different claims:
+               browsers evict storage under pressure. Say which one is true. -->
           {#if offline?.persisted === false}
             <span class="off-note">{t("settings.offlineMayClear")}</span>
           {:else if offline?.persisted}
@@ -1076,9 +921,8 @@
       </div>
       <hr />
       <p class="label">{t("settings.report")}</p>
-      <!-- ALWAYS here, whether or not this build is measuring itself: the app
-           ships with the perf switch off, and a bug report still needs something
-           to paste without handing readers a debug build (D-20). -->
+      <!-- Always here, measuring build or not: the app ships with the perf switch
+           off and a bug report still needs something to paste. -->
       <p class="desc-note">{t("settings.reportDesc")}</p>
       <div class="row">
         <button class="action" onclick={copyReport}>{copied ? t("settings.reportCopied") : t("settings.reportCopy")}</button>
@@ -1088,16 +932,11 @@
         <pre class="report">{reportText}</pre>
       </details>
       </details>
-      <!-- i18n-ignore-start: PERF-only. This whole block renders only in a
-           measuring build, so no reader in any language can reach it, and its
-           contents are stage names straight out of the engine's own trace —
-           translating "worst single stall" would be translating a variable
-           name. See scripts/check-i18n.mjs. -->
+      <!-- i18n-ignore-start: PERF-only — renders only in a measuring build, and
+           its contents are stage names out of the engine's own trace. -->
       {#if PERF && s.bootTrace.length}
         <hr />
         <details class="diag">
-          <!-- The numbers only, and only in a measuring build: the button above
-               already copies them when they exist. -->
           <summary>Boot diagnostics — this device</summary>
           {#if diag}
             <p class="diag-sub">Engine thread unavailable</p>
@@ -1167,14 +1006,9 @@
 {/if}
 
 {#if switching}
-  <!-- THE LANGUAGE TRANSITION.
-       Full-screen and above everything, because a language change is the one
-       setting that takes the whole app with it: a config write, possibly a 2 MB
-       download, then a reload.
-
-       Styled like the SPLASH rather than like this dialog, and from the same
-       palette variables — it hands straight over to the splash when the reload
-       fires, and the two should read as one motion rather than two screens. -->
+  <!-- The language transition: full-screen and above everything, because the
+       change takes the whole app with it (config write, maybe a 2 MB download,
+       reload). Styled like the splash, which it hands straight over to. -->
   <div class="switching" role="status" aria-live="polite">
     <div class="sw-mark" aria-hidden="true">✦</div>
     <p class="sw-what">{switching.say("settings.switchingTo", { language: switching.endonym })}</p>
@@ -1189,17 +1023,13 @@
 {/if}
 
 {#if restoreFailed}
-  <!-- The one thing here that must not be a toast. A restore can fail with the
-       phone already back in a pocket, and a reader who missed the 2.2 seconds is
-       left believing their backup went in. No backdrop dismiss either — a stray
-       tap must not take the message away before it has been read. -->
+  <!-- Not a toast: a restore can fail with the phone already back in a pocket,
+       and a reader who missed it believes their backup went in. No backdrop
+       dismiss either — a stray tap must not take the message away. -->
   <div class="err-backdrop"></div>
   <!-- `use:modal` with NO close: focus comes here and Tab is held here, but
-       Escape does not dismiss it. Same reasoning as the missing backdrop
-       dismiss above — a stray key must not take the message away before it has
-       been read — and the Escape is still swallowed, so it cannot reach past
-       this and close something behind it instead.
-       Focus goes to Close, which is the acknowledgement. -->
+       Escape does not dismiss it (it is still swallowed, so it cannot close
+       something behind this instead). Focus goes to Close, the acknowledgement. -->
   <div
     class="err-dialog"
     role="alertdialog"
@@ -1215,11 +1045,8 @@
 {/if}
 
 <style>
-  /* ── the language transition ──────────────────────────────────────────────
-     The splash's own look (App.svelte), on purpose: this screen is replaced by
-     the splash a moment later and a different treatment would read as two
-     unrelated waits. A system serif for the same reason the splash uses one —
-     EB Garamond is not needed to say "one moment". */
+  /* The language transition, in the splash's own look (App.svelte): it is
+     replaced by the splash a moment later. System serif, like the splash. */
   .switching {
     position: fixed;
     inset: 0;
@@ -1260,8 +1087,6 @@
     font-size: calc(13px * var(--uiScale, 1));
     color: var(--faded, #6c665d);
   }
-  /* Reassurance, not progress — quieter than the line above it, like the
-     splash's own "3 MB download". */
   .sw-note {
     font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #6c665d);
@@ -1297,9 +1122,7 @@
     font-size: calc(17px * var(--uiScale, 1));
     font-weight: 600;
   }
-  /* Above every other surface, the confirmation included: this one reports a
-     failure the reader already lived through, and it arrives on a page that has
-     just reloaded under them. */
+  /* Above every other surface, the confirmation included. */
   .err-backdrop {
     position: fixed;
     inset: 0;
@@ -1420,15 +1243,14 @@
     font-variant-numeric: tabular-nums;
     color: var(--ink, #211f1a);
   }
-  /* The report itself, on screen: the answer to "what are you sending?" and the
-     fallback when the clipboard is refused, so it has to be selectable. */
+  /* The fallback when the clipboard is refused, so it has to be selectable. */
   .report {
     margin-top: 6px;
     max-height: 38vh;
     overflow: auto;
     white-space: pre-wrap;
-    /* The user-agent string is one ~130-character token with no spaces in it, and
-       without this it widens the dialog past the edge of a phone. */
+    /* The user-agent string is one ~130-character unbroken token; without this it
+       widens the dialog past the edge of a phone. */
     overflow-wrap: anywhere;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: calc(11px * var(--uiScale, 1));
@@ -1472,13 +1294,9 @@
     width: 17px;
     height: 17px;
   }
-  /* The time input is text-shaped, not a 17px checkbox square.
-     `--popupPaper`, not `--popup`: the latter is not a palette variable and
-     never was, so this always took the light-cream FALLBACK — invisible
-     near-white-on-cream on every dark theme, which is how it was reported
-     (maintainer, 2026-08-26, on Nord). Every other popup surface in the tree
-     spells it `--popupPaper`; on a light theme the wrong name happened to land
-     on the right colour, which is why it survived this long. */
+  /* The time input is text-shaped, not a 17px checkbox square. `--popupPaper`,
+     not `--popup`: the latter is not a palette variable, so it silently takes
+     the light-cream fallback and vanishes on every dark theme. */
   .toggle input.time {
     width: auto;
     height: auto;
@@ -1513,8 +1331,7 @@
     cursor: pointer;
     padding: 2px 0;
   }
-  /* A radio with a description under its name — the wording choice, where the
-     two options each have a cost worth a sentence. */
+  /* A radio with a description under its name. */
   .rich {
     align-items: flex-start;
   }
@@ -1533,8 +1350,6 @@
     font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
-  /* The theme picker: a dropdown, not a radio column — the list grew past what a
-     column of radios can show without dominating the dialog. */
   .dropdown {
     font: inherit;
     font-size: calc(14.5px * var(--uiScale, 1));
@@ -1564,11 +1379,9 @@
     border-radius: 7px;
     cursor: pointer;
     font-size: calc(14px * var(--uiScale, 1));
-    /* "Restore from backup…" is a `<label>` wrapping a file input, so the 44px
-       tap floor (app.css) does not reach it — but it stretches to the row's
-       height beside a button that the floor DID reach, and a label does not
-       centre its own text the way a button does. Without this the two controls
-       in the row are the same size with their words at different heights. */
+    /* Restore is a `<label>` wrapping a file input, so app.css's 44px tap floor
+       does not reach it — it stretches to the row height beside a button that
+       the floor DID reach, and a label does not centre its own text. */
     align-content: center;
   }
   .action:hover {

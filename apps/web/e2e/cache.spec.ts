@@ -1,52 +1,30 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The read-through cache in state/session.svelte.ts — three separate ways it
-// misbehaved, each asserted where nothing else can interfere.
+// The read-through cache in state/session.svelte.ts — three ways it misbehaved, each asserted
+// where nothing else can interfere.
 //
-// WHY THESE ARE UNIT ASSERTIONS OVER THE CACHE AND NOT REPAINT CHECKS. Commit
-// a26dd85 wrote three end-to-end tests for a cache-invalidation fix and the
-// first two passed with the fix reverted, because the background warm calls the
-// whole-cache `invalidate()` a few seconds into a fresh profile and refreshed
-// everything as a side effect. A race is not a guard. Every assertion below
-// that could be raced instead runs INSIDE ONE page.evaluate, so the page's own
-// single thread makes interleaving impossible rather than unlikely.
-//
-// Mutation-tested 2026-07-30 (working rules: break the fix, watch it redden,
-// restore). Each test names its mutation above itself, with the failure it
-// produced — all three were re-run against a mutated engine on that date, and
-// each reddened alone while the other two stayed green.
+// Unit assertions over the cache rather than repaint checks: the background warm calls the
+// whole-cache `invalidate()` a few seconds into a fresh profile and refreshes everything as a side
+// effect, which let an earlier end-to-end version pass with the fix reverted. Every raceable
+// assertion below runs inside one page.evaluate, so the page's single thread makes interleaving
+// impossible rather than unlikely.
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page).toHaveTitle("Plumbline Bible");
-  const established = page.getByRole("button", { name: "Established believer" });
-  await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await established.isVisible().catch(() => false)) {
-    await established.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
 /**
- * Wait out the background pipeline. `onCoreReady`, `onWarmReady` and `onRndReady`
- * all call the whole-cache `invalidate()`, and on a fresh profile they land
- * within seconds — which would empty the cache underneath a test that is
- * measuring how full it is. A boot trace that has stopped growing is the honest
- * "nothing further is coming" signal; every warm and analysis step appends one
- * entry, and the analysis tiers being opt-in since v0.32.0 means `rndState`
- * never reaches "ready" on a fresh profile at all.
+ * Wait out the background pipeline: `onCoreReady`, `onWarmReady` and `onRndReady` all call the
+ * whole-cache `invalidate()`, which would empty the cache underneath a test measuring how full it
+ * is. A boot trace that has stopped growing is the signal — every warm and analysis step appends
+ * one entry, and the opt-in analysis tiers mean `rndState` never reaches "ready" on a fresh
+ * profile at all.
  *
- * POLLED FROM NODE, and not with `page.waitForFunction`, because reading the boot
- * trace is an async RPC and an ASYNC predicate handed to waitForFunction is a
- * function that returns a PROMISE — which is an object, which is truthy, so the
- * poller fulfils on its first invocation and the helper waits for nothing. This
- * file shipped that bug on 2026-07-29 and it was measured on 2026-07-30: a
- * control predicate needing three invocations to become true returned after ONE,
- * in 4 ms, and this helper "settled" a still-booting engine in 76 ms. The repo
- * had already recorded the same trap twice (`reading.spec.ts`, `maps.spec.ts`) —
- * the rule is that anything awaiting an RPC polls from here, where `await` means
- * what it says.
+ * Polled from Node, not `page.waitForFunction`: reading the boot trace is an async RPC, and an
+ * async predicate returns a promise, which is truthy, so the poller fulfils on its first
+ * invocation and the helper waits for nothing. Anything awaiting an RPC polls from here.
  */
 async function settleBackground(page: Page): Promise<void> {
   const traceLen = () =>
@@ -64,20 +42,15 @@ async function settleBackground(page: Page): Promise<void> {
   }
 }
 
-// MUTATION: in session.svelte.ts's `isPinned`, `key.startsWith(m + KEY_SEP)` →
-// `key.startsWith(m + " ")` — the one-character bug this test exists for. Red:
-// "the TOC must survive an invalidate — navigation clamps against it".
+// Fails against the bug: with `isPinned` testing `key.startsWith(m + " ")` rather than
+// `key.startsWith(m + KEY_SEP)`, "the TOC must survive an invalidate" goes red.
 test("invalidate keeps the corpus immutables and drops the derived reads", async ({ page }) => {
   await boot(page);
 
-  // `invalidate()` claims in its own comment to keep the corpus-derived reads,
-  // because wiping them made navigation clamp against an empty TOC mid-refill.
-  // It tested the key prefix `"toc "` — with a SPACE — while `q()` builds keys as
-  // `${method}\0${JSON.stringify(args)}`, so the exemption never matched anything
-  // and every core-ready / warm-ready / rnd-ready / authored event dropped the
-  // TOC and the canon segments along with the study reads. Observed: the canon
-  // strip painted nothing for the length of the round trip, a click on it did
-  // nothing, and stepping across a book boundary had no book list.
+  // `invalidate()` keeps the corpus-derived reads, because wiping them made navigation clamp
+  // against an empty TOC mid-refill. It tested the key prefix `"toc "` — with a space — while
+  // `q()` builds keys as `${method}\0${JSON.stringify(args)}`, so the exemption never matched and
+  // every ready/authored event dropped the TOC and the canon segments with the study reads.
   const primed = () =>
     page.evaluate(() => {
       const s = (window as any).__plumbline;
@@ -91,8 +64,7 @@ test("invalidate keeps the corpus immutables and drops the derived reads", async
   await expect.poll(async () => (await primed()).canon, { timeout: 30_000 }).toBe(true);
   await expect.poll(async () => (await primed()).threads, { timeout: 30_000 }).toBe(true);
 
-  // Invalidate and read back in ONE evaluate: synchronously, before any refetch
-  // can land and before any background event can interleave.
+  // Invalidate and read back in one evaluate, before any refetch or background event can land.
   const after = await page.evaluate(() => {
     const s = (window as any).__plumbline;
     s.invalidate();
@@ -108,28 +80,23 @@ test("invalidate keeps the corpus immutables and drops the derived reads", async
   expect(after.threads, "a study read is dropped and will refetch").toBe(false);
 });
 
-// MUTATION: in `#store`, make the eviction unreachable (`return;` before the
-// size test). Red: "the cache must stay inside its own bound" — received 1193,
-// one entry per chapter of the canon, for a cap of 512.
+// Fails against the bug: with `#store`'s eviction unreachable the peak is 1,193 — one entry per
+// chapter of the canon — against a cap of 512.
 test("the cache stays bounded under sustained use", async ({ page }) => {
   await boot(page);
-  // Not because the measurement needs it — see `peak` below, which is
-  // invalidate-proof by construction — but because a boot still in flight makes
-  // the flood race the pack loader for the worker.
+  // Not for the measurement (`peak` below is invalidate-proof by construction) but because a boot
+  // still in flight makes the flood race the pack loader for the worker.
   await settleBackground(page);
 
-  // It grew for the life of the tab. Several call sites mint a key per
-  // interaction — `searchBlocks` per keystroke, `wordStudyBlocks` per tapped
-  // word, `verse` per verse of a passage preview — so "sustained use" is not a
-  // contrived load. This drives the cheapest of those: one verse read per
-  // chapter, walked down the whole canon.
+  // The cache grew for the life of the tab. Several call sites mint a key per interaction
+  // (`searchBlocks` per keystroke, `wordStudyBlocks` per tapped word, `verse` per verse of a
+  // preview), so this drives the cheapest of them: one verse read per chapter of the canon.
   //
-  // MEASURED AS A PEAK, AND AS THE LONGEST UNINTERRUPTED RUN OF INSERTS, because
-  // the final size alone is not evidence: a background `invalidate()` landing
-  // mid-flood drops hundreds of entries and would leave a cache with NO bound
-  // looking bounded. It cannot lower the peak, and `run` resets whenever the size
-  // falls — so `maxRun > cap` is the proof that more distinct keys than the bound
-  // really were asked for with nothing wiping them in between.
+  // Measured as a peak and as the longest uninterrupted run of inserts, because the final size
+  // alone is not evidence — a background `invalidate()` landing mid-flood drops hundreds of
+  // entries and would leave an unbounded cache looking bounded. It cannot lower the peak, and
+  // `run` resets whenever the size falls, so `maxRun > cap` proves more distinct keys than the
+  // bound really were asked for with nothing wiping them in between.
   const flood = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     const refs: string[] = [];
@@ -147,8 +114,8 @@ test("the cache stays bounded under sustained use", async ({ page }) => {
       if (size > peak) peak = size;
       prev = size;
     }
-    // Read back in the same turn: the loop's last continuation is a microtask, so
-    // no worker message can be delivered between it and this return.
+    // Read back in the same turn: the loop's last continuation is a microtask, so no worker
+    // message can be delivered before this return.
     return {
       asked: refs.length,
       peak,
@@ -165,23 +132,20 @@ test("the cache stays bounded under sustained use", async ({ page }) => {
     flood.cap,
   );
   expect(flood.peak, "the cache must stay inside its own bound").toBeLessThanOrEqual(flood.cap);
-  // LRU, not FIFO-from-the-wrong-end: what was read last is what is still there.
+  // LRU, not FIFO from the wrong end: what was read last is what is still there.
   expect(flood.newestKept, "the most recent read must survive eviction").toBe(true);
   expect(flood.oldestEvicted, "the least recently read must be the one evicted").toBe(true);
   expect(flood.tocKept, "eviction must not take the pinned TOC either").toBe(true);
 });
 
-// MUTATION: in `#memoMarks`, drop the `if (same) return prev;` line so every call
-// stores and returns the fresh Set. Red: "an epoch bump that changed nothing must
-// not hand back a different Set — the pane repaints on identity".
+// Fails against the bug: drop `#memoMarks`'s `if (same) return prev;` so every call returns a
+// fresh Set, and "an epoch bump that changed nothing must not hand back a different Set" reddens.
 test("a no-op epoch bump does not re-mint the gutter marks", async ({ page }) => {
   await boot(page);
 
-  // The reader pane derives the weave dots and the note marks and its paint
-  // effect tracks them, so a NEW Set holding the same verse numbers costs a full
-  // repaint — mid-scroll, because that is when the background pipeline settles.
-  // Every invalidation bumps `studyEpoch` too, so the derived re-runs on all of
-  // them. Content memoization is what makes "nothing changed" cost nothing.
+  // The pane's paint effect tracks the weave dots and note marks, so a new Set holding the same
+  // verse numbers costs a full repaint. Every invalidation bumps `studyEpoch`, so the derived
+  // re-runs on all of them and only content memoization makes "nothing changed" cost nothing.
   await expect
     .poll(async () => page.evaluate(() => ((window as any).__plumbline.q("linkPairs")?.pairs ?? []).length), {
       timeout: 60_000,
@@ -189,8 +153,8 @@ test("a no-op epoch bump does not re-mint the gutter marks", async ({ page }) =>
     })
     .toBeGreaterThan(0);
 
-  // A chapter that really has dots — an all-empty set would still catch a
-  // re-minted Set, but it would not prove the content comparison itself.
+  // A chapter that really has dots: an all-empty set would catch a re-minted Set but would not
+  // exercise the content comparison itself.
   const target = await page.evaluate(() => {
     const p = (window as any).__plumbline.q("linkPairs").pairs[0];
     return { book: p.aBook as string, chapter: p.aChapter as number };
@@ -203,8 +167,7 @@ test("a no-op epoch bump does not re-mint the gutter marks", async ({ page }) =>
     // A bump with the source still cached: exactly what `studyEpoch++` alone does.
     s.studyEpoch++;
     const afterBump = s.weaveDots(t.book, t.chapter);
-    // And the real event: invalidate (core-ready / warm-ready / authored) drops
-    // `linkPairs`, so the rebuild has no source for a beat.
+    // The real event: invalidate drops `linkPairs`, so the rebuild has no source for a beat.
     s.invalidate();
     s.studyEpoch++;
     const whileRefetching = s.weaveDots(t.book, t.chapter);
@@ -219,8 +182,7 @@ test("a no-op epoch bump does not re-mint the gutter marks", async ({ page }) =>
   expect(dots.afterBump, "an epoch bump that changed nothing must not hand back a different Set").toBe(true);
   expect(dots.whileRefetching, "the marks must be held through the refetch, not blinked off").toBe(true);
 
-  // The refetch lands with identical content — still the same Set, so still no
-  // repaint. (Identity survives a background invalidate too: it holds.)
+  // The refetch lands with identical content: still the same Set, so still no repaint.
   await expect
     .poll(
       async () =>
@@ -232,8 +194,7 @@ test("a no-op epoch bump does not re-mint the gutter marks", async ({ page }) =>
     )
     .toBe(true);
 
-  // The note marks, on the same mechanism, with a note the test writes so the
-  // set is genuinely non-empty.
+  // The note marks, same mechanism, with a note written here so the set is genuinely non-empty.
   const ref = `${target.book} ${target.chapter}:1`;
   expect(
     await page.evaluate((r) => (window as any).__plumbline.author("userNoteSet", r, "test", "2026-07-29T12:00:00Z"), ref),

@@ -1,25 +1,12 @@
-// Boot sequence: CORE data pack → virtual home → wasm instance → engine open.
-// Returns the ready StudyEngine. Its hooks (`onAuthored`, `onReadingWrite`) are
-// the CALLER's to wire — engine.worker.ts does it, and it must stay the only
-// place: they are single-slot properties, so a handler set here is silently
-// overwritten and the debounce nobody can find sits in this file. The caller
-// drives a progress UI; the heavy step after download is the first-visit corpus
-// parse (the built cache is persisted so later visits skip it).
+// Boot sequence: core data pack → virtual home → wasm instance → engine open, and the
+// ready StudyEngine back. The heavy step is the first-visit corpus parse; the built
+// cache is persisted, so later visits skip it. Everything beyond the corpus (Strong's,
+// cross-refs, the ~17 MB machine-tier artifacts) is the engine worker's to stream in
+// afterwards, in yield-friendly chunks.
 //
-// Everything beyond the corpus (Strong's, cross-refs, the ~17 MB machine-tier
-// artifacts) is NOT part of boot — the engine opens without them, same shape
-// as the Android APK. The engine worker streams them in afterwards in yield-
-// friendly chunks (see engine.worker.ts) so layout/tap RPCs never queue
-// behind a long synchronous load on the worker thread.
-//
-// Every stage is timed into `trace` — the on-device answer to "where do the
-// milliseconds actually go on a phone" (surfaced via the bootTrace RPC).
-//
-// TWO WAITS RUN AT ONCE. The engine binary and the text need nothing from each
-// other until the instantiate, so the download of the first starts at the top of
-// `boot()` and is collected where it is actually needed. Awaited in order, the
-// whole wasm download would be dead time before first text, which is the number
-// that matters most on a phone.
+// The engine's hooks (`onAuthored`, `onReadingWrite`) are single-slot properties, so
+// engine.worker.ts must stay the only place that wires them. Every stage is timed into
+// `trace` (surfaced via the bootTrace RPC).
 
 import { instantiate, type WasmEngine } from "./engine";
 import { depotAvailable, depotHas, depotResponse } from "./depot";
@@ -40,37 +27,19 @@ import {
 import { manifestFromPin, pinIsFromAnOlderBuild, readPin, writePin } from "./pin";
 import { configLoad, i18nSetLanguage, StudyEngine } from "./StudyEngine";
 
-/** Where the engine binary lives — content-addressed on the build id, so a new
- *  build is a new depot entry beside the old one rather than an overwrite.
- *
- *  THREE places have to agree on this string: the prefetch below, the read inside
- *  `instantiate()` (engine.ts), and `pruneToPin`'s keep-set (engine.worker.ts).
- *  Disagreeing is silent and expensive in both directions — a prefetch under the
- *  wrong URL is a second 1.7 MB download, and a keep-set under the wrong URL is
- *  prune deleting the engine — so two of the three read it from here, and
- *  `e2e/boot-overlap.spec.ts` asserts a cold boot requests it EXACTLY ONCE. */
+/** Where the engine binary lives — content-addressed on the build id. The prefetch
+ *  below, the read inside `instantiate()` (engine.ts) and `pruneToPin`'s keep-set
+ *  (engine.worker.ts) must all agree on this string, and disagreeing is silent: a wrong
+ *  URL is either a second 1.7 MB download or prune deleting the engine. */
 export function engineUrl(): string {
   return assetUrl(`plumbline_ffi.wasm?v=${__BUILD_ID__}`);
 }
 
-/** Start the engine binary arriving NOW, beside the stage-1 read.
- *
- *  This warms the DEPOT rather than handing bytes back, because the read site is
- *  inside `instantiate()` and reads through the depot: once these bytes are
- *  stored, that read is a local hit and nothing crosses the network twice.
- *
- *  Skipped when there is no depot to warm (private mode, plain http). Without
- *  somewhere to leave the bytes a prefetch is not an overlap, it is the same
- *  1.7 MB downloaded twice — so the honest thing on those devices is to let the
- *  instantiate fetch it, exactly as before.
- *
- *  Resolves with whether the handoff really happened: a `put` refused for quota
- *  leaves the instantiate to fetch it again, and that belongs in a trace rather
- *  than in a guess. Rejections belong to the caller — see the call site.
- *
- *  ONE depot lookup on a warm boot, which is the common case and the one that has
- *  to stay cheap: the binary is already there, the instantiate's own read will hit
- *  it, and there is nothing to overlap. */
+/** Start the engine binary arriving now, beside the stage-1 read. Warms the depot
+ *  rather than handing bytes back, since the read inside `instantiate()` goes through
+ *  the depot too. Skipped without a depot (private mode, plain http), where a prefetch
+ *  would just be the same 1.7 MB downloaded twice. Resolves with whether the handoff
+ *  happened: a `put` refused for quota leaves the instantiate to fetch it again. */
 async function prefetchEngine(): Promise<boolean> {
   if (!depotAvailable()) return false;
   const url = engineUrl();
@@ -96,45 +65,31 @@ export interface BootResult {
   trace: [string, number][];
   /** Whether stage 1 came entirely from the depot, with no network request. */
   fromPin: boolean;
-  /** The corpus role this boot inflated — `corpusCache`, or `corpus:<code>`.
-   *  The background pass needs it to know which Bibles are still to fetch, and
-   *  it must be the value stage 1 actually used rather than one recomputed
-   *  later from `plumbline.lang`, which the reader can change under it. */
+  /** The corpus role this boot inflated (`corpusCache` or `corpus:<code>`) — what
+   *  stage 1 actually used, not a value recomputed later from a setting. */
   corpusRole: string;
-  /** This boot read its manifest from a pin an OLDER build wrote, so that
-   *  manifest may not list every file this code expects. `backgroundLoad`
-   *  refreshes it before stage 2 when so — and only when so, because a warm
-   *  boot on an unchanged release must ask the network for nothing at all
-   *  (e2e/app.spec.ts pins that). */
+  /** This boot's manifest came from a pin an older build wrote, so it may not list
+   *  every file this code expects. `backgroundLoad` refreshes it before stage 2 when so
+   *  — and only then: a warm boot on an unchanged release asks the network nothing. */
   staleManifest: boolean;
 }
 
-/** Whether this pack carries the corpus behind `role` at all.
- *
- *  This used to ask whether the READER had installed it. Every Bible ships now
- *  (`stage: "corpus"`), so the only remaining way to want a text this build
- *  cannot supply is a checkout whose data-prep never produced it — and the
- *  answer to that lives in the manifest, not in the reader's history. */
+/** Whether this pack carries the corpus behind `role` at all. Every Bible ships, so
+ *  this is a question for the manifest, not for the reader's install history. */
 function manifestHasCorpus(manifest: PackManifest, role: string): boolean {
   return manifest.files.some((f) => f.role === role);
 }
 
-export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = ""): Promise<BootResult> {
+export async function boot(
+  onPhase: (p: BootPhase) => void,
+  locale = "",
+  lang = "",
+  sharedLang = "",
+): Promise<BootResult> {
   const trace: [string, number][] = [];
-  // NOT PERF-gated, deliberately.
-  //
-  // The trace is this app's FLIGHT RECORDER, not a measurement: which rung the
-  // boot took, whether the idxcache fast path fired, how many KB the home freed.
-  // `e2e/app.spec.ts` reads exactly those to prove "a first visit never parses the
-  // corpus" and "read pack files are freed", and the whole suite's
-  // `settleBackground` barrier polls it to know the background pipeline has gone
-  // quiet — which is why every trace push in `engine.worker.ts` is ungated too.
-  //
-  // What PERF still gates is instrumentation that costs something per turn, per
-  // engine call or per text measurement: the per-turn cost split, the slow-call
-  // list, the stall meter, the crossing counter in the measure hot path, and the
-  // Settings diagnostics tables. This is a `performance.now()` pair per boot
-  // STAGE — about twenty of them, once.
+  // Deliberately not PERF-gated: the trace is a flight recorder, not a measurement.
+  // The e2e suite asserts against it and `settleBackground` polls it, so every trace
+  // push in `engine.worker.ts` is ungated too. One clock pair per boot stage.
   const timed = async <T>(label: string, f: () => T | Promise<T>): Promise<T> => {
     const t0 = performance.now();
     const v = await f();
@@ -142,64 +97,39 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
     return v;
   };
 
-  // THE OVERLAP, started before anything else asks the network so the engine
-  // binary and the text share the connection instead of queueing on it.
-  //
-  // ITS REJECTION IS ROUTED TWICE, on purpose. The `catch` here marks the promise
-  // handled, so a failed engine fetch cannot surface as an unhandled rejection
-  // while nobody is awaiting it (in a worker that is a console error at best and
-  // a dead thread at worst, and the reader would see a splash that never moves).
-  // The `await` at the instantiate site below still throws, which is the same
-  // failure path the awaited `instantiate()` used: out of `boot`, out of the boot
-  // RPC, onto the splash with a Retry.
+  // Before anything else asks the network, so the binary and the text share the
+  // connection. The `catch` only marks the promise handled while nobody awaits it; the
+  // `await` at the instantiate site below still throws, onto the splash with a Retry.
   const engineBytes = prefetchEngine();
   void engineBytes.catch(() => {});
 
-  // PREPARE, not download. The ladder below has not decided anything yet, and on
-  // a warm boot it never asks the network at all — so opening with
-  // "Fetching scripture data — 0%" would tell the common case a lie about itself
-  // for the whole of the pin read and the stage-1 depot read. `download` is
-  // announced at the one place a download really starts: the cold rung.
+  // Prepare, not download: the ladder below has decided nothing yet, and a warm boot
+  // never asks the network at all. `download` is announced only at the cold rung.
   onPhase({ phase: "prepare" });
-  // THE LADDER. First rung that works, wins.
-  //
-  //  1. A pin whose stage-1 files are all in the depot → zero network requests.
-  //     This is the warm boot, and it is the common case.
-  //  2. Anything else → the cold path: fetch the manifest, download what is
-  //     missing, write a fresh pin.
-  //
-  // There is deliberately no "repair" rung between them. The depot read-through
-  // already downloads only what it does not have, so the cold path IS the repair
-  // — one manifest fetch, then just the absent bytes. A partially-evicted device
-  // therefore gets one coherent decision instead of a per-file mix.
+  // The ladder; first rung that works wins. (1) a pin whose stage-1 files are all in
+  // the depot → zero network requests, the common case; (2) the cold path — fetch the
+  // manifest, download what is missing, write a fresh pin. No "repair" rung between
+  // them: the depot read-through downloads only what it lacks, so the cold path IS the
+  // repair.
   const base = assetUrl("");
-  // What this device has already chosen to keep, read before anything is
-  // fetched: a second language's corpus is an `optional` entry, so nothing on
-  // the stage-1 path would carry it otherwise, and the engine would open the
-  // English text for a reader who downloaded another one.
+  // Read before anything is fetched: a second language's corpus is an `optional`
+  // entry, so nothing on the stage-1 path would carry it otherwise.
   const taken = await timed("optional markers (idb)", installedOptional);
   const mine = (f: PackFile) => hasOptional(taken, f);
-  // WHICH CORPUS TO INFLATE — see `corpusRoleFor`. Both stay in the pin and the
-  // depot; this only decides which one is gunzipped and copied into the home,
-  // and skipping the other is worth ~28 MB of work and memory before first text.
+  // Which corpus to inflate — see `corpusRoleFor`. All of them stay in the pin and the
+  // depot; this only decides which is gunzipped into the home, worth ~28 MB of work and
+  // memory before first text. `lang` and `locale` are handed in by the main thread,
+  // which is the only one with `localStorage` and the page's `navigator.language`.
   //
-  // `lang` is HANDED IN by the main thread. It lives in `localStorage`, and this
-  // function runs in the engine worker, where there is no `localStorage` at all —
-  // reading it here would throw, the catch would swallow it, and every boot would
-  // silently fall back to the KJV with the reader's download sitting unused
-  // (e2e/language.spec.ts). `locale` is handed in for the same reason and
-  // answers when `lang` is empty, which on a first visit it always is.
-  //
-  // ASKED OF THE MANIFEST, which is why this is a function of one rather than a
-  // value computed here: the pin's manifest and the network's can disagree about
-  // which languages exist (a release that adds one), and the answer has to come
-  // from whichever one this boot actually ends up loading from. Deciding once,
-  // up here, against a manifest not yet read is how a boot would come to skip
-  // every corpus INCLUDING the English one and reach the home with no text.
-  //
-  // The corpus is pulled in by `also` rather than by its stage: stage 1 fetches
-  // `text`, and a second language's Bible is deliberately not on that stage.
-  const corpusFor = (m: PackManifest) => corpusRoleFor(lang, locale, (role) => manifestHasCorpus(m, role));
+  // A function of a manifest rather than a value computed here: the pin's manifest and
+  // the network's can disagree about which languages exist, so the answer must come
+  // from whichever this boot loads from — deciding up front against a manifest not yet
+  // read is how a boot skips every corpus, English included. The corpus arrives through
+  // `also` because stage 1 fetches `text`, and other Bibles are not on that stage.
+  // `sharedLang` is last: it only decides for a reader who has none of their own,
+  // and `lang` (this device's last resolved code) is empty exactly then.
+  const corpusFor = (m: PackManifest) =>
+    corpusRoleFor(lang || sharedLang, locale, (role) => manifestHasCorpus(m, role));
   const stage1 = (m: PackManifest) => {
     const want = corpusFor(m);
     return {
@@ -227,12 +157,10 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
   }
 
   if (!manifest || !pack) {
-    // THE COLD RUNG, and the only place the reader is told a download is
-    // happening — because it is the only place one does.
+    // The cold rung, and the only place a download really happens.
     onPhase({ phase: "download", fraction: 0 });
-    // The text arrives as the parsed-corpus cache — the pack's copy on a first
-    // visit, this device's own copy afterwards. Either way the engine never
-    // parses JSONL and never downloads it.
+    // The text arrives as the parsed-corpus cache, so the engine never parses JSONL
+    // and never downloads it.
     const live = await timed("manifest (network)", fetchManifest);
     manifest = live;
     const { want, also, skip } = stage1(live);
@@ -246,10 +174,9 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
     pinned = null; // stale: a fresh pin is written below, once the open succeeds
   }
 
-  // AFTER the manifest, not before: the role is now decided against the manifest
-  // this boot actually loaded from. e2e/language.spec.ts reads this line to prove
-  // stage 1 opened the right Bible rather than translating the chrome over the
-  // KJV, so it has to say what was really inflated.
+  // After the manifest, not before: the role is decided against the manifest this
+  // boot loaded from, and the e2e suite reads this line to prove stage 1 opened the
+  // right Bible rather than translating the chrome over the KJV.
   trace.push([`corpus loaded (${wantCorpus})`, 1]);
 
   onPhase({ phase: "prepare" });
@@ -257,67 +184,53 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
   const home = await timed("virtual home build", () =>
     buildHome(pack, stockPaths),
   );
-  // Collected here, not at the top: near-zero means the overlap paid for itself
-  // and the binary arrived while the text was being read; a large number means
-  // the engine download IS the critical path, which is a different fix (a smaller
-  // binary) and worth being able to tell apart on a real device.
+  // Collected here, not at the top: near-zero means the overlap paid for itself, a
+  // large number means the engine download is the critical path (a different fix).
   const handedOff = await timed("engine bytes wait (overlapped)", () => engineBytes);
   if (!handedOff) trace.push(["engine bytes not stored — instantiate refetches", 1]);
   const wasm = await timed("wasm compile+instantiate", () => instantiate(home.root));
 
-  // THE LANGUAGE, BEFORE THE OPEN. The engine picks which corpus to open, so a
-  // language set after this point picks nothing, and a German reader gets the
-  // English text with the download sitting unused (e2e/language.spec.ts).
-  //
-  // `configLoad` is engine-independent, so it can be asked before there is an
-  // engine; `locale` is the device's, forwarded from the main thread because a
-  // worker's own `navigator.language` is not the page's.
+  // Before the open: the engine picks which corpus to open, so a language set after
+  // this point picks nothing. `configLoad` is engine-independent, so it can answer
+  // before there is an engine.
   const cfg = configLoad(wasm) ?? {};
-  i18nSetLanguage(wasm, typeof cfg.language === "string" ? cfg.language : "", locale);
+  // A shared link's `?lang=` is a CHOICE made for this reader, so it is handed to
+  // the engine the way the reader's own setting is — but only when they have not
+  // made one themselves. Someone who has already chosen a language keeps it: a
+  // link is allowed to introduce the app in a language, not to re-language an
+  // app someone is already reading. (The church parameter's rule, for the same
+  // reason.) The engine resolves and validates; an unshipped code falls back
+  // exactly as an unshipped setting would.
+  const chosen = typeof cfg.language === "string" ? cfg.language : "";
+  i18nSetLanguage(wasm, chosen || sharedLang, locale);
 
   onPhase({ phase: "open" });
-  // Yield so the "opening" progress message lands before the synchronous
-  // parse (rAF on the main thread; a macrotask in the engine worker).
+  // Yield so the "opening" progress message lands before the synchronous parse.
   await new Promise((r) =>
     typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame(() => r(null)) : setTimeout(r, 0),
   );
-  // The label says whether the persisted corpus cache was there to skip the
-  // 19 MB re-parse — the first question when this stage is slow on a device.
+  // The label says whether the persisted cache was there to skip the 19 MB re-parse.
   const engine = await timed(
     home.hadIdxcache ? "engine open (idxcache fast path)" : "engine open (cold corpus parse)",
     () => StudyEngine.open(wasm, "/home"),
   );
 
-  // BEFORE the reader can touch anything. This shell warms in slices, so the
-  // engine must never build an index inside a tap — a freeze that also strands
-  // every download in flight behind it.
-  //
-  // Here, and not when the warm starts: the warm begins only after stage 2 is
-  // fetched and parsed (~550 ms after text on a phone), and the reader taps
-  // inside that window.
+  // Here rather than when the warm starts, because warming begins only after stage 2
+  // is parsed (~550 ms after text on a phone) and the reader taps inside that window.
+  // The engine must never build an index inside a tap.
   engine.deferBuilds(true);
 
-  // PIN ONLY AFTER A SUCCESSFUL OPEN. The pin's value is that the next launch can
-  // act on it without asking the network, so it must never name a pack that could
-  // not actually boot this one. Cold path only — on the fast path it already
-  // describes exactly this pack.
+  // Only after a successful open: the next launch acts on the pin without asking the
+  // network, so it must never name a pack that could not boot. Cold path only.
   if (!fromPin) await writePin(manifest, base, devicePackFiles(manifest, mine));
 
-  // The corpus cache is the big one: `load_cache` does a single whole-file read
-  // and MOVES the bytes into the engine's own buffer, which every unvisited
-  // chapter is then decoded out of. The node here is a pure duplicate of ~37 MB.
-  // BOTH corpus caches, for the same reason: whichever one the engine opened, the
-  // home's copy is now a pure duplicate of what the engine holds — and the one it
-  // did NOT open was never read at all, so it is 28 MB of nothing.
-  // EVERY corpus cache the manifest names, not a hand-kept pair: the one the
-  // engine opened is now a duplicate of what it holds, and the ones it did not
-  // open were never read at all.
+  // `load_cache` moves the bytes into the engine's own buffer, so the home's copy of
+  // the cache it opened is a pure duplicate (~37 MB) and the rest were never read.
   const freed = home.evict(manifest.files.filter((f) => isCorpusRole(f.role)).map((f) => f.path));
   if (freed) trace.push(["home evict after open (KB)", Math.round(freed / 1024)]);
 
-  // Reclaim the legacy IndexedDB copy of the corpus cache, but only now — after
-  // an open that PROVED the depot can supply the text. Deleting it before that
-  // would take away the one copy a device with an evicted depot still had.
+  // Only after an open that proved the depot can supply the text — earlier would take
+  // away the one copy a device with an evicted depot still had.
   void dropLegacyIdxcache().then((n) => {
     if (n) trace.push(["legacy IDB idxcache dropped (KB)", Math.round(n / 1024)]);
   });

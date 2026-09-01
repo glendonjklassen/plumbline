@@ -1,14 +1,7 @@
 //! Where you've read, and how long ago — the reading map behind the navigator's
-//! glow.
-//!
-//! The point of the feature is **attention**: the book and chapter grids tint
-//! themselves so the parts of the canon you have drifted away from stand out
-//! from the parts you were in last week. It is not a completion tracker and
-//! deliberately keeps no leaderboard.
+//! glow. Not a completion tracker: the grids tint what you have drifted away from.
 //!
 //! ## What gets measured
-//!
-//! Coverage of a chapter is a **percentage**, and it is gated two ways at once:
 //!
 //! ```text
 //! covered_words = min( words above the furthest point you reached,
@@ -16,53 +9,30 @@
 //! pct           = covered_words / chapter words
 //! ```
 //!
-//! Scrolling to the bottom instantly credits nothing (no time has passed);
-//! sitting on verse 1 for an hour credits only verse 1 (you never went further).
-//! Only doing both — moving through the chapter at something like a human
-//! reading speed — fills it. The dwell side is deliberately **aggregate rather
-//! than per-verse**: time spent lingering over verse 3 pays for verse 30 once
-//! you get there. That is the generous reading, and generous is the brief.
-//!
-//! Generous in one more place: a pass completes at [`COMPLETE_AT`] (85%), not
-//! 100%, and **snaps** to a full read. Nobody should be hunting a trailing verse
-//! to make a glow go away.
-//!
-//! But that snap is a tolerance on the CLOCK, not on the chapter. A pass also
-//! has to reach the **last verse** to count as a full read, because 85% of a
-//! chapter's words is a real amount of chapter to have missed — and it is the
-//! end of a chapter, where the argument lands, that a reader stops short of.
-//! So: get to the bottom, and have spent the time. Falling short of either is a
-//! partial pass, which is what the tint already knows how to say.
+//! Scrolling to the bottom instantly credits nothing; sitting on verse 1 for an
+//! hour credits only verse 1. Dwell is aggregate, not per-verse. A pass completes
+//! at [`COMPLETE_AT`] (85%) and snaps to a full read — but only if it ALSO reached
+//! the chapter's last verse: the snap is a tolerance on the clock, not on the
+//! chapter. Falling short of either is a partial pass.
 //!
 //! ## What gets stored
 //!
-//! Two numbers and two dates per chapter — [`ChapterReading`]. `reached` and
-//! `dwell` describe the pass **currently under way** and are reset when it
-//! completes; `last_read` is the last COMPLETED pass and `touched` the last
-//! contact of any kind. Partial dwell *within* a verse is not persisted at all:
-//! the shell holds it for the session and it is no loss if it evaporates.
+//! [`ChapterReading`], one file per book under `home/reading/`, plus `_since.json`
+//! (see [`ensure_since`]). `reached`/`dwell` describe the pass under way and reset
+//! when it completes; `last_read` is the last COMPLETED pass, `touched` the last
+//! contact of any kind. Dwell within a verse is not persisted — the shell holds it
+//! for the session.
 //!
-//! One file per book under `home/reading/`, plus `_since.json` holding the date
-//! the reader started (see [`ensure_since`]).
+//! ## The glow
 //!
-//! ## The glow, and what silences it
+//! Read means "you have been away a while"; never read is full glow from the first
+//! launch; part-read glows in proportion to what is LEFT. Over all of it,
+//! **recency outranks coverage**: the ramp runs from the most recent contact
+//! (`touched` or `last_read`, whichever is later), flat zero for [`FRESH_DAYS`] and
+//! full at [`STALE_DAYS`], so a chapter you were in this morning says nothing
+//! whatever its coverage.
 //!
-//! The glow does not mean one thing. For a chapter you have READ it means *you
-//! have been away a while*. For one you have NEVER read it means *there is
-//! something here you have not seen*, and it is full from the first launch. A
-//! part-read chapter glows in proportion to what is LEFT.
-//!
-//! Over all of that sits one rule: **recency outranks coverage.** The glow ramps
-//! from the most recent CONTACT — `touched` or `last_read`, whichever is later —
-//! and that ramp is flat zero for [`FRESH_DAYS`], reaching full at
-//! [`STALE_DAYS`]. So a chapter you were in this morning says nothing, whether you
-//! finished it or stopped halfway, and a chapter you finished last year but dipped
-//! into today says nothing either. Without this rule, reading a chapter and not
-//! quite crossing the completion bar left it glowing at you the moment you closed it,
-//! which is a map arguing with the person holding it.
-//!
-//! Personal study data, so it rides in the backup zip like `memory/` and
-//! `notes/` do.
+//! Personal study data, so it rides in the backup zip like `memory/` and `notes/`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -75,63 +45,40 @@ use crate::civil::{date_to_days, days_between, days_to_date};
 use crate::corpus::Corpus;
 use crate::Error;
 
-/// The on-disk stamp. A new format, so it is named for the product rather than
-/// inheriting the `overlay-` prefix its siblings are frozen into.
+/// The on-disk stamp — frozen, like every format tag here.
 pub const FORMAT: &str = "plumbline-reading-v1";
 
-/// The reading speed dwell is converted at. Set **generously**: at 220 wpm a
-/// 613-word chapter like Jude wanted 2.8 minutes of credited dwell, which a brisk
-/// reader beats, so "I just read this" showed as "you are partway through".
-///
-/// The dwell gate is not a pace to hold a reader to — its ONLY job is to refuse
-/// credit to someone flipping through, and [`GRACE_SECONDS`] plus the high-water
-/// mark already do that work: a flip banks no seconds at all. So this can afford
-/// to be fast, and being fast is the difference between a map that agrees with the
-/// reader and one that argues with them.
-///
-/// 300 was still arguing (street use, 2026-08-08): 1 Thess 3 is 295 words, so at
-/// 300 wpm × [`COMPLETE_AT`]=0.90 it demanded 53s of credited dwell, and a real
-/// ~450 wpm read banked ~36s after grace — reached the end, called Partial. A
-/// flipper still banks nothing (they spend seconds, not half-minutes), so the
-/// rate rose to 500 and the snap dropped to 0.85 together.
-///
-/// 500 was STILL arguing (street use, 2026-08-16): finished chapters kept
-/// landing at Partial. Two causes, fixed together. The grace window was a TAX
-/// — deducted from every pass and re-served after every word-study tap, dialog
-/// and backgrounding, so a study-heavy read paid it four or five times — and is
-/// now refunded once a stay is proven (see [`DwellTracker::tick`]). And 500 sat
-/// too close to a brisk read of familiar text: at 500 a 295-word chapter wanted
-/// 30.1s credited, which a ~600 wpm re-read undercut. 700 is the pace of a fast
-/// skim, not of reading — and the gate loses nothing by it, because a flipper
-/// is refused by banking no seconds at all, not by the rate.
+/// The reading speed dwell is converted at, deliberately fast. The rate is NOT
+/// the flip gate — [`GRACE_SECONDS`] plus the high-water mark are, and a flipper
+/// banks no seconds at all — so it can afford to sit above a brisk ~600 wpm
+/// re-read of familiar text. Slower rates (220, 300, 500) all called real reads
+/// of a short chapter "Partial".
 pub const READING_WORDS_PER_MINUTE: f32 = 700.0;
 
 /// Coverage at or above which a pass counts as a full read and snaps to 1.0.
 pub const COMPLETE_AT: f32 = 0.85;
 
-/// Days after a read during which there is no glow at all — recently read is
-/// recently read, and the map should be quiet about it.
+/// Days after a read during which there is no glow at all.
 pub const FRESH_DAYS: i64 = 30;
 
-/// Days after which the glow is at full: a year, so "fully due" lines up with
-/// the cadence of any read-the-Bible-in-a-year plan.
+/// Days after which the glow is at full: a year, matching the cadence of any
+/// read-the-Bible-in-a-year plan.
 pub const STALE_DAYS: i64 = 365;
 
 /// Seconds a chapter must be on screen before dwell starts accruing at all.
 /// This — not the reading rate — is what makes flipping through free.
 pub const GRACE_SECONDS: f32 = 3.0;
 
-/// The cadence a shell should report at. Every call writes a file, so this is a
-/// deliberate compromise between losing a session's tail and churning the disk
-/// (and, on the web, IndexedDB) every few seconds.
+/// The cadence a shell should report at. Every call writes a file, so this trades
+/// losing a session's tail against churning the disk (and IndexedDB) constantly.
 pub const TICK_SECONDS: f32 = 30.0;
 
 /// No scroll, tap or keypress for this long and accrual stops — a chapter left
 /// open on a table overnight is not reading. It resumes on the next interaction.
 pub const IDLE_SECONDS: f32 = 120.0;
 
-/// The tuning both shells read rather than each hard-coding. Handed over the ABI
-/// so the phone and the browser cannot drift on what "read" means.
+/// The tuning a shell reads over the ABI rather than hard-coding, so nothing can
+/// drift on what "read" means.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct Spec {
     #[serde(rename = "wordsPerMinute")]
@@ -163,9 +110,8 @@ pub fn spec() -> Spec {
     }
 }
 
-/// Where a chapter stands. Drives the **hue** in the navigator: unread gold
-/// (unopened treasure), partial copper (under way), read sage (settled). The glow
-/// rides on top of all three, but means different things — see the module docs.
+/// Where a chapter stands. Drives the hue in the navigator: unread gold, partial
+/// copper, read sage. The glow rides on top of all three — see the module docs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Standing {
@@ -197,30 +143,16 @@ pub struct ChapterReading {
     #[serde(rename = "lastRead", skip_serializing_if = "Option::is_none", default)]
     pub last_read: Option<String>,
     /// When this chapter last had ANY of the reader's attention — a partial pass
-    /// counts, a completed one counts, `None` means never. Additive.
-    ///
-    /// It exists because recency has to be able to silence the glow on its own:
-    /// without it, only a COMPLETED chapter has an anchor, so a chapter you read
-    /// most of an hour ago glows like one you had never opened. Being in a chapter
-    /// recently is the whole thing the map is supposed to notice.
+    /// counts, a completed one counts, `None` means never. Additive. It is what
+    /// lets recency silence the glow on its own, without a completed pass.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub touched: Option<String>,
     /// Every key on this record this build has never heard of, carried back out
-    /// again on save.
-    ///
-    /// The on-disk formats evolve **additively** (CLAUDE.md §Data formats), and
-    /// a sideloaded APK never auto-updates: a build that drops the fields of a
-    /// later one drops them for good on that device. Every write path here reads
-    /// the book's whole chapter list and writes it back, so without this a v1.0
-    /// would strip a v1.1's per-chapter field from all 150 psalms the first time
-    /// the reader opened one of them.
-    ///
-    /// Serde fills this with the leftovers after the known fields are matched, so
-    /// a known key can never be swallowed, and a key a later version promotes to
-    /// a real field stops arriving here the moment that field exists — it can
-    /// never be written twice. Empty for every record on disk today, and an empty
-    /// flattened map writes no key at all, so those files are written exactly as
-    /// they were.
+    /// again on save. The on-disk formats evolve **additively** (CLAUDE.md
+    /// §Data formats), and every write path here rewrites the book's whole chapter
+    /// list — so without this an older build would strip a newer one's per-chapter
+    /// field from all 150 psalms the first time the reader opened one. An empty
+    /// flattened map writes no key, so today's files round-trip byte for byte.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -231,20 +163,16 @@ struct BookFile {
     format: String,
     book: String,
     chapters: Vec<ChapterReading>,
-    /// The file's own unknown keys. These ride on the *file* rather than on a
-    /// loaded value, because a book's reading state is a bare `Vec` of chapters
-    /// with no container to hang them on: [`write_book`] lifts them off the file
-    /// it is replacing.
+    /// The file's own unknown keys, lifted off the file being replaced by
+    /// [`write_book`] — a book's reading state is a bare `Vec` with no container
+    /// to hang them on.
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
 
 /// `home/reading/_since.json` — when this reader started. Underscored so it can
-/// never be mistaken for a book file.
-///
-/// No unknown-key catch-all here, unlike its siblings: [`ensure_since`] writes
-/// this file once and never again — a readable one is returned untouched — so
-/// there is no save for a later version's field to be stripped by.
+/// never be mistaken for a book file. No unknown-key catch-all: [`ensure_since`]
+/// writes this file once and never again, so there is no save to lose a key to.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct SinceFile {
     format: String,
@@ -303,18 +231,14 @@ pub fn load(home: impl AsRef<Path>) -> (Store, Vec<String>) {
     (store, errors)
 }
 
-/// Load ONE book's chapters. What every write path uses: recording dwell runs on
-/// a timer while someone reads, and reading all 66 files to touch one of them
-/// would put the whole store on that timer for no reason.
+/// Load ONE book's chapters — what every write path uses, since dwell recording
+/// runs on a timer and must not read all 66 files to touch one.
 ///
-/// A file that is THERE but that we cannot understand — corrupt, or stamped by a
-/// build newer than this one — is an **error**, never an empty history. Every
-/// caller writes the list it gets back out again, so answering "nothing read
-/// yet" for a file we merely failed to parse would overwrite the reader's
-/// history with a blank one. Same refuse-to-clobber rule as
-/// [`crate::thread::add_to_thread`]: the reader's data outlives our ability to
-/// read it. A missing file — or an empty one, which holds nothing to lose —
-/// still means nothing read yet.
+/// A file that is THERE but unparseable — corrupt, or stamped by a newer build —
+/// is an **error**, never an empty history: every caller writes the list back out,
+/// so "nothing read yet" would blank the reader's history. Same refuse-to-clobber
+/// rule as [`crate::thread::add_to_thread`]. A missing or empty file still means
+/// nothing read yet.
 pub fn load_book(home: impl AsRef<Path>, book: &str) -> Result<Vec<ChapterReading>, Error> {
     let path = book_file(&home, book);
     let bytes = match std::fs::read(&path) {
@@ -344,10 +268,9 @@ pub fn write_book(home: impl AsRef<Path>, book: &str, chapters: &[ChapterReading
     }
     let mut chapters = chapters.to_vec();
     chapters.sort_by_key(|c| c.chapter);
-    // Whatever the file we are replacing carries at its top level and we do not
-    // understand goes back out with it; the chapters carry their own (see
-    // [`ChapterReading::extra`]). Bytes we cannot parse yield nothing — such a
-    // file is refused by [`load_book`] before any caller gets here.
+    // Top-level keys we do not understand go back out with the file; the chapters
+    // carry their own. Unparseable bytes yield nothing — `load_book` refuses such
+    // a file before any caller gets here.
     let extra = std::fs::read(&path)
         .ok()
         .and_then(|b| serde_json::from_slice::<BookFile>(&b).ok())
@@ -360,23 +283,20 @@ pub fn write_book(home: impl AsRef<Path>, book: &str, chapters: &[ChapterReading
 
 /// The date this reader started, creating it at `now` on first call.
 ///
-/// No longer feeds the glow — unread chapters glow at once — but it
-/// is kept: it is a true fact about this reader, it already ships inside v0.31.0
-/// backup zips, and `since` is part of the wire payload. Deleting it would strip
-/// a field from a contract that only evolves additively, to save one small file.
+/// It no longer feeds the glow, but it stays: it already ships inside backup zips
+/// and `since` is part of the wire payload, and these contracts evolve additively.
 ///
-/// A file we cannot parse is refused here for the same reason [`load_book`]
-/// refuses one: [`since`] reads it as `None`, and the anchor is written once and
-/// never again, so stamping a fresh date over it is the one chance to lose it.
-/// Callers already treat a failure as "no anchor yet" and carry on, so the
-/// reading map keeps working either way — the file just survives.
+/// An unparseable file is refused rather than overwritten: [`since`] reads it as
+/// `None`, and the anchor is written once and never again, so stamping a fresh
+/// date over it is the one chance to lose it. Callers treat a failure as "no
+/// anchor yet" and carry on.
 pub fn ensure_since(home: impl AsRef<Path>, now: &str) -> Result<String, Error> {
     if let Some(s) = since(&home) {
         return Ok(s);
     }
     let path = since_file(&home);
-    // Getting here means `since` could not use the file, so anything in it is
-    // content we do not understand rather than an absence.
+    // `since` could not use the file, so anything in it is content we do not
+    // understand rather than an absence.
     if std::fs::read(&path).is_ok_and(|b| !b.iter().all(|b| b.is_ascii_whitespace())) {
         return Err(Error::Corpus(format!("{} exists but could not be read — refusing to overwrite", path.display())));
     }
@@ -407,11 +327,9 @@ pub fn day_of(stamp: &str) -> String {
 // ── word counts ──────────────────────────────────────────────────────────────
 
 /// Words per chapter for the whole canon — the denominator of every percentage,
-/// and the weight that makes a book's coverage the sum of its chapters'.
-///
-/// Built once from the corpus (one pass, ~5 KB retained) because the navigator
-/// asks for all 1189 chapters every time it opens, and re-walking 31,102 verses
-/// per open is a cost with nothing to show for it.
+/// and the weight that makes a book's coverage the sum of its chapters'. Built
+/// once (~5 KB retained): the navigator asks for all 1189 chapters every open,
+/// and re-walking 31,102 verses each time buys nothing.
 #[derive(Clone, Debug, Default)]
 pub struct ChapterWords {
     /// Book id → words in chapter 1, 2, … (index = chapter - 1).
@@ -497,9 +415,9 @@ fn last_verse(corpus: &Corpus, book: &str, chapter: u16) -> u16 {
 
 /// Whether a pass got to the END of the chapter, which no percentage can say on
 /// its own: [`COMPLETE_AT`] snaps at 85%, so without this a reader who stopped
-/// three verses short with time to spare was told they had read the whole thing.
-/// Both shells report the high-water verse generously (a verse counts once its
-/// line has cleared the fold), so scrolling to the bottom does reach it.
+/// three verses short with time to spare is told they read the whole thing. A
+/// shell reports the high-water verse generously (a verse counts once its line has
+/// cleared the fold), so scrolling to the bottom does reach it.
 fn reached_end(corpus: &Corpus, book: &str, chapter: u16, reached: u16) -> bool {
     let end = last_verse(corpus, book, chapter);
     end > 0 && reached >= end
@@ -581,23 +499,12 @@ fn heat_of(corpus: &Corpus, book: &str, r: Option<&ChapterReading>, words: u32, 
     let last_read = r.and_then(|r| r.last_read.clone());
     let touched = r.and_then(|r| r.touched.clone());
 
-    // RECENCY OUTRANKS EVERYTHING. The most recent contact of any kind — a
-    // completed pass, or just time spent in the chapter — anchors the ramp, and
-    // inside FRESH_DAYS that ramp is flat zero. So a chapter you were in this
-    // morning is silent whatever its coverage says, which is the only honest
-    // answer: the map's question is "where have you not been lately", and you
-    // were just there.
+    // Recency outranks coverage: the most recent contact of any kind anchors the
+    // ramp, which is flat zero inside FRESH_DAYS.
     let contact = [last_read.as_deref(), touched.as_deref()].into_iter().flatten().filter_map(date_to_days).max();
-    // UPGRADE AMNESTY. `touched` is additive, so a pass that was under way before
-    // it existed has progress and no date — and would glow as if the reader had
-    // never been there, which is the very complaint this rule answers. A record
-    // with dwell banked and no contact date is read as contact NOW.
-    //
-    // Charitable rather than precise, and deliberately so: every such record was
-    // written within a day of the field landing, so "now" is very nearly true for
-    // all of them, and any that really were abandoned go quiet for a month and then
-    // come back. The alternative — leaving them lit — makes the fix look like it
-    // did not work on exactly the chapters that prompted it.
+    // Upgrade amnesty: `touched` is additive, so a pass begun before it existed has
+    // progress and no date. Dwell banked with no contact date reads as contact NOW,
+    // rather than glowing as if the reader had never been there.
     let has_progress = r.is_some_and(|r| r.dwell > 0.0);
     let ramp = match contact {
         Some(d) => glow_for_days((date_to_days(now).unwrap_or(d) - d).max(0)),
@@ -606,8 +513,7 @@ fn heat_of(corpus: &Corpus, book: &str, r: Option<&ChapterReading>, words: u32, 
     };
 
     match &last_read {
-        // Read through at least once: full coverage, and the glow is the ramp from
-        // the last time the reader was here at all.
+        // Read through at least once: full coverage, glow from the last contact.
         Some(from) => {
             let elapsed = days_between(from, now).unwrap_or(0).max(0);
             Heat { pct: 1.0, standing: Standing::Read, glow: ramp, days: Some(elapsed), last_read }
@@ -615,10 +521,8 @@ fn heat_of(corpus: &Corpus, book: &str, r: Option<&ChapterReading>, words: u32, 
         None => {
             let pct = r.map_or(0.0, |r| pass_pct(corpus, book, r, words));
             let standing = if pct > 0.0 { Standing::Partial } else { Standing::Unread };
-            // Never opened: lit at once, and fully — nothing to be recent about.
-            // Part-read: the invitation is what is LEFT, faded by how recently you
-            // were in it, so it goes quiet when you put it down and comes back if
-            // you never pick it up again.
+            // Never opened: fully lit, nothing to be recent about. Part-read: what
+            // is LEFT, faded by how recently the reader was in it.
             let glow = if pct > 0.0 { (1.0 - pct).clamp(0.0, 1.0) * ramp } else { 1.0 };
             Heat { pct, standing, glow, days: None, last_read: None }
         }
@@ -637,15 +541,10 @@ pub fn book_chapters(corpus: &Corpus, words: &ChapterWords, store: &Store, book:
         .collect()
 }
 
-/// Every book in canon order — the book grid's data. Each book's `pct` and
-/// `glow` are the **word-weighted means** of its chapters', which is what makes
-/// the chapters add up to the book: a book is 40% read when 40% of its words
-/// are, not when 40% of its chapter tiles are.
-///
-/// `days` is the exception, and deliberately so: a mean of "days since read"
-/// over a book that is half unread would be a number about nothing. It reports
-/// the **most recent** full read anywhere in the book — the answer to "when was
-/// I last in Judges".
+/// Every book in canon order — the book grid's data. `pct` and `glow` are the
+/// **word-weighted means** of the book's chapters, so a book is 40% read when 40%
+/// of its words are. `days` is the exception: it reports the most recent full read
+/// anywhere in the book, since a mean over a half-unread book says nothing.
 pub fn books(corpus: &Corpus, words: &ChapterWords, store: &Store, now: &str) -> Vec<BookHeat> {
     canon::book_ids()
         .map(|book| {
@@ -660,9 +559,8 @@ pub fn books(corpus: &Corpus, words: &ChapterWords, store: &Store, now: &str) ->
             };
             let pct = weight(|c| c.heat.pct);
             let glow = weight(|c| c.heat.glow);
-            // Only chapters the corpus actually has words for count toward "all
-            // of it read" — a wordless chapter is one the corpus doesn't carry,
-            // and it must not be able to hold a finished book at "partial".
+            // Only chapters the corpus has words for count toward "all of it read":
+            // a wordless chapter must not hold a finished book at "partial".
             let real: Vec<&ChapterHeat> = chapters.iter().filter(|c| c.words > 0).collect();
             let read = real.iter().filter(|c| c.heat.standing == Standing::Read).count() as u16;
             let days = chapters.iter().filter_map(|c| c.heat.days).min();
@@ -705,44 +603,31 @@ pub struct DwellReport {
     pub seconds: f32,
 }
 
-/// How long a chapter was really read.
-///
-/// This was written twice, once per shell (`state/readingTracker.ts` and
-/// `ui/ReadingTracker.kt`), and both copies carried their own copies of
-/// [`GRACE_SECONDS`], [`IDLE_SECONDS`] and [`TICK_SECONDS`] as fallbacks for the
-/// moment before they had fetched them — which is to say both hard-coded the
-/// thresholds they were fetching precisely so they would not have to. Android's
-/// fallback for the reading rate was still 220 words a minute, two days after
-/// the core moved to 300. So the counting lives here now and a shell owns only
-/// what the core cannot know, having no clock and no window: that another second
-/// passed with a chapter in front of somebody.
+/// How long a chapter was really read. The counting lives here, not in a shell:
+/// a shell owns only what the core cannot know, having no clock and no window —
+/// that another second passed with a chapter in front of somebody.
 ///
 /// Three refusals, and they are the whole design:
 ///
-/// * a GRACE window before anything accrues, so paging through a book to find
-///   something never credits the chapters it flew past. The window is a
-///   THRESHOLD, not a tax: its whole job is to tell a flip from a stay, and
-///   that job is done the moment a pass survives it — so the seconds it
-///   withheld, which were real reading, are credited back. Without the refund
-///   every dialog and word-study tap re-served the window and quietly docked
-///   3s from the pass;
+/// * a GRACE window before anything accrues, so paging through a book never
+///   credits the chapters it flew past. It is a THRESHOLD, not a tax: once a pass
+///   survives it the withheld seconds are credited back, or every dialog and
+///   word-study tap re-serves the window and silently docks 3s from the pass;
 /// * an IDLE cutoff, so a phone left face-up on a table does not read Leviticus
 ///   overnight;
-/// * nothing on screen stops the clock and banks the tail, because a
-///   backgrounded app is not being read and locking a phone is how a reading
-///   session usually ends.
+/// * nothing on screen stops the clock and banks the tail — a backgrounded app is
+///   not being read, and locking a phone is how a reading session usually ends.
 #[derive(Clone, Debug, Default)]
 pub struct DwellTracker {
-    /// The chapter the banked seconds belong to. The reader may have moved on
-    /// by the time they are handed over, and crediting them to the new chapter
-    /// would simply be wrong.
+    /// The chapter the banked seconds belong to — the reader may have moved on by
+    /// the time they are handed over.
     owner: Option<(String, u16)>,
     reached: u16,
     on_screen: f32,
     since_input: f32,
     pending: f32,
-    /// Whether this pass's grace window has already been credited back —
-    /// the refund happens once per pass, on the first sample to survive it.
+    /// Whether the grace window has been refunded — once per pass, on the first
+    /// sample to survive it.
     graced: bool,
 }
 
@@ -772,9 +657,9 @@ impl DwellTracker {
             _ => false,
         };
         if !same {
-            // Leaving a chapter, or arriving in one. Bank the tail against the
-            // chapter that earned it, then start the new pass clean — coming
-            // back is not continuing, so the grace period is served again.
+            // Leaving or arriving: bank the tail against the chapter that earned
+            // it, then start clean — coming back is not continuing, so the grace
+            // period is served again.
             let out = self.bank();
             self.owner = target.map(|(b, c)| (b.to_string(), c));
             self.reached = reached;
@@ -791,13 +676,11 @@ impl DwellTracker {
         self.reached = self.reached.max(reached);
         self.on_screen += step;
         self.since_input += step;
-        // Grace first, then presence. Neither is a punishment: both exist so
-        // that time nobody spent reading never becomes progress.
+        // Grace first, then presence.
         if self.on_screen < GRACE_SECONDS || self.since_input > IDLE_SECONDS {
             return None;
         }
-        // The window is survived, so it has answered its one question — this
-        // was a stay, not a flip — and the seconds it withheld were real
+        // Survived: this was a stay, not a flip, so the withheld seconds were real
         // reading. Credit them back, once per pass.
         if !self.graced {
             self.graced = true;
@@ -824,8 +707,7 @@ impl DwellTracker {
 
 // ── recording ────────────────────────────────────────────────────────────────
 
-/// What a [`record`] call did, so a shell can react to a chapter completing
-/// (the navigator's tile changing colour under the reader's thumb).
+/// What a [`record`] call did, so a shell can react to a chapter completing.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Recorded {
     pub book: String,
@@ -841,21 +723,16 @@ pub struct Recorded {
 
 /// Credit reading time to a chapter and persist it.
 ///
-/// `reached` is the furthest verse number the reader has had on screen and
-/// `seconds` the dwell **since the last call** — shells accumulate both while a
-/// chapter is on screen and report on a slow tick, on leaving the chapter, and
-/// when the app goes to the background. Calling more often is correct but
-/// writes a file each time; roughly every 30 seconds is the intended cadence.
+/// `reached` is the furthest verse number on screen and `seconds` the dwell
+/// **since the last call**. Calling more often is correct but writes a file each
+/// time; [`TICK_SECONDS`] is the intended cadence.
 ///
 /// Crossing [`COMPLETE_AT`] **with the chapter's last verse reached** snaps
-/// coverage to a full read at `now` and clears the pass, so the next time
-/// through starts clean. Time without the bottom of the chapter, or the bottom
-/// of the chapter without the time, stays a partial pass.
-///
-/// Eight arguments, one over clippy's default: three are the loaded core the
-/// shell already holds and five are the tick itself, arriving as separate
-/// scalars off the C ABI. A params struct here would exist only to be
-/// constructed at the single call site and destructured again immediately.
+/// coverage to a full read at `now` and clears the pass. Time without the bottom
+/// of the chapter, or the bottom without the time, stays a partial pass.
+// Eight arguments: three are the loaded core the shell already holds, five are the
+// tick arriving as separate scalars off the C ABI. A params struct would be built
+// and destructured again at the single call site.
 #[allow(clippy::too_many_arguments)]
 pub fn record(
     home: impl AsRef<Path>,
@@ -879,17 +756,15 @@ pub fn record(
     let rec = &mut list[idx];
     rec.reached = rec.reached.max(reached);
     rec.dwell += seconds.max(0.0);
-    // Any credited second is contact with the chapter, whether or not the pass
-    // ever finishes. This is what lets a part-read chapter go quiet.
+    // Any credited second is contact, finished pass or not — what lets a part-read
+    // chapter go quiet.
     if seconds > 0.0 {
         rec.touched = Some(day_of(now));
     }
 
     let pct = pass_pct(corpus, book, rec, total);
-    // TWO gates, not one: enough time AND the bottom of the chapter. The 85% snap
-    // exists so nobody hunts a trailing verse for a rounding error, but on its own
-    // it also credited a full read to someone who stopped short — the last verses
-    // of a chapter are usually the ones it was going somewhere for.
+    // TWO gates: enough time AND the bottom of the chapter. The 85% snap alone
+    // credits a full read to someone who stopped short.
     let completed = pct >= COMPLETE_AT && total > 0 && reached_end(corpus, book, chapter, rec.reached);
     if completed {
         rec.last_read = Some(day_of(now));
@@ -908,11 +783,8 @@ pub fn record(
     Ok(out)
 }
 
-/// Log a chapter as read on `date` by hand — the long-press affordance on a
-/// chapter's opening verse, for reading done in a paper Bible. Full credit:
-/// you read it, the app simply wasn't there.
-///
-/// `date` may be any `YYYY-MM-DD` (or RFC3339 stamp); only its day is kept.
+/// Log a chapter as read on `date` by hand — for reading done in a paper Bible.
+/// Full credit. `date` may be `YYYY-MM-DD` or RFC3339; only its day is kept.
 pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -> Result<(), Error> {
     let mut list = load_book(&home, book)?;
     let day = day_of(date);
@@ -955,8 +827,8 @@ mod tests {
         format!(r#"{{"b":"{b}","c":{c},"v":{v},"t":[{}]}}"#, toks.join(","))
     }
 
-    /// A three-chapter toy corpus: 10, 20 and 5 words respectively, spread over
-    /// verses so the high-water arithmetic has something to bite on.
+    /// A three-chapter toy corpus: 10, 20 and 5 words, spread over verses so the
+    /// high-water arithmetic has something to bite on.
     fn toy() -> Corpus {
         let mut lines = vec![serde_json::to_string(&corpus::corpus_header(
             canon::TOKENIZATION_VERSION,
@@ -1025,8 +897,7 @@ mod tests {
         let c = toy();
         let w = ChapterWords::build(&c);
         let home = scratch("complete");
-        // Gen 1 is 10 words. Reach verse 4 (8 words = 80%, under the
-        // COMPLETE_AT bar) with ample time.
+        // Gen 1 is 10 words. Verse 4 = 8 words = 80%, under COMPLETE_AT.
         let r = record(&home, &c, &w, "Gen", 1, 4, 60.0, NOW).unwrap();
         assert!((r.pct - 0.8).abs() < 1e-6);
         assert!(!r.completed, "80% is short of the bar");
@@ -1049,10 +920,8 @@ mod tests {
         let c = toy();
         let w = ChapterWords::build(&c);
         let home = scratch("generous");
-        // The 85% bar is a tolerance on the CLOCK. Gen 1: verses 1–5 at 2 words
-        // each; COMPLETE_AT of its 10 words is 8.5, so 9 words of dwell over a
-        // fully-scrolled chapter must complete it — nobody re-reads the chapter
-        // because their pace ran a shade ahead of the credited rate.
+        // The 85% bar is a tolerance on the CLOCK: COMPLETE_AT of Gen 1's 10 words
+        // is 8.5, so 9 words of dwell over a fully-scrolled chapter must complete it.
         let r = record(&home, &c, &w, "Gen", 1, 5, seconds_for_words(9), NOW).unwrap();
         assert!(r.completed, "clearing COMPLETE_AT at the bottom is a full read");
         assert_eq!(r.pct, 1.0);
@@ -1073,29 +942,22 @@ mod tests {
         let w = ChapterWords::build(&c);
         let home = scratch("no-bottom");
 
-        // 95% of the words, ample time — but verse 3 never came into view. The
-        // snap must not hand this out as a full read: it is a partial pass, at
-        // the pct the words actually say.
+        // 95% of the words, ample time — but verse 3 never came into view.
         let r = record(&home, &c, &w, "Gen", 1, 2, 3600.0, NOW).unwrap();
         assert!(!r.completed, "the last verse was never reached");
         assert!((r.pct - 0.95).abs() < 1e-6, "still an honest partial, got {}", r.pct);
 
-        // Scrolling the last verse into view finishes it — the dwell is already
-        // banked on the pass, so no further time is owed.
+        // The last verse in view finishes it — dwell is already banked on the pass.
         let r = record(&home, &c, &w, "Gen", 1, 3, 0.0, NOW).unwrap();
         assert!(r.completed, "reaching the bottom completes the banked pass");
         assert_eq!(r.pct, 1.0);
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// The street complaint, pinned in absolute terms on purpose (2026-08-08,
-    /// and again 2026-08-16 after the rate rose to 500): a real read of a short
-    /// chapter, finished to the last verse, landing at Partial. Every other
-    /// test here states its dwell in the rate's own terms so the rate can move
-    /// — this one must NOT, because it is the test of whether the rate is fast
-    /// enough. 1 Thess 3 is 295 words; familiar text reads at ~600 wpm; the
-    /// wall-clock such a read actually spends has to clear the bar, since the
-    /// gate's only job is refusing flippers, who spend seconds.
+    /// A real read of a short chapter, finished to the last verse, must not land
+    /// at Partial. Dwell is stated in ABSOLUTE seconds here, not in the rate's own
+    /// terms as every other test does, because this is the test of whether the rate
+    /// is fast enough: 295 words read at a familiar ~600 wpm has to clear the bar.
     #[test]
     fn a_fast_read_of_a_short_chapter_is_a_read() {
         let lines = [
@@ -1120,9 +982,8 @@ mod tests {
         let c = toy();
         let w = ChapterWords::build(&c);
         let home = scratch("accumulate");
-        // Gen 2 is 20 words. Sip time in thirds of what those words cost, so this
-        // test states its intent in the rate's own terms and survives a change to
-        // READING_WORDS_PER_MINUTE.
+        // Gen 2 is 20 words. Sipped in thirds of what those words cost, so the test
+        // survives a change to READING_WORDS_PER_MINUTE.
         let third = seconds_for_words(20) / 3.0;
         for (reached, secs) in [(1u16, third), (2, third)] {
             let r = record(&home, &c, &w, "Gen", 2, reached, secs, NOW).unwrap();
@@ -1132,8 +993,7 @@ mod tests {
         let rec = &store["Gen"][0];
         assert!((rec.dwell - third * 2.0).abs() < 1e-3, "seconds carry over between calls");
         assert_eq!(rec.reached, 2);
-        // The third sip covers the chapter, and the scroll had already reached the
-        // end — so this is the call that lands it.
+        // The third sip covers the chapter, with the end already reached.
         let r = record(&home, &c, &w, "Gen", 2, 2, third, NOW).unwrap();
         assert!(r.completed);
         let _ = std::fs::remove_dir_all(&home);
@@ -1144,8 +1004,7 @@ mod tests {
         let c = toy();
         let w = ChapterWords::build(&c);
         let home = scratch("high-water");
-        // Well short of completing (which would legitimately reset `reached`):
-        // a fifth of Gen 1's ten words, twice.
+        // Well short of completing (which would legitimately reset `reached`).
         let sip = seconds_for_words(2);
         let a = record(&home, &c, &w, "Gen", 1, 5, sip, NOW).unwrap();
         let b = record(&home, &c, &w, "Gen", 1, 1, sip, NOW).unwrap();
@@ -1161,9 +1020,8 @@ mod tests {
         let w = ChapterWords::build(&c);
         let home = scratch("just-read");
 
-        // The Jude case. Read most of a chapter, but not past the completion
-        // bar, so it stands as Partial — and it must NOT glow, because the reader
-        // was in it moments ago.
+        // Read most of a chapter but short of the completion bar: Partial, and it
+        // must NOT glow — the reader was in it moments ago.
         let r = record(&home, &c, &w, "Gen", 2, 1, seconds_for_words(10), NOW).unwrap();
         assert!(!r.completed, "half of Gen 2 is short of the bar");
         let (store, _) = load(&home);
@@ -1172,8 +1030,8 @@ mod tests {
         assert!(ch.heat.pct > 0.0 && ch.heat.pct < 1.0);
         assert_eq!(ch.heat.glow, 0.0, "just read, so the map says nothing about it");
 
-        // Put it down and leave it. A year later the unfinished half is an
-        // invitation again — faded by how much of it is already behind you.
+        // A year later the unfinished half is an invitation again — faded by how
+        // much of it is already behind you.
         let later = "2027-07-28T12:00:00Z";
         let ch = &book_chapters(&c, &w, &store, "Gen", later)[1];
         assert_eq!(ch.heat.standing, Standing::Partial);
@@ -1184,8 +1042,7 @@ mod tests {
             ch.heat.glow,
         );
 
-        // A chapter never opened is unaffected by any of this — nothing to be
-        // recent about, so it stays lit.
+        // A chapter never opened stays lit — nothing to be recent about.
         let ch1 = &book_chapters(&c, &w, &store, "Gen", NOW)[2];
         assert_eq!(ch1.heat.standing, Standing::Unread);
         assert_eq!(ch1.heat.glow, 1.0);
@@ -1197,10 +1054,8 @@ mod tests {
         let c = toy();
         let w = ChapterWords::build(&c);
         let mut store = Store::new();
-        // What v0.33.0 wrote: progress banked, no contact date, because the field
-        // did not exist yet. It must NOT glow — these records are a day old, and
-        // reading the amnesty the other way would leave the glow on precisely the
-        // chapters whose glow was reported as a false positive.
+        // A record written before `touched` existed: progress banked, no contact
+        // date. It must NOT glow — see the upgrade amnesty in `heat_of`.
         store.insert("Gen".into(), vec![ChapterReading { chapter: 1, reached: 4, dwell: 600.0, ..Default::default() }]);
         let ch = &book_chapters(&c, &w, &store, "Gen", NOW)[0];
         assert_eq!(ch.heat.standing, Standing::Partial);
@@ -1225,8 +1080,8 @@ mod tests {
         );
         assert_eq!(book_chapters(&c, &w, &store, "Gen", NOW)[0].heat.glow, 1.0);
 
-        // Then the reader spends a little time in it today. They have BEEN here;
-        // the map has nothing to tell them, even though the last full pass is old.
+        // A little time in it today: the map has nothing to say, even though the
+        // last full pass is old.
         store.get_mut("Gen").unwrap()[0].touched = Some("2026-07-28".into());
         let ch = &book_chapters(&c, &w, &store, "Gen", NOW)[0];
         assert_eq!(ch.heat.standing, Standing::Read, "a dip does not undo a full read");
@@ -1256,9 +1111,7 @@ mod tests {
         let c = toy();
         let w = ChapterWords::build(&c);
         let store = Store::new();
-        // Day one, and every day after: what you have never read is fully lit.
-        // This is the invitation, not a nag — the reader asked to be shown where
-        // the treasure is, and a map that starts dark shows nothing.
+        // Day one and every day after: what you have never read is fully lit.
         for now in ["2026-07-28T12:00:00Z", "2030-01-01T00:00:00Z"] {
             let fresh = book_chapters(&c, &w, &store, "Gen", now);
             assert!(fresh.iter().all(|ch| ch.heat.standing == Standing::Unread));
@@ -1266,16 +1119,13 @@ mod tests {
             assert!(fresh.iter().all(|ch| ch.heat.days.is_none()), "never read has no last-read day");
         }
 
-        // Part-read: the invitation shrinks in proportion to what is LEFT, so a
-        // chapter you are most of the way through stops shouting.
+        // Part-read: the glow shrinks in proportion to what is LEFT.
         let mut part = Store::new();
         part.insert(
             "Gen".into(),
-            // Gen 1 is 10 words over 5 verses; reached verse 4 (8 words) with
-            // ample dwell = 80% covered, so 20% of the invitation remains.
-            // Touched long ago and abandoned: fully stale, so nothing damps the
-            // invitation. (An abandoned pass with NO date at all is the upgrade
-            // amnesty — covered separately below.)
+            // Gen 1 is 10 words over 5 verses; verse 4 (8 words) with ample dwell
+            // is 80% covered, so 20% remains. Touched long ago and abandoned, so
+            // recency damps nothing.
             vec![ChapterReading {
                 chapter: 1,
                 reached: 4,
@@ -1432,10 +1282,9 @@ mod tests {
         let home = scratch("no-clobber");
         let path = book_file(&home, "Gen");
 
-        // Two ways a book file can be sitting there and mean nothing to us:
-        // corrupt bytes, and a well-formed file from a build newer than this one.
-        // Neither is "nothing read yet" — both are the reader's history, and
-        // every write path here reads the whole file and writes it back.
+        // Corrupt bytes and a file from a newer build. Neither is "nothing read
+        // yet" — both are the reader's history, and every write path rewrites the
+        // whole file.
         let future = r#"{"format":"plumbline-reading-v9","book":"Gen","chapters":[{"c":1,"lastRead":"2019-01-01"}]}"#;
         for content in ["{ not json".to_string(), future.to_string()] {
             crate::store::write_atomic(&path, &content).unwrap();
@@ -1450,9 +1299,9 @@ mod tests {
                 let msg = e.map(|e| e.to_string()).unwrap_or_default();
                 assert!(msg.contains("refusing to overwrite"), "want a refusal, got {msg:?}");
             }
-            // `unwrap_or_default` and not `unwrap`: a refused `forget` that in
-            // fact went through deletes the file outright (an emptied book leaves
-            // no husk), and that must read as a diff, not as a panic about i/o.
+            // `unwrap_or_default`, not `unwrap`: a refused `forget` that in fact
+            // went through deletes the file outright, and that must read as a diff
+            // rather than a panic about i/o.
             assert_eq!(
                 std::fs::read_to_string(&path).unwrap_or_default(),
                 content,
@@ -1460,15 +1309,14 @@ mod tests {
             );
         }
 
-        // Absent still means nothing read yet — a first-ever read must not trip
-        // over the guard.
+        // Absent still means nothing read yet: a first-ever read must not trip the
+        // guard.
         std::fs::remove_file(&path).unwrap();
         assert!(load_book(&home, "Gen").unwrap().is_empty());
         mark_read(&home, "Gen", 1, "2026-05-04").unwrap();
         assert_eq!(load_book(&home, "Gen").unwrap().len(), 1);
 
-        // A file with no chapters in it, and an empty file, are empty too: there
-        // is nothing in either to lose.
+        // A file with no chapters, and an empty file, hold nothing to lose.
         for content in [format!(r#"{{"format":"{FORMAT}","book":"Gen","chapters":[]}}"#), String::new()] {
             crate::store::write_atomic(&path, &content).unwrap();
             assert!(load_book(&home, "Gen").unwrap().is_empty(), "empty: {content:?}");
@@ -1476,9 +1324,8 @@ mod tests {
             assert_eq!(load_book(&home, "Gen").unwrap().len(), 1);
         }
 
-        // `_since.json` is the same story: `since` reads a file it cannot parse
-        // as "no anchor yet", and the anchor is written once and never again, so
-        // stamping a new one over it is the only chance to lose it.
+        // `_since.json` is the same story: written once and never again, so
+        // stamping a new anchor over an unparseable one is the only chance to lose it.
         for content in ["not json at all", r#"{"format":"plumbline-reading-v9","since":"2019-01-01"}"#] {
             crate::store::write_atomic(since_file(&home), content).unwrap();
             assert_eq!(since(&home), None, "unusable: {content}");
@@ -1506,11 +1353,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// Forward compatibility: the on-disk formats evolve
-    /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
-    /// auto-updates — so a key this build drops is dropped for good on that
-    /// device. Reading one chapter of a book rewrites that book's whole file, so
-    /// a v1.1 field would go from all 150 psalms at once.
+    /// Forward compatibility: the on-disk formats evolve **additively** (CLAUDE.md
+    /// §Data formats). Reading one chapter rewrites that book's whole file, so a
+    /// dropped key would go from all 150 psalms at once.
     #[test]
     fn a_book_file_keeps_the_keys_of_a_later_build() {
         let home = scratch("forward");
@@ -1547,8 +1392,8 @@ mod tests {
             "a chapter's unknown array was stripped"
         );
 
-        // The start anchor is written once and never again, so there is no save
-        // for it to lose a key to — but check, because that is the whole promise.
+        // The start anchor is written once and never again, so it has no save to
+        // lose a key to — checked anyway, because that is the promise.
         std::fs::write(
             since_file(&home),
             r#"{"format":"plumbline-reading-v1","since":"2026-01-01","timezone":"Africa/Johannesburg"}"#,
@@ -1563,7 +1408,7 @@ mod tests {
 
     // ── the dwell tracker ────────────────────────────────────────────────────
 
-    /// Drive the tracker at one sample a second, the cadence both shells use.
+    /// Drive the tracker at one sample a second, the shell's cadence.
     fn seconds(t: &mut DwellTracker, book: &str, chapter: u16, reached: u16, n: usize) -> Vec<DwellReport> {
         (0..n).filter_map(|_| t.tick(Some((book, chapter)), reached, false, 1.0)).collect()
     }
@@ -1581,11 +1426,9 @@ mod tests {
     #[test]
     fn dwell_is_reported_on_the_cores_cadence() {
         let mut t = DwellTracker::default();
-        // One sample to arrive in the chapter (it establishes the target and
-        // credits nothing, as the web tracker's target-change branch did),
-        // then TICK_SECONDS on screen. The grace window is refunded once
-        // survived, so 30 seconds in front of the reader is 30 credited — the
-        // report lands exactly on the tick.
+        // One sample to arrive (establishes the target, credits nothing), then
+        // TICK_SECONDS on screen. Grace is refunded once survived, so 30 seconds in
+        // front of the reader is 30 credited and the report lands on the tick.
         let tick = TICK_SECONDS as usize;
         let out = seconds(&mut t, "Gen", 1, 12, 1 + tick);
         assert_eq!(out.len(), 1, "exactly one report per {TICK_SECONDS}s of credited reading");
@@ -1614,15 +1457,15 @@ mod tests {
         assert!(banked > 0.0, "the reader really was there at first");
         // More of the same silence adds nothing at all.
         assert!(seconds(&mut t, "Lev", 11, 4, 2 * tick).is_empty());
-        // One touch, and the chapter counts again. The grace period is NOT
-        // served again — the reader never left it.
+        // One touch and the chapter counts again. Grace is NOT re-served — the
+        // reader never left.
         t.tick(Some(("Lev", 11)), 4, true, 1.0);
         assert_eq!(seconds(&mut t, "Lev", 11, 4, tick).len(), 1, "a touch must start the clock again");
     }
 
-    /// The bug both shells shipped: the tail of a chapter was handed over with
-    /// whatever verse the reader had reached in the chapter they had just moved
-    /// TO, because the shell read `reached` at flush time off the live pane.
+    /// Fails against: the tail of a chapter handed over with whatever verse the
+    /// reader had reached in the chapter they just moved TO, because `reached` was
+    /// read at flush time off the live pane.
     #[test]
     fn seconds_are_credited_to_the_chapter_that_earned_them() {
         let mut t = DwellTracker::default();
@@ -1633,8 +1476,8 @@ mod tests {
         assert_eq!(out.reached, 5, "Gen 1 must not be credited with how far Gen 2 got");
         assert_eq!(out.seconds, 12.0);
 
-        // And within a pass it is the HIGH-WATER mark, not wherever the reader
-        // happens to be sitting when the seconds are handed over.
+        // Within a pass it is the HIGH-WATER mark, not wherever the reader happens
+        // to be sitting when the seconds are handed over.
         let mut t = DwellTracker::default();
         seconds(&mut t, "Gen", 1, 12, 8);
         seconds(&mut t, "Gen", 1, 3, 4);
@@ -1642,40 +1485,32 @@ mod tests {
         assert_eq!(back.reached, 12, "scrolling back up surrendered ground already covered");
     }
 
-    /// Coming back is not continuing. Android re-served the grace period when the
-    /// app resumed but NOT when the tracker was disabled and re-enabled in the
-    /// same chapter (a dialog opening and closing), so a reader who dismissed a
-    /// dialog resumed accruing immediately; the web reset on both.
+    /// Coming back is not continuing: the grace window is re-served on every
+    /// re-entry, a dialog opening and closing in the same chapter included.
     #[test]
     fn coming_back_serves_the_grace_window_again() {
         let mut t = DwellTracker::default();
         seconds(&mut t, "Gen", 1, 5, 13);
         assert!(t.stop().is_some(), "the tail is banked on the way out");
-        // A bounce back into the chapter, inside the re-served window: nothing
-        // may be credited, not even on the way back out. This is the refusal
-        // the window exists for, and the refund must not undermine it.
+        // A bounce back in, inside the re-served window: nothing may be credited,
+        // not even on the way back out. The refund must not undermine this refusal.
         assert!(seconds(&mut t, "Gen", 1, 5, 3).is_empty());
         assert_eq!(t.stop(), None, "a bounce credits nothing");
     }
 
-    /// The grace window is a threshold, not a tax. Its one job is to tell a
-    /// flip from a stay, and that job is done the moment a pass survives it —
-    /// so the seconds it withheld are credited back. Without the refund, every
-    /// dialog and word-study tap re-served the window and quietly docked 3s
-    /// from the pass; a study-heavy chapter paid it five times over, which is
-    /// one of the two ways a finished chapter kept landing at Partial (street
-    /// use, 2026-08-16 — the other was the rate, see
-    /// [`READING_WORDS_PER_MINUTE`]).
+    /// Fails against: the grace window charged as a tax rather than a threshold.
+    /// Every dialog and word-study tap re-serves the window, so without the refund
+    /// a study-heavy chapter is docked 3s five times over and a finished chapter
+    /// lands at Partial.
     #[test]
     fn a_pass_that_survives_grace_is_credited_the_graced_seconds() {
         let mut t = DwellTracker::default();
-        // Arrival plus ten seconds on screen. A flip would have banked nothing;
-        // the old tax would have banked seven.
+        // Arrival plus ten seconds. A flip banks nothing; a tax would bank seven.
         seconds(&mut t, "Gen", 1, 5, 11);
         let out = t.stop().expect("ten real seconds");
         assert_eq!(out.seconds, 10.0, "all ten seconds count, not ten minus the window");
-        // Interrupted and back — a dialog closing, the app resuming. The window
-        // is served again (a bounce still credits nothing) and refunded again.
+        // Interrupted and back: served again (a bounce still credits nothing) and
+        // refunded again.
         seconds(&mut t, "Gen", 1, 5, 11);
         let out = t.stop().expect("the second stay");
         assert_eq!(out.seconds, 10.0, "an interruption must not tax the pass");
@@ -1693,12 +1528,12 @@ mod tests {
     #[test]
     fn a_late_sample_cannot_credit_an_hour() {
         let mut t = DwellTracker::default();
-        // Arrive, then get past grace. `interacted` throughout, so it is the
-        // clamp being tested here and not the idle cutoff.
+        // Arrive, then get past grace. `interacted` throughout, so it is the clamp
+        // under test and not the idle cutoff.
         t.tick(Some(("Gen", 1)), 1, true, MAX_STEP_SECONDS);
         t.tick(Some(("Gen", 1)), 1, true, MAX_STEP_SECONDS);
-        // A whole minute in one sample: long enough to bank a report on its own,
-        // short enough that IDLE_SECONDS is not what refuses it.
+        // A whole minute in one sample: enough to bank a report on its own, short
+        // enough that IDLE_SECONDS is not what refuses it.
         assert_eq!(
             t.tick(Some(("Gen", 1)), 1, true, TICK_SECONDS * 2.0),
             None,
@@ -1730,8 +1565,8 @@ mod tests {
         }
     }
 
-    /// A book file with nothing unknown in it is written byte for byte as it was
-    /// before any of that landed — these files already ship inside backup zips.
+    /// A book file with no unknown keys round-trips byte for byte — these files
+    /// already ship inside backup zips.
     #[test]
     fn a_book_file_with_no_unknown_keys_is_written_exactly_as_before() {
         let home = scratch("golden");

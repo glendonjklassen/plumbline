@@ -1,10 +1,10 @@
-// Minimal ZIP for study-data backups — no dependencies. Writes store-only
-// archives (the files are small JSON; portability beats bytes) and reads
-// store or deflate entries (deflate via DecompressionStream). The archive
-// layout is the home's authored dirs, shared with the Android backup, so one
-// zip restores across devices. Reading is checked, not trusted: every offset is
-// bounds-checked and every entry's CRC-32 must match the central directory,
-// because whatever `zipRead` returns is written into the reader's home.
+// Minimal ZIP for study-data backups — no dependencies. Writes store-only archives
+// (the files are small JSON; portability beats bytes) and reads store or deflate
+// entries (deflate via DecompressionStream). The archive layout is the home's
+// authored dirs, unchanged from the one older Android builds wrote, so their
+// backups still restore. Reading is checked, not trusted: every offset is
+// bounds-checked and every entry's CRC-32 must match the central directory, because
+// whatever `zipRead` returns is written into the reader's home.
 
 const LOCAL_SIG = 0x04034b50;
 const CENTRAL_SIG = 0x02014b50;
@@ -105,12 +105,8 @@ export async function zipRead(buf: Uint8Array): Promise<Map<string, Uint8Array>>
   const count = dv.getUint16(eocd + 10, true);
   let at = dv.getUint32(eocd + 16, true);
 
-  // Restore writes these bytes straight into the reader's home, so nothing the
-  // archive claims about itself is taken on trust. Every offset is checked
-  // before it is read — `subarray` CLAMPS, so an over-long length would
-  // otherwise hand back a silently short file instead of failing — and every
-  // entry's CRC-32 is checked against the central directory, so a flipped byte
-  // is a refusal by name rather than a bad restore.
+  // Every offset is checked before it is read: `subarray` CLAMPS, so an over-long
+  // length would otherwise hand back a silently short file instead of failing.
   const fits = (start: number, len: number, what: string): void => {
     if (start < 0 || len < 0 || start + len > buf.length) throw new Error(`damaged backup: ${what}`);
   };

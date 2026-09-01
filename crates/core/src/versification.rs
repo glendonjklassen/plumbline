@@ -1,33 +1,24 @@
-//! What a printed German Bible calls a verse we address the KJV's way.
+//! What a printed Bible in another tradition calls a verse we address the KJV's
+//! way — a display concern and nothing more.
 //!
-//! ## Why this is a display concern and nothing more
+//! Every shipped corpus sits at the KJV's own verse addresses: all 66 books,
+//! every chapter count, every last verse, 31,102 identical refKeys. So `refKey`
+//! means one verse in all of them, and a reader's notes, tags, threads, weaves,
+//! memory cards and shared links need no mapping and no migration.
 //!
-//! The German corpus (`data-prep/README.md`) sits at the KJV's own verse
-//! addresses: all 66 books, every chapter count, every last verse, 31,102
-//! refKeys identical. So `refKey` means one verse in both texts, and a reader's
-//! notes, tags, threads, weaves, memory cards and shared links need no mapping
-//! and no migration. That problem does not exist here.
+//! What differs is the number printed beside the verse. German tradition breaks
+//! 26 books' chapters in slightly different places (357 verses of 31,102), and
+//! the Unbound editors, moving the text onto KJV addresses, left the German
+//! number in the verse as a `3:19 ` prefix; `build-luther.py` strips those and
+//! writes them here.
 //!
-//! What DOES differ is the number a German reader would find printed beside the
-//! verse. German tradition breaks 26 books' chapters in slightly different
-//! places — 357 verses out of 31,102, about 1.1% — and the Unbound editors, when
-//! they moved the text onto KJV addresses, left the German number in the verse as
-//! a `3:19 ` prefix. `build-luther.py` strips those and writes them here.
-//!
-//! ## What this module deliberately does NOT do
-//!
-//! It does not renumber anything. Chapter counts, navigation, search results and
-//! the reading map all stay on KJV numbering, and `VRef::display_in` still says
-//! "Maleachi 4,1". This only ANNOTATES: where the two traditions disagree, a
-//! reader is told what their printed Bible calls the same verse, so a reference
-//! someone handed them can be found.
-//!
-//! Renumbering wholesale is a much larger feature — a two-way versification
-//! layer touching every site that computes a chapter number, with 26 book
-//! boundaries to get off-by-one wrong silently — and it would be fixing 1.1% of
-//! references at that risk. Annotating explains the difference instead of hiding
-//! it, which for somebody comparing against a printed Bible is arguably the more
-//! useful answer. Only one book (Joel) has a different chapter COUNT at all.
+//! This module only ANNOTATES. Chapter counts, navigation, search results and
+//! the reading map stay on KJV numbering, and `VRef::display_in` still says
+//! "Maleachi 4,1"; where the traditions disagree, the reader is told what their
+//! printed Bible calls the same verse so a reference someone handed them can be
+//! found. Renumbering wholesale would touch every site that computes a chapter
+//! number, with 26 book boundaries to get off-by-one wrong silently, to fix 1.1%
+//! of references.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -37,11 +28,10 @@ use crate::reference::VRef;
 
 /// refKey → the `chapter:verse` a printed Bible in this language shows, parsed
 /// from the `osis \t chapter \t verse \t printedRef` table its
-/// [`crate::i18n::NumberingSpec`] names. ~357 entries for German; empty for a
-/// language whose tradition agrees with the KJV's breaks, which is most of them.
+/// [`crate::i18n::NumberingSpec`] names. Empty for a language whose tradition
+/// agrees with the KJV's breaks, which is most of them.
 ///
-/// One cell per language, indexed by the variant, so a reader parses only their
-/// own table and only once.
+/// One cell per language, so a reader parses only their own table and only once.
 fn printed_map(lang: Lang) -> &'static HashMap<String, (u16, u16)> {
     static MAPS: [OnceLock<HashMap<String, (u16, u16)>>; Lang::COUNT] = [const { OnceLock::new() }; Lang::COUNT];
     MAPS[lang as usize].get_or_init(|| {
@@ -73,8 +63,8 @@ fn printed_map(lang: Lang) -> &'static HashMap<String, (u16, u16)> {
 /// Already formatted for the language, so German gets its comma: `"3,19"`.
 pub fn printed_as(lang: Lang, vref: &VRef) -> Option<String> {
     let (c, v) = printed_map(lang).get(&vref.ref_key()).copied()?;
-    // Same separator rule as a full reference — see `ref.chapterVerse`, which is
-    // a comma in German and a colon in English.
+    // Same separator rule as a full reference: `ref.chapterVerse` is a comma in
+    // German and a colon in English.
     Some(crate::i18n::t(lang, "ref.chapterVerse", &[("chapter", &c.to_string()), ("verse", &v.to_string())]))
 }
 
@@ -82,10 +72,9 @@ pub fn printed_as(lang: Lang, vref: &VRef) -> Option<String> {
 /// the two traditions agree.
 pub fn printed_note(lang: Lang, vref: &VRef) -> Option<String> {
     let printed = printed_as(lang, vref)?;
-    // WHOSE numbering, from the language's row rather than from the sentence.
-    // It used to be baked into the translation — `ref.printedAs` read
-    // "Luther {ref}" in English AND in German — which meant the next language's
-    // annotation would have credited its verse numbers to Luther.
+    // Whose numbering, from the language's own row rather than baked into the
+    // `ref.printedAs` sentence — otherwise the next language's annotation
+    // credits its verse numbers to Luther.
     let tradition = lang.spec().numbering.map(|n| n.label).unwrap_or_default();
     Some(crate::i18n::t(lang, "ref.printedAs", &[("tradition", tradition), ("ref", &printed)]))
 }
@@ -96,10 +85,9 @@ mod tests {
 
     #[test]
     fn the_table_loads_and_is_the_size_the_corpus_produced() {
-        // 357 is what `build-luther.py` extracted from the source. A table that
-        // silently parsed to a handful of entries would annotate almost nothing
-        // and look like "the traditions agree", which is the failure worth
-        // catching.
+        // 357 is what `build-luther.py` extracted. A table that silently parsed
+        // to a handful of entries would annotate almost nothing and look like
+        // "the traditions agree" — the failure worth catching.
         let m = printed_map(Lang::De);
         assert!(m.len() > 300, "the Luther numbering table has only {} entries", m.len());
     }
@@ -107,9 +95,8 @@ mod tests {
     #[test]
     fn the_french_and_chinese_tables_load_at_their_produced_sizes() {
         // 1,263 is what `build-ostervald.py` derived (psalm titles shift 983
-        // addresses on their own); 22 is `build-cuv.py`'s, dominated by the
-        // 1 Chronicles 22 boundary. The same silent-shrink failure mode as
-        // the Luther test above.
+        // addresses on their own); 22 is `build-cuv.py`'s. Same silent-shrink
+        // failure mode as the Luther test above.
         assert!(
             printed_map(Lang::Fr).len() > 1200,
             "the Ostervald table has only {} entries",
@@ -138,9 +125,9 @@ mod tests {
     #[test]
     fn a_language_whose_tradition_agrees_has_no_table_and_that_is_not_a_gap() {
         // Reina-Valera follows the KJV's breaks, so Spanish carries no numbering
-        // row — and the absence has to behave like agreement rather than like a
-        // missing file. An empty map that still answered `Some` for some verse
-        // would put a bogus "printed as" line on a Spanish study card.
+        // row, and the absence must behave like agreement rather than a missing
+        // file — an empty map answering `Some` would put a bogus "printed as"
+        // line on a Spanish study card.
         assert!(printed_map(Lang::Es).is_empty(), "Spanish grew a numbering table without one being written");
         assert_eq!(printed_as(Lang::Es, &VRef::new("Mal", 4, 1)), None);
         assert_eq!(printed_note(Lang::Es, &VRef::new("Joel", 3, 1)), None);
@@ -159,8 +146,7 @@ mod tests {
 
     #[test]
     fn where_the_traditions_agree_nothing_is_said() {
-        // The overwhelming majority, and the reason this is an annotation rather
-        // than a renumbering: John 3:16 is John 3:16 in both.
+        // The overwhelming majority: John 3:16 is John 3:16 in both.
         assert_eq!(printed_as(Lang::De, &VRef::new("John", 3, 16)), None);
         assert_eq!(printed_as(Lang::De, &VRef::new("Rom", 5, 8)), None);
         // And an English reader is never told about German numbering at all.

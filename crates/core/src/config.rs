@@ -1,17 +1,8 @@
-//! Application config: the study mode chosen at first run plus the reader's
-//! body-text size, persisted as JSON at the platform's per-user config
-//! directory.
+//! Application config: study mode, reader typography and session state,
+//! persisted as JSON in the platform's per-user config directory.
 //!
-//! Decision #4 (README §For developers, decisions table) is *guided
-//! first-run*: the first launch picks the analysis tiers
-//! (scholars' / machine) with examples — the text and the reader's own data
-//! are always on. That choice — and the live font size — live here so every
-//! shell (Compose and the PWA) reads and writes the same file through one
-//! code path.
-//!
-//! Paths are resolved per-OS and composed with [`Path::join`] (never a hardcoded
-//! separator); writes go through the cross-platform atomic writer in
-//! [`crate::store`], so this is correct on Windows and Unix alike.
+//! Paths are composed with [`Path::join`]; writes go through the atomic writer
+//! in [`crate::store`].
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -24,8 +15,7 @@ use crate::theme::ThemeChoice;
 use crate::Error;
 
 /// How much of the app the reader sees. `Full` unlocks the study surface
-/// (threads, tags, weave authoring/review, and — when it lands — the R&D tier);
-/// `Simple` is a clean reader with lookup and search only.
+/// (threads, tags, weave authoring/review); `Simple` is lookup and search only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StudyMode {
     #[default]
@@ -56,41 +46,28 @@ impl StudyMode {
     }
 }
 
-/// One reopened reading pane: which passage it showed, and (additively) the
-/// first visible verse, so a session reopens mid-chapter where the reader left
-/// off. `None` = top of the chapter; history entries don't carry it.
+/// One reopened reading pane. `verse` is the first visible verse so a session
+/// reopens mid-chapter; `None` = top of the chapter, and history entries never
+/// carry it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaneRef {
     pub book: String,
     pub chapter: u16,
     pub verse: Option<u16>,
-    /// The TEXT this pane reads, as a language code — empty meaning "the
-    /// reader's own language", which is what every pane was before per-pane
-    /// text existed and what every pane still is until one is changed.
-    ///
-    /// A pane's text language is not the UI's: German beside English is the
-    /// point, so this travels with the pane rather than with the app.
+    /// The text this pane reads, as a language code; empty = the reader's own.
+    /// Per-pane, not per-app: German beside English is the point.
     pub lang: String,
 }
 
-/// The reader's home church, carried in a shared link so one QR hands over
-/// both the Bible and where to find the people who sent it.
-/// Every part is optional; an empty name means "not set".
+/// The reader's home church, carried in a shared link. Every part is optional;
+/// an empty name means "not set".
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Church {
     pub name: String,
-    /// When they meet, as MINUTES SINCE LOCAL MIDNIGHT — the same grain as
-    /// [`Config::sunday_service`], and for this reader's own church it is
-    /// literally that field (the share builder fills it from there). It lives
-    /// on `Church` as well because a church that arrives from someone else's
-    /// link is not this reader's config.
-    ///
-    /// This replaced a free "when and where" line: the reader had already given
-    /// their service time in Settings and was being asked to type it again into
-    /// a text box that no screen could format, localize, or check. A number
-    /// renders as "Sundays 10:00" in every language on its own.
+    /// When they meet, in minutes since local midnight — the grain of
+    /// [`Config::sunday_service`], which the share builder fills it from. Its own
+    /// field because a church from someone else's link is not this reader's config.
     pub service: Option<u16>,
-    /// Their website, if they have one.
     pub url: String,
 }
 
@@ -107,146 +84,163 @@ impl Church {
 pub struct Config {
     pub mode: StudyMode,
     pub body_size: f64,
-    /// The reading panes from the last session (empty on a fresh install → the
-    /// app opens its default passage). Selections/scroll are transient.
+    /// The reading panes from the last session; empty → the default passage.
     pub panes: Vec<PaneRef>,
     /// Which pane was active last session.
     pub active: usize,
-    /// Where the reader was, PER SEATING — see [`crate::session_slot`]. Opening
-    /// the app at a Sunday service resumes last Sunday's service rather than
-    /// Saturday night's study. Keyed by slot token, so a build that adds a slot
-    /// simply starts writing a new key. Empty until the reader has been
-    /// somewhere in a given slot, and the plain last position
-    /// ([`Config::panes`]) is the fallback for a slot never used.
+    /// Where the reader was, per seating ([`crate::session_slot`]), keyed by slot
+    /// token. [`Config::panes`] is the fallback for a slot never used.
     pub slots: BTreeMap<String, PaneRef>,
-    /// How many times this reader has read the Bible through, or `-1` for
-    /// "never said". Seeded ONCE by hand — a reader arriving with thirty years
-    /// behind them should not start at nought — and after that it is EARNED:
-    /// nothing in the UI edits it, and the only thing that moves it is
-    /// finishing the canon. Zero is a legitimate answer, which is why "unset"
-    /// is -1 rather than 0.
+    /// Lifetime reads of the whole Bible; `-1` = never said (0 is a legitimate
+    /// answer). Seeded once by hand; after that only finishing the canon moves it.
     pub bible_reads: i64,
-    /// Whether the CURRENT full-canon state has already been counted. Set when
-    /// the map first reads complete, cleared when it drops below — so finishing
-    /// credits exactly one read however many times the hub is opened
-    /// afterwards.
+    /// Whether the current full-canon state has been counted, so finishing
+    /// credits exactly one read. Cleared when the map drops below complete.
     pub bible_reads_credited: bool,
-    /// Verse-per-line reading mode (each verse starts a new line).
+    /// Verse-per-line reading mode.
     pub verse_per_line: bool,
-    /// Page-turn mode: the reader keeps a tap margin on either side of the
-    /// text, and a tap there scrolls most of a screen — page back on the
-    /// left, forward on the right — so a page-turner remote can drive the
-    /// page hands-free.
+    /// Page-turn mode: a tap margin either side of the text scrolls most of a
+    /// screen, so a page-turner remote can drive the page.
     pub page_turn: bool,
-    /// Paint the small leading verse numbers. Off is "just the text" — the
-    /// chapter reads as prose, the way a printed reader's edition sets it.
-    /// A LAYOUT input, not a paint flag: see `plumbline_layout::LayoutConfig`.
+    /// Paint the small leading verse numbers. A layout input, not a paint flag:
+    /// see `plumbline_layout::LayoutConfig`.
     pub verse_numbers: bool,
-    /// Italicize the words the KJV translators supplied (`FLAG_ADDED`).
-    ///
-    /// On by default, because the italics ARE the 1769 text's own honesty about
-    /// itself. Off for a reader who finds a page of scattered italics harder to
-    /// read than the thing they mark; the words stay distinguishable either way
-    /// by the palette's `added` tone, which is the same fallback a face with no
-    /// italic already relies on ([`crate::font::Font::has_italic`]).
+    /// Italicize the words the KJV translators supplied (`FLAG_ADDED`). When off
+    /// they stay distinguishable by the palette's `added` tone, the same fallback
+    /// a face with no italic uses ([`crate::font::Font::has_italic`]).
     pub added_italics: bool,
-    /// The reader's colour theme (Tier 0 #5). `System` follows the OS.
+    /// The reader's colour theme. `System` follows the OS.
     pub theme: ThemeChoice,
-    /// The face scripture is painted in — the reader canvas, Present, the
-    /// memorize drills, the hymnal's stanzas.
-    ///
-    /// Independent of [`theme`](Config::theme) and of
-    /// [`chrome_font`](Config::chrome_font): colour and the two type axes are
-    /// orthogonal, and every combination is a legal thing to want.
+    /// The face scripture is painted in; independent of the other two axes.
     pub text_font: Font,
-    /// The face the app's own chrome is painted in — controls, labels,
-    /// navigation, dialogs. See [`crate::font`].
+    /// The face the app's own chrome is painted in. See [`crate::font`].
     pub chrome_font: Font,
-    /// Default one-tap copy shape, for shells whose copy is a single action
-    /// (e.g. the Android long-press). A verse `CopyKind` token:
-    /// `"verse"` / `"verseRef"` / `"verseMarkdown"`.
+    /// Default one-tap copy shape, a verse `CopyKind` token: see [`COPY_STYLES`].
     pub copy_style: String,
-    /// Reader horizontal margin in px — the space on either side of the text
-    /// column (feature-manifest MARGIN; default 28).
+    /// Reader horizontal margin in px (default 28).
     pub side_margin: f64,
-    /// Reader line-height as a multiple of the text height (feature-manifest
-    /// line_height; default 1.35).
+    /// Reader line-height as a multiple of the text height (default 1.35).
     pub line_spacing: f64,
     /// Reading history, most-recent-first, deduped by (book, chapter) and capped
-    /// at [`HISTORY_CAP`] — powers a "recently read" list + jump-back.
+    /// at [`HISTORY_CAP`].
     pub history: Vec<PaneRef>,
     /// Show the curated-scholarship analysis tiers (renderings, morphology,
-    /// same-root, TSK). Replaces half of the old Simple/Full switch; the text
-    /// and the reader's own data are never gated.
+    /// same-root, TSK). The text and the reader's own data are never gated.
     pub human_analysis: bool,
-    /// Show the learned/statistical tiers (the symbolic concept engine, SIF,
-    /// leitwort).
+    /// Show the learned/statistical tiers (concept engine, SIF, leitwort).
     pub machine_analysis: bool,
-    /// The reader's home church — shown in the welcome when a shared link
-    /// carried one, and attached to the links this reader shares.
+    /// The reader's home church, attached to the links this reader shares.
     pub church: Church,
-    /// When the Sunday service starts, in minutes since local midnight.
-    /// Set, it redraws the `sunday-morning` seating as the window from this
-    /// time until 1.5 hours after ([`crate::session_slot::slot_for_at`]);
-    /// unset keeps the original before-noon rule. Never sent anywhere — it
-    /// only decides which bookmark a Sunday open resumes.
+    /// Sunday service start, minutes since local midnight. Set, the
+    /// `sunday-morning` seating is this time until 1.5 hours after
+    /// ([`crate::session_slot::slot_for_at`]); unset keeps the before-noon rule.
     pub sunday_service: Option<u32>,
-    /// Whether a link shared from PRESENT opens for a new believer: that
-    /// screen is what you show someone face to face, so the person receiving
-    /// it is usually meeting the Bible, not setting up a study tool. On by
-    /// default; the recipient can still change everything.
-    pub present_shares_as_new: bool,
-    /// The plain-English overlay (the AKJV delta) on the reader. Off unless the
-    /// reader asks for it, and reader-only either way — memorize, Present, copy
-    /// and share stay KJV (see [`crate::akjv`]). Persisted here because both
-    /// shells write it; if the core dropped it the switch wouldn't survive a
-    /// restart.
+    /// The plain-English overlay (the AKJV delta) on the reader. Reader-only:
+    /// memorize, Present, copy and share stay KJV (see [`crate::akjv`]).
     pub akjv_overlay: bool,
-    /// Which welcome this reader was given ("new" | "curious"), empty when
-    /// none. The shells offer it again from the chrome — a reader shouldn't
-    /// have to reinstall to read it twice.
-    pub intro: String,
-    /// Whether the bundled devotional has already been offered to this reader,
-    /// so the new-believer welcome starts it EXACTLY ONCE.
-    ///
-    /// It exists because the start can legitimately fail the first time: on a
-    /// cold first run the welcome can be finished before the pack's text stage
-    /// has landed, and `devotional_start` refuses a booklet the catalogue does
-    /// not carry yet. The shell therefore retries on a later boot — and the
-    /// retry needs to know the difference between "never managed to start it"
-    /// and "started it, and the reader then stopped it". Without this flag the
-    /// second case looks exactly like the first, and a booklet the reader threw
-    /// away would come back every launch (the `meta:stockSeeded` lesson).
-    pub devotional_seeded: bool,
-    /// The reader's language, as a code ([`crate::i18n::Lang::code`]).
-    ///
-    /// EMPTY MEANS "follow the device", which is not the same as English: a
-    /// German phone should open in German without anyone visiting Settings,
-    /// and storing "en" the first time we resolve it would freeze that reader
-    /// into English forever. The shell passes its locale in and the core
-    /// decides; only an explicit choice is written here.
+    /// The reader's language ([`crate::i18n::Lang::code`]). Empty = follow the
+    /// device, not English: storing "en" on the first resolve would freeze a
+    /// German reader into English. Only an explicit choice is written.
     pub language: String,
-    /// The concept study the reader is IN — the id of a running
-    /// [`crate::plan::Kind::ConceptStudy`] plan, empty when in normal reading
-    /// mode. Persisted so the mode survives a relaunch (a sweep is days of
-    /// work) and lives in the config so every pane and both shells agree what
-    /// a tap means. The shell suspends its reading tracker while this is set.
+    /// The id of the running [`crate::plan::Kind::ConceptStudy`] plan, empty in
+    /// normal reading mode. Here so it survives a relaunch and every pane agrees
+    /// what a tap means; the shell suspends its reading tracker while it is set.
     pub concept_study: String,
-    /// Which thread "share the gospel" opens — the Share screen's one button,
-    /// and the first-run path of the same name.
-    ///
-    /// EMPTY MEANS THE DEFAULT, not "none": the stock Romans Road is what a
-    /// reader who has never chosen gets, and storing that choice explicitly
-    /// would freeze the name of a thread they can rename or delete. A name that
-    /// no longer matches any thread falls back the same way, so deleting your
-    /// chosen thread leaves the button working rather than dead.
+    /// Which thread "share the gospel" opens. Empty = the default (the stock
+    /// Romans Road), not "none": storing the choice would freeze the name of a
+    /// thread the reader can rename or delete. An unmatched name falls back too.
     pub gospel_thread: String,
-    /// Opt OUT of this language's own Strong's dictionary (`strongs-de.json`,
-    /// `strongs-es.json`): a reader who prefers the original English
-    /// definitions to a machine translation of them sets this. Off (false) =
-    /// the localized dictionary when the pack ships one, the default. Applied
-    /// when the engine opens, like the language.
+    /// Opt out of this language's own Strong's dictionary (`strongs-de.json`,
+    /// `strongs-es.json`) in favour of the English definitions. Applied when the
+    /// engine opens, like the language.
     pub localized_lexicon_off: bool,
+    /// The reader's saved share-link presets, in the order they were made. See
+    /// [`SharePreset`]; normalized by [`clean_presets`] on the way in.
+    pub share_presets: Vec<SharePreset>,
+}
+
+/// One saved share-link preset: a name and the palette choices it restores.
+///
+/// The reader's CHOICES, not the finished URL. A stored link would freeze the
+/// church as it read the day it was saved, so renaming a church would leave
+/// every preset handing out the old name; and it would freeze availability, so a
+/// preset made before a booklet was translated could never notice that it had
+/// been. Rebuilding from the choices means a preset is re-checked against what
+/// exists every time it is applied.
+///
+/// At most one of `thread` / `devotional` / `at` is set — a recipient lands on
+/// one thing. All empty is the plain app link, which is a legitimate preset (a
+/// language and a persona and nothing else).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharePreset {
+    /// What the reader called it. Capped at [`PRESET_NAME_MAX`]; unique among
+    /// this reader's presets, which is also how one is addressed for deletion.
+    pub name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub thread: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub devotional: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub at: String,
+    /// Empty means the link carries no language and the recipient's own device
+    /// decides — a real choice, not an unset field.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub lang: String,
+    /// Whether the link carries the reader's church. Defaults TRUE when the key
+    /// is absent, matching the palette: a hand-edited file that lost the key
+    /// should keep sharing the church, not silently stop.
+    #[serde(default = "yes", skip_serializing_if = "is_yes")]
+    pub church: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn is_yes(b: &bool) -> bool {
+    *b
+}
+
+/// The longest a preset name may be — a label on a chip, not a document.
+pub const PRESET_NAME_MAX: usize = 40;
+
+/// The most presets kept. A cap because they live in the config file, which is
+/// read on every boot before anything is painted.
+pub const PRESET_CAP: usize = 24;
+
+impl SharePreset {
+    /// Trim and cap a preset as it arrives from a shell or a hand-edited file.
+    /// Truncation counts CODE POINTS, like [`crate::church::clean`].
+    pub fn clean(&self) -> SharePreset {
+        let cut = |v: &str, max: usize| v.trim().chars().take(max).collect::<String>();
+        SharePreset {
+            name: cut(&self.name, PRESET_NAME_MAX),
+            thread: cut(&self.thread, crate::church::TARGET_MAX),
+            devotional: cut(&self.devotional, crate::church::TARGET_MAX),
+            at: cut(&self.at, crate::church::TARGET_MAX),
+            lang: cut(&self.lang, 16),
+            church: self.church,
+        }
+    }
+}
+
+/// Clean a list of presets: drop the unnamed, dedupe by name keeping the first,
+/// and cap the count. The one place a preset list is normalized, so a shell, a
+/// restored backup and a hand-edited file all get the same answer.
+pub fn clean_presets(list: &[SharePreset]) -> Vec<SharePreset> {
+    let mut out: Vec<SharePreset> = Vec::new();
+    for p in list {
+        let c = p.clean();
+        if c.name.is_empty() || out.iter().any(|q| q.name == c.name) {
+            continue;
+        }
+        out.push(c);
+        if out.len() == PRESET_CAP {
+            break;
+        }
+    }
+    out
 }
 
 /// A verse copy-shape token accepted for [`Config::copy_style`].
@@ -276,37 +270,35 @@ impl Default for Config {
             side_margin: 28.0,
             line_spacing: 1.35,
             history: Vec::new(),
-            // Opt-in: see the note on `from_wire` below.
-            human_analysis: false,
-            machine_analysis: false,
+            // ON by default. They were opt-in while the first-run welcome asked
+            // about them; with the welcome gone nothing asks, and opt-in would
+            // mean nobody ever finds them. The machine tier's download is 3 MB
+            // against 35 MB of text and 260 MB of Bibles — small enough that
+            // spending it unasked is not the imposition it would be for a corpus.
+            human_analysis: true,
+            machine_analysis: true,
             church: Church::default(),
             sunday_service: None,
-            present_shares_as_new: true,
             akjv_overlay: false,
             localized_lexicon_off: false,
-            intro: String::new(),
-            devotional_seeded: false,
             language: String::new(),
             concept_study: String::new(),
             gospel_thread: String::new(),
+            share_presets: Vec::new(),
         }
     }
 }
 
 // On-disk form (camelCase, mode as a token). Missing fields fall back to the
-// default so the file evolves additively.
+// default so the file evolves additively (CLAUDE.md §Data formats).
 //
-// Evolving additively cuts both ways: a field this build has never heard of has
-// to survive its saves too. The formats are frozen contracts (CLAUDE.md §Data
-// formats) and a sideloaded APK never auto-updates, so a v1.0 that drops a v1.1
-// key drops it for good on that device. Every struct here therefore ends in a
-// flattened catch-all, and `save_to` fills them from the file it is replacing —
-// the reader's settings cannot be carried on `Config` itself, because
-// `crates/ffi` rebuilds that value field by field out of the shell's wire
-// payload on every save (`wire::config_from_wire`), so an in-memory field would
-// be dropped there instead. Serde matches the declared fields first, so the
-// catch-all holds only keys we have never heard of; a key a later version
-// promotes to a real field stops arriving in it the moment that field exists,
+// Additive cuts both ways: a key this build has never heard of must survive its
+// saves too, or an older build strips it for good. Every struct here therefore
+// ends in a flattened catch-all that `save_to` fills from the file it replaces.
+// It cannot live on `Config`: `crates/ffi` rebuilds that value field by field
+// from the shell's wire payload on every save (`wire::config_from_wire`), so an
+// in-memory field would be dropped there instead. Serde matches declared fields
+// first, so a key later promoted to a real field stops arriving in the catch-all
 // and can never be written twice.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -319,40 +311,34 @@ struct ConfigWire {
     open_panes: Vec<PaneWire>,
     #[serde(default)]
     active_pane: usize,
-    /// Per-seating positions (additive). A BTreeMap so the file is written in a
-    /// stable order — an on-disk format that reshuffles itself makes every save
-    /// look like a change to anything diffing or syncing it.
+    /// A BTreeMap so the file is written in a stable order — a format that
+    /// reshuffles itself makes every save look like a change to anything
+    /// diffing it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     slots: BTreeMap<String, PaneWire>,
-    /// Sunday service start, minutes since local midnight (additive); absent =
-    /// never set, which keeps the before-noon rule for the Sunday seating.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sunday_service: Option<u32>,
-    /// Lifetime reads (additive). Absent → never said, which is -1 and NOT the
-    /// same as a reader who answered "none".
+    /// Absent → -1, "never said", not "none".
     #[serde(default = "default_bible_reads", skip_serializing_if = "is_unset_reads")]
     bible_reads: i64,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     bible_reads_credited: bool,
     #[serde(default)]
     verse_per_line: bool,
-    /// Page-turn mode (additive); absent in an older file → off, and off is
-    /// not written, so a reader who never used it keeps their file unchanged.
+    /// Absent → off, and off is not written, so a reader who never used it keeps
+    /// their file unchanged.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     page_turn: bool,
-    /// The two reader-typography switches (additive). `default_true` rather
-    /// than serde's `bool` default: absent in an older file has to mean the
-    /// numbers and italics that reader has always had, not their sudden
-    /// removal on upgrade.
+    /// `default_true`, not serde's `bool` default: absent in an older file means
+    /// the numbers and italics that reader has always had, not their removal.
     #[serde(default = "default_true")]
     verse_numbers: bool,
     #[serde(default = "default_true")]
     added_italics: bool,
     #[serde(default = "default_theme_token")]
     theme: String,
-    /// The two type axes (additive). Absent in an older file → the shipped
-    /// default face, which is what that reader has been looking at, so nothing
-    /// changes under them on the upgrade.
+    /// Absent → the shipped default face, which is what that reader has been
+    /// looking at.
     #[serde(default = "default_font_token")]
     text_font: String,
     #[serde(default = "default_font_token")]
@@ -365,51 +351,33 @@ struct ConfigWire {
     line_spacing: f64,
     #[serde(default)]
     history: Vec<PaneWire>,
-    // The per-tier analysis gates. Absent in an older file →
-    // derived from studyMode, preserving what the reader was seeing.
+    // Every `Option` below is an additive key: absent means the default given in
+    // `from_wire`, and skipped rather than written null so an existing config
+    // does not grow keys just because this build knows about the feature.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     human_analysis: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     machine_analysis: Option<bool>,
-    /// The home church; absent in every older file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     church: Option<ChurchWire>,
-    /// Present-screen shares open as a new believer; absent in an
-    /// older file → on, which is the default the feature shipped with.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    present_shares_as_new: Option<bool>,
-    /// English definitions preferred over this language's own Strong's
-    /// dictionary; absent in an older file → off (the localized one serves when
-    /// shipped).
-    ///
-    /// `alias` because this shipped as `strongsDeOff` when German was the only
-    /// translation, and the name is sitting in config files on devices. Reading
-    /// the old spelling keeps a reader's choice; writing only the new one means
-    /// the German-shaped name stops spreading.
+    /// `alias`: this shipped as `strongsDeOff` when German was the only
+    /// translation, and that key sits in config files on devices. Read the old
+    /// spelling, write only the new one.
     #[serde(default, alias = "strongsDeOff", skip_serializing_if = "Option::is_none")]
     localized_lexicon_off: Option<bool>,
-    /// The plain-English overlay; absent in an older file → off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     akjv_overlay: Option<bool>,
-    /// The welcome this reader was given; absent when none.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    intro: Option<String>,
-    /// Whether the bundled devotional has been offered; absent reads as false,
-    /// so an existing config does not grow a key just because this build knows
-    /// about devotionals.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    devotional_seeded: Option<bool>,
-    /// The reader's chosen language; absent means "follow the device", which
-    /// is why this skips rather than writing null — an existing config must
-    /// not grow a key just because this build knows about languages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     language: Option<String>,
-    /// The active concept study's plan id; absent when reading normally.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     concept_study: Option<String>,
-    /// The thread "share the gospel" opens; absent = the stock Romans Road.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     gospel_thread: Option<String>,
+    /// A LIST rather than an `Option<Vec>`: absent and empty mean the same
+    /// thing (no presets), and skipping it when empty keeps the key off a
+    /// config that has never saved one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    share_presets: Vec<SharePreset>,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -419,7 +387,6 @@ struct ConfigWire {
 struct ChurchWire {
     #[serde(default)]
     name: String,
-    /// Minutes since local midnight; absent when the church never said.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     service: Option<u16>,
     #[serde(default)]
@@ -432,10 +399,10 @@ struct ChurchWire {
 struct PaneWire {
     book: String,
     chapter: u16,
-    /// First visible verse (additive; absent = top / an old writer).
+    /// Absent = top of the chapter, or an old writer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     verse: Option<u16>,
-    /// This pane's text language (additive; absent = the reader's own).
+    /// Absent = the reader's own language.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     lang: String,
     #[serde(flatten)]
@@ -451,8 +418,7 @@ fn default_body_size() -> f64 {
 fn default_theme_token() -> String {
     ThemeChoice::default().token().to_string()
 }
-/// For an ON-by-default switch: a key absent from an older file must not read
-/// as "the reader turned this off".
+/// For an on-by-default switch: an absent key must not read as "turned off".
 fn default_true() -> bool {
     true
 }
@@ -539,10 +505,8 @@ impl Config {
             verse_numbers: w.verse_numbers,
             added_italics: w.added_italics,
             theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
-            // A face this build does not ship falls back to the default rather
-            // than to nothing: the reader is owed type they can read, and an
-            // unknown token here is either a hand-edited file or a config
-            // written by a LATER build that shipped a face we do not have.
+            // A face this build does not ship (hand-edited, or a later build's
+            // face) falls back to the default rather than to nothing.
             text_font: Font::parse(&w.text_font).unwrap_or_default(),
             chrome_font: Font::parse(&w.chrome_font).unwrap_or_default(),
             copy_style: normalize_copy_style(&w.copy_style),
@@ -554,52 +518,34 @@ impl Config {
                 .map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1), verse: None, lang: String::new() })
                 .take(HISTORY_CAP)
                 .collect(),
-            // Absent in an older file → on. (Deriving from studyMode would
-            // surprise-hide the tiers on devices whose shell defaulted to Full
-            // without persisting it — the gates are opt-OUT switches.)
-            // Absent = off. The tiers are opt-in: a first-time
-            // reader should inherit the text, not a study apparatus. A reader
-            // who switched one on has an explicit `true` here and keeps it.
-            human_analysis: w.human_analysis.unwrap_or(false),
-            machine_analysis: w.machine_analysis.unwrap_or(false),
-            // Trimmed on the way in: these arrive from a shared link's query
-            // string, where trailing spaces are an accident of copy-paste.
-            present_shares_as_new: w.present_shares_as_new.unwrap_or(true),
-            // Absent = off: the localized dictionary serves when the pack ships one.
+            // Absent = a config written before the tiers had a default, or one
+            // this build has not seen. Reads as ON, matching `Config::default`;
+            // a reader who switched one OFF has an explicit `false` on the wire
+            // and keeps it.
+            human_analysis: w.human_analysis.unwrap_or(true),
+            machine_analysis: w.machine_analysis.unwrap_or(true),
             localized_lexicon_off: w.localized_lexicon_off.unwrap_or(false),
-            // Absent = off: the KJV is the text, and off is what the reader was
-            // getting on every launch before this field was kept.
             akjv_overlay: w.akjv_overlay.unwrap_or(false),
-            // Absent = never offered, which is right for every config written
-            // before devotionals existed: those readers get the offer once.
-            devotional_seeded: w.devotional_seeded.unwrap_or(false),
-            intro: match w.intro.as_deref() {
-                Some("new") => "new".to_string(),
-                Some("curious") => "curious".to_string(),
-                _ => String::new(), // unknown token → no welcome to re-open
-            },
-            // A language this build does not ship reads as "follow the device"
-            // rather than English: the reader chose a language once, and the
-            // honest response to not having it is to fall back to their
-            // system's, not to overrule them with ours.
+            // A language this build does not ship reads as "follow the device",
+            // not English.
             language: match w.language.as_deref() {
                 Some(code) if crate::i18n::Lang::ALL.iter().any(|l| l.code() == code) => code.to_string(),
                 _ => String::new(),
             },
-            // An id, not a token: whether the plan it names still exists is the
-            // plan store's question, answered at use (a stale id reads as
-            // normal mode), so nothing validates it away here.
+            // An id, not a token: whether the plan still exists is answered at
+            // use (a stale id reads as normal mode), so nothing validates here.
             concept_study: w.concept_study.map(|s| s.trim().to_string()).unwrap_or_default(),
             gospel_thread: w.gospel_thread.map(|s| s.trim().to_string()).unwrap_or_default(),
-            // A minute outside the day is a corrupt or hand-edited value; the
-            // honest reading is "never set", not a slot pinned to nonsense.
+            // Normalized on the way IN, so a hand-edited file and a restored
+            // backup get exactly what a shell's save gets.
+            share_presets: clean_presets(&w.share_presets),
+            // A minute outside the day is corrupt; read it as "never set".
             sunday_service: w.sunday_service.filter(|m| *m < 24 * 60),
             church: w
                 .church
                 .map(|c| Church {
                     name: c.name.trim().to_string(),
-                    // Same clamp as `sunday_service`: a stored minute outside a
-                    // day is nonsense, and "never said" beats a bad time.
+                    // Same clamp as `sunday_service`.
                     service: c.service.filter(|m| *m < 24 * 60),
                     url: c.url.trim().to_string(),
                 })
@@ -655,7 +601,7 @@ impl Config {
                 .history
                 .iter()
                 .take(HISTORY_CAP)
-                // History is a list of PLACES, not of panes: no language.
+                // History is a list of places, not of panes: no language.
                 .map(|p| PaneWire {
                     book: p.book.clone(),
                     chapter: p.chapter,
@@ -666,14 +612,12 @@ impl Config {
                 .collect(),
             human_analysis: Some(self.human_analysis),
             machine_analysis: Some(self.machine_analysis),
-            present_shares_as_new: Some(self.present_shares_as_new),
             localized_lexicon_off: Some(self.localized_lexicon_off),
             akjv_overlay: Some(self.akjv_overlay),
-            intro: (!self.intro.is_empty()).then(|| self.intro.clone()),
-            devotional_seeded: self.devotional_seeded.then_some(true),
             language: (!self.language.is_empty()).then(|| self.language.clone()),
             concept_study: (!self.concept_study.is_empty()).then(|| self.concept_study.clone()),
             gospel_thread: (!self.gospel_thread.is_empty()).then(|| self.gospel_thread.clone()),
+            share_presets: self.share_presets.clone(),
             church: (!self.church.is_empty()).then(|| ChurchWire {
                 name: self.church.name.clone(),
                 service: self.church.service,
@@ -686,15 +630,13 @@ impl Config {
     }
 }
 
-/// Copy the unknown keys of the file being replaced onto the settings about to be
-/// written over it — the whole object, the church, and each pane in the two pane
-/// lists (see the note on [`ConfigWire`]).
+/// Copy the unknown keys of the file being replaced onto the settings about to
+/// be written over it — object, church and each pane (see [`ConfigWire`]).
 ///
-/// A pane keeps its unknown keys when the pane in the same slot is still the same
-/// chapter. Those two lists are the live session, regenerated from the shell's
-/// own state rather than edited in place, so there is no identity to match on;
-/// same slot, same chapter is as far as an honest guess goes, and anything else
-/// is dropped rather than attached to a passage it was never about.
+/// A pane keeps its unknown keys only when the pane in the same slot is still
+/// the same chapter: those lists are regenerated from the shell's state, so
+/// there is no identity to match on, and anything else is dropped rather than
+/// attached to a passage it was never about.
 fn carry_unknown(old: ConfigWire, new: &mut ConfigWire) {
     new.extra = old.extra;
     if let (Some(from), Some(to)) = (old.church, new.church.as_mut()) {
@@ -713,8 +655,6 @@ fn carry_unknown(old: ConfigWire, new: &mut ConfigWire) {
 /// - Windows: `%APPDATA%\plumbline`
 /// - macOS: `$HOME/Library/Application Support/plumbline`
 /// - other Unix: `$XDG_CONFIG_HOME/plumbline` (else `$HOME/.config/plumbline`)
-///
-/// Returns `None` only when the environment gives us nothing to build on.
 pub fn config_dir() -> Option<PathBuf> {
     let app = "plumbline";
     #[cfg(target_os = "windows")]
@@ -740,12 +680,10 @@ pub fn config_path() -> Option<PathBuf> {
     config_dir().map(|d| d.join("config.json"))
 }
 
-/// Load the config at `path`, returning `(config, first_run)` where `first_run`
-/// is true when no file existed yet (the caller should present the chooser). A
-/// present-but-unreadable file loads as the default with `first_run = false`
-/// (we do not re-prompt someone whose file merely got damaged) — and an
-/// unparseable one is moved aside first, so the next save cannot quietly write
-/// defaults over it (see [`move_damaged_aside`]).
+/// Load the config at `path`, returning `(config, first_run)`; `first_run` is
+/// true only when no file existed. An unreadable file loads as the default with
+/// `first_run = false`, and an unparseable one is moved aside first so the next
+/// save cannot write defaults over it (see [`crate::store::move_damaged_aside`]).
 pub fn load_from(path: impl AsRef<Path>) -> (Config, bool) {
     let path = path.as_ref();
     match std::fs::read(path) {
@@ -762,11 +700,8 @@ pub fn load_from(path: impl AsRef<Path>) -> (Config, bool) {
 }
 
 /// Atomically write the config to `path`, keeping any key the file already there
-/// carries that this build does not understand (see [`ConfigWire`]).
-///
-/// Unparseable bytes yield nothing to keep — and they are not there to be read
-/// anyway, since [`load_from`] moves a damaged file aside before it comes to
-/// this.
+/// carries that this build does not understand (see [`ConfigWire`]). Unparseable
+/// bytes yield nothing to keep, and [`load_from`] has already moved them aside.
 pub fn save_to(path: impl AsRef<Path>, config: &Config) -> Result<(), Error> {
     let path = path.as_ref();
     let mut wire = config.to_wire();
@@ -786,8 +721,8 @@ pub fn load() -> (Config, bool) {
     }
 }
 
-/// Save the config to the platform config path. A no-op error if no config
-/// directory resolves (nothing we can do; the app still runs).
+/// Save the config to the platform config path. A no-op when no config
+/// directory resolves.
 pub fn save(config: &Config) -> Result<(), Error> {
     match config_path() {
         Some(p) => save_to(p, config),
@@ -808,6 +743,57 @@ mod tests {
         assert_eq!(cfg, Config::default());
     }
 
+    /// What [`clean_presets`] refuses, and why each one matters.
+    ///
+    /// The config file is the least trusted input the app reads after a query
+    /// string — it survives backups, hand edits and older builds — and every rule
+    /// here is one that would otherwise reach the share palette as a broken row:
+    /// an unnamed preset is a chip with no label, a duplicate name is two chips
+    /// that delete each other, and an unknown persona token would put a value in
+    /// the link that no recipient's app can read.
+    #[test]
+    fn preset_cleaning_refuses_what_would_break_the_palette() {
+        let named = |n: &str| SharePreset { name: n.to_string(), ..SharePreset::default() };
+
+        // Unnamed (or whitespace-only) is dropped: the name IS the handle.
+        assert_eq!(clean_presets(&[named(""), named("   ")]).len(), 0);
+
+        // Deduped by name, first wins — the name addresses a preset for deletion,
+        // so two of them would make "delete" ambiguous.
+        let dupes = clean_presets(&[
+            SharePreset { thread: "Kept".to_string(), ..named("One") },
+            SharePreset { thread: "Dropped".to_string(), ..named("One") },
+        ]);
+        assert_eq!(dupes.len(), 1);
+        assert_eq!(dupes[0].thread, "Kept");
+
+        // Trimmed and capped in CODE POINTS, so a cap can never split a character
+        // and leave a lone surrogate on a chip.
+        let long = clean_presets(&[named(&format!("  {}  ", "\u{1F600}".repeat(PRESET_NAME_MAX + 10)))]);
+        assert_eq!(long[0].name.chars().count(), PRESET_NAME_MAX);
+        assert!(!long[0].name.contains('\u{FFFD}'));
+
+        // Capped, so a config file cannot grow without bound — it is read on
+        // every boot before anything is painted.
+        let many: Vec<SharePreset> = (0..PRESET_CAP + 10).map(|i| named(&format!("p{i}"))).collect();
+        assert_eq!(clean_presets(&many).len(), PRESET_CAP);
+    }
+
+    /// An absent `church` key reads as TRUE, matching the palette's own default.
+    /// A hand-edited file that lost the key should keep sharing the church rather
+    /// than silently stop, and `false` must still survive as a deliberate choice.
+    #[test]
+    fn a_preset_missing_its_church_key_still_carries_the_church() {
+        let with_key: SharePreset = serde_json::from_str(r#"{"name":"a","church":false}"#).unwrap();
+        assert!(!with_key.church);
+        let without: SharePreset = serde_json::from_str(r#"{"name":"a"}"#).unwrap();
+        assert!(without.church, "absent must not read as false");
+        // And `true` is skipped on the way out, so the common case adds no key.
+        let json = serde_json::to_string(&without).unwrap();
+        assert!(!json.contains("church"), "{json}");
+        assert!(serde_json::to_string(&with_key).unwrap().contains("\"church\":false"));
+    }
+
     #[test]
     fn roundtrips_and_reload_is_not_first_run() {
         let path = std::env::temp_dir().join(format!("plumbline-cfg-rt-{}.json", std::process::id()));
@@ -820,29 +806,22 @@ mod tests {
                 PaneRef { book: "Rom".into(), chapter: 8, verse: None, lang: String::new() },
             ],
             active: 1,
-            // Both halves of the lifetime counter, so the round-trip covers a
-            // SET value rather than only the -1 that is skipped on the wire.
+            // Every field here is set away from its default: a default value is
+            // skipped on the wire, so it would round-trip even through a key
+            // that is never written or never read.
             bible_reads: 7,
             bible_reads_credited: true,
-            // A slot with something in it, so the round-trip covers the map
-            // rather than only its empty case.
             slots: BTreeMap::from([(
                 "sunday-morning".to_string(),
                 PaneRef { book: "Ps".into(), chapter: 23, verse: Some(4), lang: String::new() },
             )]),
             verse_per_line: true,
-            // ON, so the round-trip covers the written key, not only the
-            // default that is skipped on the wire.
             page_turn: true,
-            // Both OFF here: these default to true, so a round-trip that left
-            // them at the default would pass against a wire field that was
-            // never written or never read.
             verse_numbers: false,
             added_italics: false,
             theme: ThemeChoice::Night,
-            // Two DIFFERENT non-default faces: an axis that silently carried
-            // the other one's value would still round-trip if both were set the
-            // same, and the whole point of the pair is that they are independent.
+            // Two *different* non-default faces: equal values would round-trip
+            // even if one axis carried the other's.
             text_font: Font::FiraCode,
             chrome_font: Font::Inter,
             copy_style: "verseMarkdown".to_string(),
@@ -854,16 +833,31 @@ mod tests {
             ],
             human_analysis: true,
             machine_analysis: false,
-            present_shares_as_new: false,
             akjv_overlay: true,
-            intro: "curious".to_string(),
-            // TRUE here, because false is the default and skipped on the wire:
-            // a round-trip left at the default would pass against a field that
-            // was never written or never read.
-            devotional_seeded: true,
             language: "de".to_string(),
             concept_study: "run-grace".to_string(),
             gospel_thread: "My Gospel Walk".to_string(),
+            // Two presets, not one: a list that round-trips its first element
+            // and drops the rest would pass with one. Each carries a DIFFERENT
+            // destination so a builder that writes the same field for all three
+            // cannot pass either.
+            share_presets: vec![
+                SharePreset {
+                    name: "Romans Road · Punjabi".to_string(),
+                    thread: "Romans Road".to_string(),
+                    lang: "pa".to_string(),
+                    church: true,
+                    ..SharePreset::default()
+                },
+                SharePreset {
+                    name: "Booklet".to_string(),
+                    devotional: "new-believer-30".to_string(),
+                    // Church OFF, which is the non-default: it must survive, or a
+                    // preset made deliberately without a church grows one back.
+                    church: false,
+                    ..SharePreset::default()
+                },
+            ],
             localized_lexicon_off: true,
             church: Church {
                 name: "Grace Bible Church".into(),
@@ -888,9 +882,9 @@ mod tests {
         dir
     }
 
-    /// A damaged config must be moved aside before the next save: otherwise it
-    /// loads as the default and the next save *overwrites* it, taking the
-    /// reader's history, panes and church with it.
+    /// Fails if a damaged config is not moved aside before the next save: it
+    /// loads as the default and the save overwrites it, taking the reader's
+    /// history, panes and church with it.
     #[test]
     fn damaged_config_is_moved_aside_before_the_next_save() {
         let dir = scratch("rescue");
@@ -919,9 +913,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The rescue is the ORIGINAL one: a second failure is usually the same
-    /// damage saved back out, so it must not replace the copy that still has
-    /// the reader's data in it.
+    /// The rescue is the original one: a second failure is usually the same
+    /// damage saved back out, and must not replace the copy that still holds
+    /// the reader's data.
     #[test]
     fn an_existing_rescue_is_kept() {
         let dir = scratch("rescue-twice");
@@ -961,22 +955,21 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// `akjvOverlay` must survive a load/save/load: the key spelling here is the
-    /// one both shells write, and a save that dropped it would turn the reader's
-    /// plain-English overlay back off next launch. Absent still means off.
+    /// `akjvOverlay` must survive a load/save/load: this is the key spelling the
+    /// shell writes, and a save that dropped it would turn the reader's overlay
+    /// back off next launch. Absent still means off.
     #[test]
     fn akjv_overlay_survives_a_load_save_load() {
         let dir = scratch("akjv");
         let path = dir.join("config.json");
 
-        // Written by a shell (Android ConfigState / the web session snapshot).
+        // As the shell writes it.
         std::fs::write(&path, r#"{"studyMode":"simple","akjvOverlay":true}"#).unwrap();
         let (cfg, first_run) = load_from(&path);
         assert!(!first_run);
         assert!(cfg.akjv_overlay, "the shells' akjvOverlay never reached Config");
 
-        // Check the bytes, not just the struct: it is the written file the next
-        // launch reads.
+        // Check the bytes, not just the struct: the next launch reads the file.
         save_to(&path, &cfg).unwrap();
         let json = std::fs::read_to_string(&path).unwrap();
         assert!(json.contains(r#""akjvOverlay": true"#), "the save dropped akjvOverlay: {json}");
@@ -990,11 +983,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The active concept study's plan id must survive a load/save/load — a
-    /// sweep is days of work, and a save that dropped the mode would drop the
-    /// reader out of it on the next launch. Absent means normal reading mode;
-    /// the value is trimmed but never validated away (the plan store answers
-    /// for it at use).
+    /// The active concept study's plan id must survive a load/save/load, or a
+    /// save drops the reader out of a days-long sweep on the next launch. Absent
+    /// means normal reading mode; the value is trimmed but never validated away.
     #[test]
     fn concept_study_mode_survives_a_load_save_load() {
         let dir = scratch("concept-study");
@@ -1019,11 +1010,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Forward compatibility: the on-disk formats evolve
-    /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
-    /// auto-updates — so a key this build drops is dropped for good on that
-    /// device. Settings are saved on nearly every interaction, so this file is the
-    /// one a v1.0 would strip fastest.
+    /// Forward compatibility: the on-disk formats evolve additively (CLAUDE.md
+    /// §Data formats), so a key an older build drops is dropped for good.
+    /// Settings save on nearly every interaction, so this file strips fastest.
     #[test]
     fn the_config_keeps_the_keys_of_a_later_build() {
         let dir = scratch("forward");
@@ -1073,10 +1062,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A config with nothing unknown in it is written byte for byte as it was
-    /// before any of that landed — this file rides in the backup zip too.
-    /// A pane's TEXT LANGUAGE survives the file, and its absence still means
-    /// "the reader's own" — the additive rule, applied to the field that makes
+    /// A pane's text language survives the file, and its absence still means
+    /// "the reader's own" — the additive rule applied to the field that makes
     /// German-beside-English reopen as German beside English.
     #[test]
     fn a_pane_carries_its_own_text_language() {
@@ -1092,9 +1079,8 @@ mod tests {
         save_to(&path, &cfg).unwrap();
 
         let written: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        // The English pane writes NO key: an unset language is the absence of
-        // one, so a file from before this feature and a file from a reader who
-        // never used it are the same bytes.
+        // The English pane writes no key, so a file from before this feature and
+        // one from a reader who never used it are the same bytes.
         assert_eq!(written["openPanes"][0]["lang"], Value::Null);
         assert_eq!(written["openPanes"][1]["lang"], "de");
 
@@ -1129,9 +1115,8 @@ mod tests {
   "sideMargin": 28.0,
   "lineSpacing": 1.35,
   "history": [],
-  "humanAnalysis": false,
-  "machineAnalysis": false,
-  "presentSharesAsNew": true,
+  "humanAnalysis": true,
+  "machineAnalysis": true,
   "localizedLexiconOff": false,
   "akjvOverlay": false
 }
@@ -1153,8 +1138,7 @@ mod tests {
         assert!(back.page_turn);
         assert_eq!(back.sunday_service, Some(630));
 
-        // A minute outside the day reads as never-set, not a pinned nonsense
-        // window. (Defaults write neither key — the golden test above holds.)
+        // A minute outside the day reads as never-set.
         std::fs::write(&path, r#"{"sundayService": 4000}"#).unwrap();
         assert_eq!(load_from(&path).0.sunday_service, None);
         let _ = std::fs::remove_dir_all(&dir);
@@ -1175,9 +1159,8 @@ mod tests {
         let dir = scratch("language");
         let path = dir.join("config.json");
 
-        // Absent: follow the device. NOT "en" — writing that the first time we
-        // resolved a locale would freeze a German reader into English. The
-        // golden test above proves the key is not even written.
+        // Absent: follow the device, not "en" — writing that on the first locale
+        // resolve would freeze a German reader into English.
         assert_eq!(Config::default().language, "");
 
         // A language this build ships round-trips through the file.
@@ -1186,10 +1169,7 @@ mod tests {
         assert!(std::fs::read_to_string(&path).unwrap().contains("\"language\": \"de\""));
         assert_eq!(load_from(&path).0.language, "de");
 
-        // One it does NOT ship reads as "follow the device": the reader chose a
-        // language once, and the honest answer to not having it is their
-        // system's, not ours overruling them. (This example was "fr" until
-        // French shipped.)
+        // One it does not ship reads as "follow the device".
         std::fs::write(&path, r#"{"language":"it"}"#).unwrap();
         assert_eq!(load_from(&path).0.language, "");
         std::fs::write(&path, "{}").unwrap();
@@ -1201,7 +1181,7 @@ mod tests {
 mod review_tests {
     use super::*;
 
-    /// Shells index panes with `active` — a corrupt/stale value must come back
+    /// Shells index panes with `active`, so a corrupt/stale value must come back
     /// clamped.
     #[test]
     fn active_pane_is_clamped_to_the_pane_list() {

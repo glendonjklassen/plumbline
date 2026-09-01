@@ -11,7 +11,7 @@ memorize it, sing from the hymnal, and hand it to someone else. Everything runs
 on your device and works offline. No account, no sign-in, no telemetry; your
 notes and study data stay local and private.
 
-It ships on the web and on Android, in nine languages — interface and scripture
+It runs in any browser, in nine languages — interface and scripture
 both. It follows your device's language, and you can pick one under Settings.
 Every text is public domain:
 
@@ -96,7 +96,7 @@ theme](assets/readme/themeable.png)
 
 ### The application
 
-- Free. No account, no Play Store, no paid tier. Works offline.
+- Free. No account, no app store, no paid tier. Works offline.
 - Every bit of your data backs up to a zip and restores on any device.
 
 ## Getting started

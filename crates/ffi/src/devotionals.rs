@@ -1,19 +1,15 @@
-//! Devotionals — the C ABI. A sibling of `plans.rs` for the same reason:
-//! `lib.rs` is past the no-3k-line rule, and cbindgen walks the whole crate, so
-//! the header is unchanged by the split.
+//! Devotionals — the C ABI.
 //!
-//! Runs load FRESH from `home/devotionals/` on every call (the small-set stance
-//! the plan endpoints take): a run file is tens of bytes and a reader has one or
-//! two. The CATALOGUE is cached on the engine instead — it is the shipped
-//! booklet text, tens of kilobytes, and never changes under a running app.
+//! Runs load fresh from `home/devotionals/` on every call (a run file is tens of
+//! bytes and a reader has one or two). The catalogue is cached on the engine —
+//! shipped text that never changes under a running app.
 //!
 //! All of these tolerate an engine opened from bytes (no home): the list reads
 //! empty, authoring returns the standard "no home" error.
 //!
-//! **`today` is the reader's own LOCAL `YYYY-MM-DD`,** not a UTC instant. It is
-//! the whole of the pacing rule (`core::devotional`), so a UTC date would roll
-//! the next entry over at the wrong hour for most of the world. The shell
-//! computes it the same way it does for the seating slots.
+//! `today` is the reader's own local `YYYY-MM-DD`, not a UTC instant: it is the
+//! whole of the pacing rule (`core::devotional`), so a UTC date would roll the
+//! next entry over at the wrong hour for most of the world.
 
 use std::ffi::c_char;
 use std::ptr;
@@ -35,8 +31,8 @@ struct WireDevotionals {
     catalogue: Vec<WireBooklet>,
 }
 
-/// A booklet as the picker shows it — its own words, already resolved to the
-/// reader's language, so no shell re-implements the fallback.
+/// A booklet as the picker shows it, already resolved to the reader's language
+/// so no shell re-implements the fallback.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WireBooklet {
@@ -46,13 +42,8 @@ struct WireBooklet {
     /// Whether the new-believer welcome starts this one (see core::devotional).
     new_believer: bool,
     /// Whether this booklet has been translated into the reader's language.
-    ///
-    /// TRUE for everything in this list now: an untranslated booklet is no
-    /// longer offered at all (see the filter below), so the label this used to
-    /// drive — "Available in English only" — has nothing left to mark. Kept
-    /// because the wire evolves additively and because it is still a true
-    /// statement about the entry; it is also the field a setting that offered
-    /// untranslated booklets on purpose would read.
+    /// Always true here — untranslated booklets are filtered out of the
+    /// catalogue below — but the wire only evolves additively, so it stays.
     translated: bool,
     sections: Vec<WireSection>,
 }
@@ -70,10 +61,9 @@ struct WireSection {
 struct WireRunning {
     id: String,
     name: String,
-    /// When the booklet was started — with the name, how a set-aside run is
-    /// introduced ("New Believer Devotional · started 3 Aug").
+    /// When the booklet was started; shown with the name for a set-aside run.
     started: String,
-    /// Set aside, kept whole: holds its place, asks nothing (no chip).
+    /// Set aside: holds its place, asks nothing (no chip).
     paused: bool,
     days_total: u32,
     days_done: u32,
@@ -82,26 +72,24 @@ struct WireRunning {
     today: Option<WireToday>,
 }
 
-/// The open day, whole: everything the reader's page paints, in one answer, so
-/// opening a devotional is ONE round trip and not four.
+/// The open day: everything the reader's page paints, in one round trip.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WireToday {
     day: u32,
-    /// Whether the entry is INVITED today. False for the rest of the day after
+    /// Whether the entry is invited today. False for the rest of the day after
     /// a Done — the page still opens, but no chip asks for it.
     available: bool,
     title: String,
-    /// The passages, structured — the shell renders the text from its own
-    /// corpus and prints the label in the reader's language.
+    /// The passages, structured: the shell renders the text from its own corpus
+    /// and prints the label in the reader's language.
     scripture: Vec<WireRef>,
     reflection: Vec<String>,
     activity: String,
     /// The section this day sits in, if the booklet is sectioned.
     #[serde(skip_serializing_if = "Option::is_none")]
     section: Option<WireSection>,
-    /// The booklet's send-off, present ONLY on its last day — the closing note
-    /// belongs at the foot of day 30, not on a page of its own.
+    /// The booklet's send-off, present only on its last day.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     closing: Vec<String>,
 }
@@ -124,16 +112,15 @@ fn wire_section(s: &devotional::Section) -> WireSection {
     WireSection { from: s.from, to: s.to, title: s.title.clone() }
 }
 
-/// The booklet's name in `lang`, or its id when a catalogue somehow carries no
-/// text at all — a name is what every list shows, so it must never be blank.
-fn booklet_name(d: &Devotional, lang: &str) -> String {
+/// The booklet's name in `lang`, or its id when the catalogue carries no text at
+/// all: every list shows a name, so it must never be blank.
+pub(crate) fn booklet_name(d: &Devotional, lang: &str) -> String {
     d.text(lang).map(|t| t.name.clone()).unwrap_or_else(|| d.id.clone())
 }
 
 /// One run's derived state. A run whose booklet is no longer in the catalogue
-/// (a pack rolled back, an id retired) answers `None` rather than a row with no
-/// content: the reader's file stays where it is, and the shell simply has
-/// nothing to draw.
+/// (a pack rolled back, an id retired) answers `None`: the reader's file stays
+/// where it is, and the shell has nothing to draw.
 fn running_state(run: &Run, catalogue: &[Devotional], lang: &str, today: &str) -> Option<WireRunning> {
     let d = catalogue.iter().find(|d| d.id == run.id)?;
     let open = devotional::next_day(run, d.days, today);
@@ -171,9 +158,9 @@ fn running_state(run: &Run, catalogue: &[Devotional], lang: &str, today: &str) -
 /// offers, as `{running:[…], catalogue:[…]}`. Never null on a live engine.
 ///
 /// `lang` selects the text (falling back to English per entry); null reads as
-/// English. `today` is the reader's LOCAL `YYYY-MM-DD`; null reads as "no day",
-/// which leaves every open entry `available` — the permissive direction, since
-/// the cost of a missing date should never be a reader locked out.
+/// English. `today` is the reader's local `YYYY-MM-DD`; null reads as "no day",
+/// leaving every open entry `available` — a missing date must not lock a reader
+/// out.
 ///
 /// # Safety
 /// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
@@ -191,17 +178,10 @@ pub unsafe extern "C" fn plumbline_engine_devotionals_json(
         let runs = e.home.as_ref().map(|h| devotional::load_runs(h).0).unwrap_or_default();
         out_json(&WireDevotionals {
             running: runs.iter().filter_map(|r| running_state(r, catalogue, lang, today)).collect(),
-            // OFFERED ONLY WHERE SOMEONE HAS WRITTEN IT. A booklet is a person
-            // speaking to a reader through a month of their life, so an
-            // untranslated one is that person speaking English at someone who
-            // asked for German — the same reason the first-run welcome is gated
-            // (`i18n::Lang::has_native_intros`). It used to be offered anyway
-            // with a label saying it was English only.
-            //
-            // `running` above is deliberately built from the UNFILTERED
-            // catalogue: a reader who started a booklet and then switched
-            // language is mid-way through it, and taking it off the shelf must
-            // not take it out of their hands.
+            // Only booklets written in `lang` are offered — the gate the share palette
+            // reads to mark one "coming soon". `running` above is deliberately built from
+            // the UNfiltered catalogue: taking a booklet off the shelf must not take it
+            // out of the hands of a reader who started it and then switched language.
             catalogue: catalogue
                 .iter()
                 .filter(|d| d.has_lang(lang))
@@ -240,8 +220,8 @@ pub unsafe extern "C" fn plumbline_engine_devotional_day_json(
         let Some(text) = entry.text(lang) else { return ptr::null_mut() };
         out_json(&WireToday {
             day,
-            // A day reached by browsing is always readable; "available" is about
-            // what the chip INVITES, and only the open day has an invitation.
+            // A day reached by browsing is always readable; "available" is about what the
+            // chip invites, and only the open day has an invitation.
             available: true,
             title: text.title.clone(),
             scripture: wire_refs(&entry.scripture),
@@ -258,10 +238,9 @@ pub unsafe extern "C" fn plumbline_engine_devotional_day_json(
 }
 
 /// Start a devotional by its catalogue `id`. Starting one already running is a
-/// no-op, NOT a re-seed: a reader who taps Start again from a stale list must
-/// not lose 12 days of progress, and there is no class exclusivity here to
-/// force a replacement (a reader may run two booklets at once). Null on
-/// success, else an owned error string.
+/// no-op, not a re-seed, so Start from a stale list cannot wipe progress; a
+/// reader may run two booklets at once. Null on success, else an owned error
+/// string.
 ///
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -294,9 +273,8 @@ pub unsafe extern "C" fn plumbline_engine_devotional_start(
     })
 }
 
-/// Stop a devotional, removing its run file and its progress. An absent run is
-/// a no-op, not an error (the `plan_stop` stance). Null on success, else an
-/// owned error string.
+/// Stop a devotional, removing its run file and its progress. An absent run is a
+/// no-op, not an error. Null on success, else an owned error string.
 ///
 /// # Safety
 /// `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
@@ -318,11 +296,11 @@ pub unsafe extern "C" fn plumbline_engine_devotional_stop(
     })
 }
 
-/// Bank day `day` of a running devotional on the reader's LOCAL `today`
-/// (`YYYY-MM-DD`) — the Done at the foot of the page, and the only signal that
-/// a day was read. Banking a day already banked is a no-op that does NOT
-/// re-stamp the date, so a double tap cannot push tomorrow's entry further
-/// away. Null on success, else an owned error string.
+/// Bank day `day` of a running devotional on the reader's local `today`
+/// (`YYYY-MM-DD`) — the Done at the foot of the page, and the only signal that a
+/// day was read. Re-banking a banked day is a no-op that does not re-stamp the
+/// date, so a double tap cannot push tomorrow's entry further away. Null on
+/// success, else an owned error string.
 ///
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -360,11 +338,10 @@ pub unsafe extern "C" fn plumbline_engine_devotional_done(
     })
 }
 
-/// Pause or resume a devotional — set aside, kept whole: its file and its
-/// banked days stay put, and it stops asking (no chip) while `paused`. An
-/// absent id is an error: pausing one that is not running means the shell's
-/// list is stale, and saying so beats a silent no-op (the `plan_set_paused`
-/// stance). Null on success, else an owned error string.
+/// Pause or resume a devotional: its file and banked days stay put, and it stops
+/// asking (no chip) while `paused`. An absent id is an error — pausing one that
+/// is not running means the shell's list is stale, and saying so beats a silent
+/// no-op. Null on success, else an owned error string.
 ///
 /// # Safety
 /// `engine` is valid; `id` is null or valid NUL-terminated UTF-8.

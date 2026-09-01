@@ -4,68 +4,45 @@
     python3 data-prep/indic/check-indic.py pa [Punjabi_Bible-master]
     python3 data-prep/indic/check-indic.py hi [Hindi_Bible-master]
 
-`build-indic.py` makes a set of claims, and a script that only ran the builder
-would be trusting all of them. This checks each against evidence, and with the
-source in hand it checks the most important one: that no word of scripture was
-lost on the way through.
+Each numbered check is a claim `build-indic.py` makes, tested against evidence.
+With the source in hand, check 11 tests the one that matters most: that no word
+of scripture was lost on the way through.
 
-  1. THE ADDRESSES ARE THE KJV'S. Same 66 books, same chapter counts, same
-     last-verse numbers, same 31,102 refKeys. This is what makes `refKey` mean
-     one verse in every corpus, and what lets a Punjabi reader's notes and an
-     English reader's notes land on the same verse.
-  2. THE TWO SPLITS WERE MERGED IN THE RIGHT DIRECTION. 3 John 15 is the tail
-     of the KJV's v14 and Rev 12:18 is the HEAD of the KJV's 13:1, so one is
-     appended and the other prepended. A build that appended both keeps every
-     word, passes checks 1, 4 and 11, and prints Revelation 13:1 with its first
-     clause last.
+  1. THE ADDRESSES ARE THE KJV'S. Same 66 books, chapter counts, last-verse
+     numbers and 31,102 refKeys — what makes a refKey mean one verse in every
+     corpus.
+  2. THE TWO SPLITS WERE MERGED IN THE RIGHT DIRECTION. A build that appended
+     both keeps every word, passes checks 1, 4 and 11, and prints Rev 13:1 with
+     its first clause last.
   3. IT IS A TEXTUS RECEPTUS NEW TESTAMENT. Twenty readings a critical text
-     omits or brackets must be present and carry real words. This is the check
-     that matters most: the reason to ship these beside the KJV is that they
-     stand on the same Hebrew and the same Greek, and an edition conformed to a
-     critical text would sit in the same reader saying different things.
-  4. TOKENS REASSEMBLE. `pre + word + post` concatenated in order is the verse.
-     A tokenizer that drops a danda or eats a word passes every other check here.
-  5. WORDS ARE WHOLE, and for these scripts that is a stronger claim than for
-     Latin. No `pre` or `post` may hold a letter, and NO WORD MAY BEGIN WITH A
-     COMBINING MARK — a dependent vowel sign or a virama at the head of a word
-     is a split INSIDE a grapheme cluster. It reassembles perfectly, renders as
-     a dotted circle, and no search will ever match it. The mark test is on
-     category M, not Mn: Devanagari and Gurmukhi vowel signs are half Mn and
-     half Mc (spacing), and a check that only knew Mn would miss ि and ा.
-     A word ENDING in a virama is NOT an error and is not checked — "अर्थात्"
-     and "वरन्" are ordinary Hindi words, 2,104 of them, and asserting against
-     that would be inventing a rule the language does not have.
-  6. THE TEXT WAS NOT NORMALISED. NFC and NFD must both be no-ops over the whole
-     corpus. The Punjabi source repo warns in capitals that normalising Gurmukhi
-     rewrites letters — the precomposed nukta forms are on Unicode's composition
-     exclusion list, so NFC DECOMPOSES them — and Devanagari is on the same
-     list. Checked rather than trusted, because the offending line is one call
-     a later maintainer could add by habit and nothing else here would notice.
+     omits or brackets must be present AND carry real words — an edition can
+     keep the verse number and empty the verse.
+  4. TOKENS REASSEMBLE. `pre + word + post` in order is the verse. A tokenizer
+     that drops a danda passes every other check here.
+  5. WORDS ARE WHOLE. No `pre`/`post` holds a letter, and no word begins with a
+     combining mark — that is a split inside a grapheme cluster, which
+     reassembles perfectly, renders as a dotted circle and matches no search.
+     Tested on category M, not Mn: these vowel signs are half Mc (spacing), so
+     an Mn-only test misses half of them. A word ENDING in a virama is ordinary
+     and is not checked.
+  6. THE TEXT WAS NOT NORMALISED. NFC and NFD must both be no-ops. Normalising
+     Gurmukhi rewrites letters — the precomposed nukta forms are on Unicode's
+     composition exclusion list, so NFC decomposes them — and Devanagari is on
+     the same list. Checked because the offending line is one call a later
+     maintainer could add by habit.
   7. THE DIVINE NAME IS MARKED, at a rate near the KJV's own 6,892, and only on
-     the bare name. Unlike Arabic — where ٱلرَّبّ renders YHWH and Adonai alike
-     and could not be flagged at all — these texts spell ਯਹੋਵਾਹ and यहोवा out.
+     the bare name.
   8. SUPERSCRIPTIONS AND PARAGRAPHS ARE MARKED. Flag 4 on psalm titles, folded
-     into verse 1 as `kjv.jsonl` folds them; flag 8 at a rate near the KJV's own
-     and never on the same token as flag 4.
-  9. THERE ARE NO STRONG'S CODES AND NO ITALICS. Both absences are deliberate
-     (see `build-indic.py`), and a check is the only thing that keeps a
-     deliberate absence from quietly becoming an accidental presence later.
- 10. THE CORPUS IS ONE TEXT — the splice guard, and the reason it exists.
-     The first Punjabi source tried here, tfbf/Bible-Punjabi-Pavitr-Bible-1945,
-     had EIGHT WHOLE BOOKS of a different modern translation spliced into it
-     (Titus, John, James, 1 Peter, 1-2 Thessalonians, 2 Peter, 1 Corinthians)
-     plus ~217 scattered verses, Acts 8:37 among them. Every other check on this
-     list passes on that file: 66 books, KJV addresses, all twenty TR readings
-     present, tokens that reassemble.
-     What gives it away is punctuation. The 1945 keyboarding types the danda as
-     an ASCII "|", the spliced books use a real ਦ U+0964, and no book uses both.
-     So: A SENTENCE TERMINATOR THAT ACCOUNTS FOR MORE THAN 1% OF THE CORPUS'S
-     TERMINATORS MUST BE USED BY AT LEAST 90% OF ITS BOOKS. Measured on that
-     file, "।" is 11.9% of the terminators and appears in 18 of 66 books, so it
-     fails; here every terminator over the threshold is in all 66. The 1% floor
-     is what keeps the rule off the noise both clean sources do carry — six "॥"
-     in one Punjabi book, four full stops in two — which is real variation and
-     not a second text.
+     into verse 1; flag 8 at a rate near the KJV's, never on a flag-4 token.
+  9. THERE ARE NO STRONG'S CODES AND NO ITALICS. Both absences are deliberate,
+     and a check is what keeps a deliberate absence from becoming an accidental
+     presence later.
+ 10. THE CORPUS IS ONE TEXT. A sentence terminator accounting for more than 1%
+     of the corpus's terminators must be used by at least 90% of its books.
+     This catches a source assembled by splicing a modern translation into an
+     older one, which passes every other check on this list: the two texts
+     punctuate differently and no book uses both conventions. The 1% floor
+     keeps the rule off the handful of odd terminators a clean source carries.
  11. NOTHING WAS LOST (needs the source). Every verse's letters and marks,
      ignoring whitespace and punctuation, are the source's.
 """

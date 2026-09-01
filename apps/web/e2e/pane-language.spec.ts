@@ -1,45 +1,30 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// PER-PANE TEXT LANGUAGE (docs/PER-PANE-LANGUAGE.md): German beside English,
-// without the UI language moving.
-//
-// The reader's own data is shared because every text sits at the KJV's verse
-// addresses, so what these tests watch for is the two ways that can go wrong:
-// a pane painting the WRONG text (the turn cache serving English geometry to a
-// German pane), and study answered against the wrong Bible.
+// Per-pane text language: German beside English, without the UI language moving.
+// Every text sits at the KJV's verse addresses, so the two ways this goes wrong are a
+// pane painting the wrong text (the turn cache serving English geometry to a German
+// pane) and study answered against the wrong Bible.
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page).toHaveTitle("Plumbline Bible");
-  const established = page.getByRole("button", { name: "Established believer" });
-  await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await established.isVisible().catch(() => false)) {
-    await established.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
-/** The words a pane actually painted, from the accessibility mirror the canvas
- *  keeps (ReaderPane's `mirror`) — the real text, not the display list.
+/** The words a pane actually painted, from the canvas's accessibility mirror.
  *
- *  `textContent`, not `innerText`: the mirror is visually hidden (1px +
- *  clip-path) so it can be read by assistive tech without being seen, and
- *  `innerText` answers with what is RENDERED, which for that box is nothing. */
+ *  `textContent`, not `innerText`: the mirror is visually hidden (1px + clip-path), and
+ *  `innerText` answers with what is rendered, which for that box is nothing. */
 async function paneText(page: Page, idx: number): Promise<string> {
   const raw = await page.locator(".pane").nth(idx).locator(".mirror").textContent();
   return (raw ?? "").replace(/\s+/g, " ").trim();
 }
 
 /**
- * Point pane `idx` at a language by its Bible's name ("Luther"), and WAIT for
- * the pane to actually be reading it.
- *
- * Waiting on the pane's own state rather than on its words: picking a language
- * is asynchronous (a download, then a corpus open), so a helper that returns on
- * the click lets the test tap a word in the English text it has not replaced
- * yet — which is how the first version of the study test below passed while
- * proving nothing.
+ * Point pane `idx` at a language by its Bible's name ("Luther"), and wait on the pane's
+ * own state until it is reading it. Picking a language is asynchronous (a download, then
+ * a corpus open), so a helper that returned on the click would let a test tap a word in
+ * the English text that has not been replaced yet.
  */
 async function setPaneBible(page: Page, idx: number, bible: string, code: string): Promise<void> {
   const pane = page.locator(".pane").nth(idx);
@@ -55,23 +40,20 @@ async function setPaneBible(page: Page, idx: number, bible: string, code: string
     .toBeGreaterThan(20);
 }
 
-// MUTATION: drop `${m.lang ?? ""}|` from the turn-cache key in
-// engine.worker.ts. Red: the German pane paints the English chapter — the
-// right geometry for the wrong Bible — because both panes ask for John 3 at
-// the same width and the first answer is cached under a key that cannot tell
-// them apart.
+// Fails against a turn-cache key in engine.worker.ts that omits the pane's language:
+// both panes ask for John 3 at the same width, so the German pane paints the cached
+// English chapter.
 test("a pane reads German beside an English one, and the UI stays English", async ({ page }) => {
   await boot(page);
 
-  // Two panes on the same chapter, so the ONLY difference between them is the
-  // text — which is what makes a wrong answer visible.
+  // Two panes on the same chapter, so the only difference between them is the text.
   await page.evaluate(() => {
     const s = (window as any).__plumbline;
     if (s.panes.length < 2) s.addPane(0);
   });
   await expect(page.locator(".pane")).toHaveCount(2);
-  // POLLED, not read once: splitting re-renders the pane row (every column
-  // changes width), so both panes are briefly between display lists.
+  // Polled, not read once: splitting re-renders the pane row (every column changes
+  // width), so both panes are briefly between display lists.
   await expect.poll(async () => (await paneText(page, 0)).length, { timeout: 30_000 }).toBeGreaterThan(20);
   const english = await paneText(page, 0);
   expect(english).toContain("Pharisees");
@@ -81,30 +63,23 @@ test("a pane reads German beside an English one, and the UI stays English", asyn
 
   const german = await paneText(page, 1);
   expect(german, "the two panes must not be the same text").not.toBe(english);
-  // The pane beside it never changed — no reload, no re-language of the app.
+  // The pane beside it never changed: no reload, no re-language of the app.
   expect(await paneText(page, 0)).toBe(english);
-  // THE INTERFACE IS UNTOUCHED: the reader picked a Bible for one column, not
-  // a language for the app.
+  // The reader picked a Bible for one column, not a language for the app.
   await expect(page.getByRole("button", { name: "Study" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.lang)).not.toBe("de");
 });
 
-// FULL STUDY PER PANE: a word tapped in the German column is studied in German.
+// A word tapped in the German column is studied in German. The assertion must be
+// sensitive to the language, not the position: comparing one coordinate's answers
+// before and after the switch proves nothing, because changing the text moves the words
+// and the tap lands on a different token either way. So the chain is pinned in two
+// places — the tap carries the pane's language into the panel view, and the panel asks
+// that language.
 //
-// The assertion has to be sensitive to the LANGUAGE, not to the position. An
-// earlier version tapped the same coordinate before and after the switch and
-// compared the two answers — which differ either way, because changing the text
-// moves the words, so the tap lands on a different token and the study differs
-// even when the language is dropped entirely. It passed against its own bug.
-//
-// So this pins the two links of the chain separately:
-//   1. the TAP carries the pane's language into the panel view, and
-//   2. the PANEL asks that language — same verse, same token, two languages,
-//      two answers.
-//
-// MUTATION (1): drop `pane.lang` from ReaderPane's `onWordStudy` call → the
-// panel view has no language. MUTATION (2): pass `undefined` instead of
-// `p.lang` in StudyPanel's wordStudy `qIn` → the two answers are identical.
+// Fails against a ReaderPane `onWordStudy` call with no `pane.lang` (the view has no
+// language), or a StudyPanel wordStudy `qIn` passing `undefined` (the two answers are
+// identical).
 test("word study on a pane comes from that pane's own text", async ({ page }) => {
   await boot(page);
   await setPaneBible(page, 0, "Luther", "de");
@@ -117,15 +92,15 @@ test("word study on a pane comes from that pane's own text", async ({ page }) =>
     if (await page.evaluate(() => (window as any).__plumbline.panel?.kind === "wordUsage")) break;
   }
   const view = await page.evaluate(() => (window as any).__plumbline.panel);
-  // The tap answer is the word-usage card (the word-first candidate); the
-  // language-carrying seam this test pins is the same either way.
+  // The tap answer is the word-usage card; the language-carrying seam is the same
+  // either way.
   expect(view?.kind, "a tap on a word opens its study").toBe("wordUsage");
   expect(view?.lang, "and the study belongs to the pane's own text").toBe("de");
 
   // ── 2. the panel asks that language ──
-  // The SAME verse and the SAME token, answered twice: once as the pane asked
-  // (German) and once as the reader's own text. A panel that ignores the view's
-  // language cannot tell these apart, and they come back identical.
+  // The same verse and token, answered twice: once as the pane asked (German) and once
+  // as the reader's own text. A panel that ignores the view's language returns both
+  // answers identical.
   const answers = await page.evaluate(async (v: any) => {
     const s = (window as any).__plumbline;
     const de = await s.fetchQIn("de", "wordStudyBlocks", v.refKey, v.tokenIndex, s.gates);
@@ -134,15 +109,9 @@ test("word study on a pane comes from that pane's own text", async ({ page }) =>
   }, view);
   expect(answers.de, "the German text must answer differently from the KJV").not.toBe(answers.en);
 
-  // And what the panel actually PAINTS follows the view's language: the same
-  // verse and token rendered through the panel twice, once with the pane's
-  // language and once without, must not paint the same words.
-  //
-  // (The panel's REFERENCE line stays in the interface language — "John 3:1",
-  // not "Johannes" — because the reader's UI is still English. That is why this
-  // compares two rendered panels rather than hunting for a German word in one:
-  // the first version of this check picked "John" out of the reference and
-  // failed a correct app.)
+  // What the panel paints follows the view's language. Its reference line stays in the
+  // interface language ("John 3:1", not "Johannes"), so this compares two rendered
+  // panels rather than hunting for a German word in one.
   const paint = async (lang: string | undefined): Promise<string> => {
     await page.evaluate(
       (v: any) => {
@@ -160,11 +129,9 @@ test("word study on a pane comes from that pane's own text", async ({ page }) =>
   expect(paintedDe, "the panel must paint the pane's own text, not the KJV").not.toBe(paintedEn);
 });
 
-// The cost of the thing, measured rather than assumed: three languages open at
-// once is the ceiling (the web caps at three panes), and this is a wasm heap in
-// ONE worker thread. Not a budget that fails the build — a number printed into
-// the run so a regression is visible and a phone's limits can be argued about
-// with data.
+// Three languages open at once is the ceiling (the web caps at three panes), on one
+// wasm heap in one worker thread. This prints the measured cost rather than enforcing a
+// millisecond budget; the assertion is only that nothing fell over.
 test("three languages at once, and what they cost @perf", async ({ page }) => {
   test.setTimeout(300_000);
   await boot(page);
@@ -188,18 +155,15 @@ test("three languages at once, and what they cost @perf", async ({ page }) => {
   console.log(
     `three texts open: wasm heap ${mb(before)} MB → ${mb(after)} MB (+${mb(after - before)} MB for two more Bibles)`,
   );
-  // All three panes are still readable — the point of the measurement is that
-  // nothing fell over, not the number itself.
+  // All three panes are still readable.
   for (let i = 0; i < 3; i++) expect((await paneText(page, i)).length).toBeGreaterThan(20);
 });
 
-// A Bible no pane reads is handed back. Each open text costs its cache in the
-// engine's heap (~70 MB, measured above), so a reader who tries German and goes
-// back to English must not keep paying for it for the rest of the session.
+// A Bible no pane reads is handed back: each open text costs ~70 MB of engine heap, so
+// a reader who tries German and returns to English must not keep paying for it.
 //
-// MUTATION: drop the `releaseUnusedLangs()` call from `setPaneLang` → the
-// engine is still open after the pane returns to the KJV, and the read below
-// succeeds instead of being refused.
+// Fails against a `setPaneLang` with no `releaseUnusedLangs()` call: the engine is still
+// open, and the read below succeeds instead of being refused.
 test("a language no pane reads is released", async ({ page }) => {
   await boot(page);
   await setPaneBible(page, 0, "Luther", "de");
@@ -210,9 +174,8 @@ test("a language no pane reads is released", async ({ page }) => {
     .poll(async () => await page.evaluate(() => (window as any).__plumbline.panes[0]?.lang ?? ""), { timeout: 30_000 })
     .toBe("");
 
-  // The engine is GONE, not merely unused: a read against it is refused rather
-  // than silently answered from the KJV, which is the invariant the whole
-  // per-pane path rests on.
+  // The engine is gone, not merely unused: a read against it is refused rather than
+  // silently answered from the KJV.
   const refused = await page.evaluate(async () => {
     try {
       await (window as any).__plumbline.rpc.callIn("de", "tocJson");
@@ -224,22 +187,18 @@ test("a language no pane reads is released", async ({ page }) => {
   expect(refused, "the released engine must not answer").toBeTruthy();
   expect(refused).toMatch(/not open/i);
 
-  // And asking for it again just works — releasing is not a one-way door.
+  // Asking for it again works: releasing is not a one-way door.
   await setPaneBible(page, 0, "Luther", "de");
   expect(await paneText(page, 0)).toMatch(/Pharisäern|Nikodemus|Gott/);
 });
 
-// A PANE'S LANGUAGE SURVIVES A RELAUNCH — engine included. The `lang` always
-// rode `openPanes`, but the engine it names lives and dies with the worker,
-// and nothing reopened it on boot: the restored pane's first layout threw
-// "the de text is not open on this device" and the pane sat BLANK, its word
-// study dead with it. Found by UAT as "Strong's isn't working except for
-// English" (2026-08-18) — the study surface was the symptom, the unopened
-// engine the cause.
+// A pane's language survives a relaunch, engine included: `lang` rides `openPanes`, but
+// the engine it names lives and dies with the worker, so boot has to reopen it.
 //
-// MUTATION: in session.svelte.ts, drop the restore-time `openPaneLang` loop
-// (or stop setting `langLoading` on restored panes). Red: the pane never
-// paints German after the reload, and the study read below is refused.
+// Fails against a session.svelte.ts with no restore-time `openPaneLang` loop (or that
+// stops setting `langLoading` on restored panes): the restored pane's first layout
+// throws "the de text is not open on this device", it sits blank, and the study read
+// below is refused.
 test("a restored language pane paints its text and answers study after a reload", async ({ page }) => {
   await boot(page);
   await setPaneBible(page, 0, "Luther", "de");
@@ -249,13 +208,13 @@ test("a restored language pane paints its text and answers study after a reload"
   await page.reload();
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
 
-  // The pane came back GERMAN — same language, same text, no silent English.
+  // The pane came back German, not silently English.
   expect(await page.evaluate(() => (window as any).__plumbline.panes[0]?.lang ?? "")).toBe("de");
   await expect
     .poll(async () => await paneText(page, 0), { timeout: 60_000 })
     .toMatch(/Pharisäern|Nikodemus|Gott/);
 
-  // And its study answers — the read that used to throw "not open".
+  // And its study answers.
   const study = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     return JSON.stringify(await s.fetchQIn("de", "wordStudyBlocks", "John 3:16", 1, s.gates));

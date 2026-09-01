@@ -1,42 +1,26 @@
 //! A bounded memo in front of a [`Measure`]: the same run of text is measured
 //! once per font, not once per token per layout.
 //!
-//! Every run [`crate::layout_chapter`] places is measured through the shell's own
-//! text stack, and on both shipped shells that measurement is a *boundary
-//! crossing* — a wasm→JS `measureText` call (which also decodes a C string on the
-//! way) on the web, a JNA upcall into `android.graphics.Paint` on Android.
-//! Scripture, meanwhile, repeats itself. Counted from `data/kjv.jsonl` by
-//! replaying exactly what `layout_chapter` measures (each verse
-//! number, then each rendered token):
+//! Every run [`crate::layout_chapter`] places crosses out of Rust into the
+//! shell's text stack, and scripture repeats itself: laying out the whole KJV
+//! measures 822,057 runs, only 348,027 of them distinct, and re-laying out a
+//! chapter already measured (a rotation, a margin change, a revisit) measures
+//! nothing. Living below the ABI, one implementation serves every shell.
 //!
-//!  - Gen 1 measures 828 runs, of which **229 are distinct** — 72% redundant.
-//!  - Every chapter laid out once: 822,057 measurements, 348,027 distinct (58%).
-//!  - Twenty consecutive chapters through ONE memo: 12,916 → **2,126** (84%),
-//!    because neighbouring chapters share nearly all their word forms.
-//!  - Re-laying out a chapter already measured — a rotation, a margin change, a
-//!    revisit: **zero**.
-//!
-//! This lives below the ABI on purpose, so both shells get it from one
-//! implementation instead of each caching in its own language.
-//!
-//! ## Why this cannot serve a stale width
-//!
-//! A remembered width is only valid for the font and size it was measured in, and
-//! the caller — not this crate — is the only one who knows which that is. So every
-//! entry belongs to a caller-supplied **font identity** ([`Memoized::new`]):
-//! pointing the memo at a new identity drops what the old one remembered, and a
-//! read at an identity the memo is not currently holding is a MISS rather than a
-//! reuse. The identity is therefore checked on every read, not only when the memo
-//! is retuned — two threads laying out in different fonts at once will thrash,
-//! but neither can ever be handed the other's widths. A wrong width is a
-//! mis-laid-out chapter, which is far worse than a slow one.
+//! A remembered width is valid only for the font and size it was measured in, and
+//! only the caller knows which that is, so every entry belongs to a
+//! caller-supplied font identity ([`Memoized::new`]). Pointing the memo at a new
+//! identity drops what the old one remembered, and the identity is checked on
+//! every read, not only on retune: two threads laying out in different fonts will
+//! thrash, but neither can be handed the other's widths. A wrong width is a
+//! mis-laid-out chapter, far worse than a slow one.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::Measure;
 
-/// Remembered advance widths for ONE font identity. Shared across layouts by the
+/// Remembered advance widths for one font identity. Shared across layouts by the
 /// caller (the FFI layer keeps one per engine); drive it through [`Memoized`].
 pub struct MeasureMemo {
     /// The font identity every entry below was measured in.
@@ -47,18 +31,14 @@ pub struct MeasureMemo {
 impl MeasureMemo {
     /// Entries kept before the memo starts over.
     ///
-    /// A bound is mandatory: the whole KJV has 29,158 distinct rendered runs (mean
-    /// 7.4 bytes), so an unbounded map is a slow leak that a read-through fills.
-    /// 4,096 is safe because it is sized against the unit of work rather than the
-    /// corpus — the longest chapter in the canon, Ps 119, has 866 distinct runs, so
-    /// the chapter on screen fits nearly five times over and its re-layout stays
-    /// free even right after an overflow.
-    ///
-    /// Overflow clears the map instead of evicting one entry: LRU bookkeeping
-    /// would sit in the measure hot path, and clearing costs almost nothing here.
-    /// A whole-Bible read-through at this bound clears 25 times and still removes
-    /// 87% of the crossings (822,057 → 106,426); an unbounded map would remove
-    /// 96%, i.e. 9 more points for ~1.4 MB of resident strings instead of ~230 KB.
+    /// A bound is mandatory — the whole KJV has 29,158 distinct rendered runs, so
+    /// an unbounded map is a slow leak a read-through fills. 4,096 is sized
+    /// against the unit of work, not the corpus: the longest chapter (Ps 119) has
+    /// 866 distinct runs, so the chapter on screen fits nearly five times over and
+    /// its re-layout stays free even right after an overflow. Overflow clears the
+    /// map rather than evicting one entry, because LRU bookkeeping would sit in
+    /// the measure hot path; a whole-Bible read-through still avoids 87% of the
+    /// crossings at ~230 KB resident, against 96% at ~1.4 MB unbounded.
     pub const CAP: usize = 4096;
 
     pub fn new() -> MeasureMemo {
@@ -89,8 +69,8 @@ impl MeasureMemo {
 
     fn insert(&mut self, font: u64, text: &str, width: f32) {
         // Another identity took the memo over while this width was being measured
-        // (two panes, two fonts): dropping the width is correct — remembering it
-        // under the wrong identity is the one thing that must never happen.
+        // (two panes, two fonts): drop it rather than file it under the wrong
+        // identity.
         if self.font != font {
             return;
         }
@@ -116,8 +96,8 @@ pub struct Memoized<'a, M: Measure> {
 }
 
 impl<'a, M: Measure> Memoized<'a, M> {
-    /// Wrap `inner`, pointing `memo` at `font` — the caller's identity for "the
-    /// font and size `inner` measures with right now". Constructing this is what
+    /// Wrap `inner`, pointing `memo` at `font` — the caller's identity for the
+    /// font and size `inner` measures with right now. Constructing this is what
     /// invalidates: widths remembered for any other identity are dropped here, so
     /// a caller that folds every measurement-affecting input into `font` cannot
     /// be served a stale width.
@@ -137,21 +117,19 @@ impl<M: Measure> Measure for Memoized<'_, M> {
         if let Some(w) = lock(self.memo).get(self.font, text) {
             return w;
         }
-        // The guard is dropped BEFORE the inner call. `inner` is a foreign upcall
-        // (canvas `measureText`, `android.graphics.Paint`): holding a lock across
-        // it would make two panes' layouts wait on each other's shell work, and
-        // would deadlock outright if that upcall ever re-entered layout on this
-        // thread.
+        // The guard is dropped before the inner call: `inner` is a foreign upcall
+        // into the shell's text stack, so holding the lock across it would make
+        // two panes' layouts wait on each other, and would deadlock outright if
+        // the upcall ever re-entered layout on this thread.
         let w = self.inner.text_width(text);
         lock(self.memo).insert(self.font, text, w);
         w
     }
 }
 
-/// Take the memo, ignoring poisoning. A memo is a pure cache: a panic that
-/// happened while some other thread held it must not turn every later layout into
-/// a panic — the ABI's firewall would answer null and the reader would get a
-/// blank chapter instead of a slightly slower one.
+/// Take the memo, ignoring poisoning. A memo is a pure cache: a panic on another
+/// thread must not turn every later layout into a panic, since the ABI's firewall
+/// would then answer null and the reader would get a blank chapter.
 fn lock(memo: &Mutex<MeasureMemo>) -> MutexGuard<'_, MeasureMemo> {
     memo.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -163,7 +141,7 @@ mod tests {
     use plumbline_core::corpus;
     use std::cell::Cell;
 
-    /// Monospace measurement that COUNTS its calls — one call is one crossing of
+    /// Monospace measurement that counts its calls — one call is one crossing of
     /// the shell boundary in the product.
     struct Counting {
         char_w: f32,
@@ -258,10 +236,9 @@ mod tests {
         assert_eq!(small.calls.get(), 2);
     }
 
-    /// Two layouts overlapping in different fonts — Android lays out on a thread
-    /// pool and two panes can be in flight at once. Retuning alone is not enough
-    /// to keep them apart: the one that is already running would then read the
-    /// other's widths for the same word.
+    /// Two layouts overlapping in different fonts — a caller may lay out on a
+    /// thread pool with two panes in flight. Retuning alone is not enough to keep
+    /// them apart: the one already running would read the other's widths.
     #[test]
     fn two_layouts_in_different_fonts_never_read_each_others_widths() {
         let memo = Mutex::new(MeasureMemo::new());

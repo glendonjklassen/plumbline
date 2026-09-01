@@ -22,12 +22,6 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
-  const est = page.getByRole("button", { name: "Established believer" });
-  await expect(est.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
-  if (await est.isVisible().catch(() => false)) {
-    await est.click();
-    await page.getByRole("button", { name: "Start reading" }).click();
-  }
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
 }
 
@@ -77,7 +71,6 @@ const DIALOGS: { name: string; open: string; sel: string }[] = [
   { name: "the tag picker", open: `s.tagPickFor = "John 3:16"`, sel: `[data-surface="tag picker"]` },
   { name: "the thread picker", open: `s.threadPickFor = "John 3:16"`, sel: `[data-surface="thread picker"]` },
   { name: "the passage picker", open: `s.memorizePassageFrom = "John 3:16"`, sel: `[data-surface="passage picker"]` },
-  { name: "the welcome", open: `s.reopenIntro = "new"`, sel: `[aria-label="Welcome to Plumbline"]` },
   { name: "the text prompt", open: `void s.askText("Note", "", true)`, sel: `[aria-label="Note"]` },
   {
     name: "the confirmation",
