@@ -1,0 +1,50 @@
+{
+  "id": "bei-dir-jesu-will-ich-bleiben",
+  "number": 92,
+  "tune": "O DU LIEBE MEINER LIEBE",
+  "meter": "8.7.8.7 D",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "In Thy Service Will I Ever",
+      "author": "Philipp Spitta",
+      "translator": "Richard Massie",
+      "year": 1863,
+      "stanzas": [
+        "[G]In thy service [C]will I [D]ever,\n[G]Jesus, my Re[D7]deemer, [G]stay;\n[G]nothing me from [C]thee shall [D]sever,\n[G]gladly would I [D7]go the [G]way.\n[C]Life in me thy [G]life pro[D]duces,\n[Em]and gives vigour [A7]to my [D]heart,\n[G]as the vine doth [C]living [D]juices\n[G]to the purple [D7]grape im[G]part.",
+        "Could I be in other places\nhalf so happy as with thee,\nwho so many gifts and graces\nhast thyself prepared for me?\nNo place could be half so fitted\nto impart true joy, I ween,\nsince to thee, O Lord, committed\npower in heaven and earth hath been.",
+        "Where shall I find such a Master,\nwho hath done my soul such good,\nand retrieved the great disaster\nsin first caused, by his own blood?\nIs not he my rightful owner,\nwho for me his own life gave?\nWere it not a foul dishonour\nnot to love him to the grave?",
+        "Yes, Lord Jesus, I am ever\nthine in sorrow and in joy;\ndeath the union shall not sever,\nnor eternity destroy.\nI am waiting, yea, am sighing\nfor my summons to depart;\nhe is best prepared for dying\nwho in life is thine in heart.",
+        "Let thy light on me be shining\nwhen the day is almost gone,\nwhen the evening is declining,\nand the night is drawing on;\nbless me, O my Father, laying\nboth thy hands on my meek head,\n\"Here thy day is ended,\" saying,\n\"yonder live the faithful dead.\"",
+        "Stay beside me, when the stillness\nand the icy touch of death\nfill my trembling soul with chillness,\nlike the morning's frosty breath;\nas my failing eyes grow dimmer,\nlet my spirit grow more bright,\nas I see the first faint glimmer\nof the everlasting light."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.christmysong.com/240/jtr240en4_in_thy_service_will_i_ever.html",
+        "https://hymnary.org/text/in_thy_service_will_i_ever",
+        "https://hymnary.org/text/bei_dir_jesu_will_ich_bleiben?extended=true"
+      ]
+    },
+    "de": {
+      "title": "Bei dir, Jesu, will ich bleiben",
+      "author": "Philipp Spitta",
+      "translator": null,
+      "year": 1833,
+      "stanzas": [
+        "[G]Bei dir, Jesu, [C]will ich [D]bleiben,\n[G]stets in deinem [D7]Dienste [G]stehn;\n[G]nichts soll mich von [C]dir ver[D]treiben,\n[G]will auf deinen [D7]Wegen [G]gehn.\n[C]Du bist meines [G]Lebens [D]Leben,\n[Em]meiner Seele [A7]Trieb und [D]Kraft,\n[G]wie der Weinstock [C]seinen [D]Reben\n[G]zuströmt Kraft und [D7]Lebens[G]saft.",
+        "Könnt ich's irgend besser haben\nals bei dir, der allezeit\nsoviel tausend Gnadengaben\nfür mich Armen hat bereit?\nKönnt ich je getroster werden\nals bei dir, Herr Jesu Christ,\ndem im Himmel und auf Erden\nalle Macht gegeben ist?",
+        "Wo ist solch ein Herr zu finden,\nder, was Jesus tat, mir tut:\nmich erkauft von Tod und Sünden\nmit dem eignen teuren Blut?\nSollt ich dem nicht angehören,\nder sein Leben für mich gab,\nsollt ich ihm nicht Treue schwören,\nTreue bis in Tod und Grab?",
+        "Ja, Herr Jesu, bei dir bleib ich\nso in Freude wie in Leid;\nbei dir bleib ich, dir verschreib ich\nmich für Zeit und Ewigkeit.\nDeines Winks bin ich gewärtig,\nauch des Rufs aus dieser Welt;\ndenn der ist zum Sterben fertig,\nder sich lebend zu dir hält.",
+        "Bleib mir nah auf dieser Erden,\nbleib auch, wenn mein Tag sich neigt,\nwenn es nun will Abend werden\nund die Nacht herniedersteigt.\nLege segnend dann die Hände\nmir aufs müde, schwache Haupt,\nsprich: \"Mein Kind, hier geht's zu Ende;\naber dort lebt, wer hier glaubt.\"",
+        "Bleib mir dann zur Seite stehen,\ngraut mir vor dem kalten Tod\nals dem kühlen, scharfen Wehen\nvor dem Himmelsmorgenrot.\nWird mein Auge dunkler, trüber,\ndann erleuchte meinen Geist,\ndass ich fröhlich zieh hinüber,\nwie man nach der Heimat reist."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_bei_dir_jesu_will_ich_bleiben.html",
+        "https://www.jesus.de/medien/musik/bei-dir-jesu-will-ich-bleiben/",
+        "https://www.kirche-grosshartmannsdorf.de/wp-content/uploads/2020/04/Hausandacht-Jubilate.pdf"
+      ]
+    }
+  },
+  "notes": "German is the six-stanza text as evangeliums.net prints it (EG 406), in modern sung orthography — 'tat/tut/teuren' where Spitta's 1833 Psalter und Harfe had 'that/thut/theuren'. Stanza 1 line 1 reads 'Bei dir, Jesu' here, not evangeliums.net's 'Bei dir, Jesus': the EG reading is 'Jesu', which is also the hymn's title on that same page and what the Grosshartmannsdorf EG-406 order of service prints. That order of service is the independent witness for the text — it carries stanzas 1, 2 and 4 (it is a selection, not an abridgement of the hymn) and matches this file word for word across all three, including 'soviel tausend Gnadengaben' and stanza 4's 'Deines Winks bin ich gewärtig'. English is Richard Massie's translation from Lyra Domestica I (1863), 59–60, which renders all six stanzas in the same metre; Massie died in 1887, so it is public domain. Hymnary lists three other 19th-century translations (Walter 1868, Burns 1869, Durand 1873); Massie's is the one that actually reached hymnals (Schaff's Christ in Song 1879, Horder's Congregational Hymns 1884), and it is the only complete one. Tune: the hymn has no melody of its own and is sung to the Herrnhut tune of 'Herz und Herz vereint zusammen' — hymnary names that tune O DU LIEBE MEINER LIEBE, meter 8.7.8.7 D, originally the folk song 'Sollen nun die grünen Jahre' (ca. 1700). CHART CAVEAT: the only score I could source is Lift Up Your Hearts 727, whose scan shows just the first two lines — in G, 4/4, which is why the key needs no transposing under the guitar rule. Lines 1–2 are harmonised from that scan; lines 3–4 and 7–8 reuse them because the tune is documented (hymnary) as rounded bar form AABA. Lines 5–6, the B section, are the guessed part: I took the chords from a spectral analysis of the LUYH 727 recording, which shows the middle of the tune leaving G for the dominant via A7→D before returning, and wrote the plainest reading of that (C–G–D / Em–A7–D). A player with the full score should check those two lines. Both languages' charts agree bar for bar: G on syllable 1, the second change on syllable 5, the third on syllable 7, in every line."
+}

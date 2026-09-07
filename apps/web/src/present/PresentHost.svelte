@@ -16,7 +16,18 @@
     ref: string;
     display: string;
     body: string;
+    note: string;
   }
+
+  /** A step in the walk: a verse, or one of the thread's bookends.
+   *
+   *  The bookends are STEPS, not decorations on the first and last verse —
+   *  the whole point of an opening is that it is read before the passage, and
+   *  a closing after it, which on a screen you hand across means its own card.
+   *  An absent bookend is simply not in this list, so the walk of a thread
+   *  without them is the walk this screen has always had, and clearing one
+   *  removes its card rather than leaving a blank. */
+  type Step = { kind: "verse"; entry: Entry } | { kind: "bookend"; text: string };
 
   const threads = $derived.by(() => {
     void s.studyEpoch;
@@ -24,7 +35,7 @@
   });
 
   let thread = $state<any | null>(null);
-  let focus = $state<number | null>(null); // null = overview; entries.length = end card
+  let focus = $state<number | null>(null); // null = overview; steps.length = end card
 
   // A preselected thread (first-run "Sharing the gospel" → the Romans Road)
   // skips the picker; unknown names fall through to it.
@@ -46,8 +57,24 @@
         ref: e.verse,
         display: v?.display ?? e.display ?? e.verse,
         body: v?.body || (e.text ?? []).join(" "),
+        // An entry note is `null` when absent and `""` is the same thing here.
+        // Trimmed so a note of only whitespace does not open a gap under the
+        // verse that reads as a rendering bug.
+        note: (e.note ?? "").trim(),
       };
     });
+  });
+
+  /** The walk: opening (if any), every passage, closing (if any). The end card
+   *  still follows at `steps.length`, as it always did. */
+  const steps = $derived.by((): Step[] => {
+    const opening = (thread?.opening ?? "").trim();
+    const closing = (thread?.closing ?? "").trim();
+    return [
+      ...(opening ? [{ kind: "bookend" as const, text: opening }] : []),
+      ...entries.map((entry) => ({ kind: "verse" as const, entry })),
+      ...(closing ? [{ kind: "bookend" as const, text: closing }] : []),
+    ];
   });
 
   // What is under the STATUS BAR, which is not the same question as "is Present
@@ -89,9 +116,17 @@
   }
 
   function shareText(): string {
+    // The same walk the screen shows, flattened: bookends and entry notes
+    // included, because someone who cannot be handed the phone should still get
+    // the thread as it was meant to be read rather than a bare verse list.
     const lines = [thread.name, ""];
-    for (const e of entries) {
-      lines.push(e.display, e.body, "");
+    for (const st of steps) {
+      if (st.kind === "bookend") lines.push(st.text, "");
+      else {
+        lines.push(st.entry.display, st.entry.body);
+        if (st.entry.note) lines.push(`— ${st.entry.note}`);
+        lines.push("");
+      }
     }
     // The same link the header's Share gives: the church rides along, and this
     // is the screen you show someone face to face — exactly where it matters
@@ -148,7 +183,7 @@
     if (!s.showPresent) return;
     if (e.key === "Escape") back();
     else if (focus !== null && (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown"))
-      focus = Math.min(focus + 1, entries.length);
+      focus = Math.min(focus + 1, steps.length);
     else if (focus !== null && (e.key === "ArrowLeft" || e.key === "PageUp"))
       focus = Math.max(focus - 1, 0);
     else return;
@@ -213,24 +248,44 @@
              its thread and a page that looked half-drawn (maintainer, "I added
              a couple of verses and it's all smushed"). The list is replaced
              wholesale on every change, so position is a sound identity here. -->
-        {#each entries as e, i (i)}
-          <button class="entry" onclick={() => (focus = i)}>
-            <span class="ref">{e.display}</span>
-            <span class="body">{e.body}</span>
+        {#each steps as st, i (i)}
+          <button class="entry" class:bookend={st.kind === "bookend"} onclick={() => (focus = i)}>
+            {#if st.kind === "bookend"}
+              <span class="body">{st.text}</span>
+            {:else}
+              <span class="ref">{st.entry.display}</span>
+              <span class="body">{st.entry.body}</span>
+              <!-- The entry's own note, under the verse it belongs to. Rendered
+                   only when there is one, so clearing a note takes the line with
+                   it instead of leaving an empty row in the list. -->
+              {#if st.entry.note}<span class="note">{st.entry.note}</span>{/if}
+            {/if}
           </button>
         {/each}
       </div>
-    {:else if focus < entries.length}
+    {:else if focus < steps.length}
+      <!-- Bound once: `steps[focus]` is an index expression, which TypeScript
+           will not narrow on `.kind`, so reading `.text` off it in a branch
+           fails the check even where the branch has proved which variant it is. -->
+      {@const step = steps[focus]}
       <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-      <div class="focus" onclick={() => (focus = Math.min(focus! + 1, entries.length))}>
-        <p class="fref">{entries[focus].display}</p>
-        <p class="fbody">{entries[focus].body}</p>
+      <div class="focus" onclick={() => (focus = Math.min(focus! + 1, steps.length))}>
+        {#if step.kind === "bookend"}
+          <!-- A bookend card carries no reference line: it is the presenter's
+               own words, and labelling it "Opening" in front of the person
+               being shown it would read as stage directions left in. -->
+          <p class="fbody">{step.text}</p>
+        {:else}
+          <p class="fref">{step.entry.display}</p>
+          <p class="fbody">{step.entry.body}</p>
+          {#if step.entry.note}<p class="fnote">{step.entry.note}</p>{/if}
+        {/if}
       </div>
       <div class="stepbar">
         <button onclick={(e) => (e.stopPropagation(), (focus = Math.max(focus! - 1, 0)))}>‹</button>
         <button class="ovbtn" onclick={(e) => (e.stopPropagation(), (focus = null))}>{t("present.overview")}</button>
-        <span>{focus + 1} / {entries.length}</span>
-        <button onclick={(e) => (e.stopPropagation(), (focus = Math.min(focus! + 1, entries.length)))}>›</button>
+        <span>{focus + 1} / {steps.length}</span>
+        <button onclick={(e) => (e.stopPropagation(), (focus = Math.min(focus! + 1, steps.length)))}>›</button>
       </div>
     {:else}
       <div class="endcard">
@@ -421,6 +476,38 @@
   .entry .body {
     font-size: calc(21px * var(--uiScale, 1));
     line-height: 1.45;
+  }
+  /* An entry note in the overview: the presenter's line about the verse, set
+     smaller and quieter than the verse so scanning the list still reads as
+     scripture first. 5.4:1 on this paper, like `.pick .n`. */
+  .entry .note {
+    font-size: calc(16px * var(--uiScale, 1));
+    line-height: 1.4;
+    color: #6c665d;
+    font-style: italic;
+  }
+  /* A bookend row is the presenter's own words, not a passage — italic and
+     inset, so the eye can tell at a glance where the scripture starts and
+     stops without needing a label to say so. */
+  .entry.bookend {
+    padding-inline-start: 14px;
+    border-inline-start: 2px solid #d8cba8;
+  }
+  .entry.bookend .body {
+    font-style: italic;
+    color: #453f36;
+  }
+  /* The focused bookend card reuses `.fbody`'s size; only the voice changes. */
+  .focus .fbody:only-child {
+    font-style: italic;
+  }
+  .fnote {
+    /* Sits with `.fbody` in the same non-shrinking position — see `.focus`. */
+    flex-shrink: 0;
+    font-size: clamp(15px, 2.4vw, 24px);
+    line-height: 1.4;
+    color: #4a443a;
+    font-style: italic;
   }
   .focus {
     /* `min-height: 0` + `overflow-y: auto` for the reason `.overview` has them:

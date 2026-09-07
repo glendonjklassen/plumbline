@@ -282,6 +282,11 @@ pub struct StudyXrefView {
 pub struct ThreadView {
     pub name: String,
     pub notes: String,
+    /// The bookends — see [`crate::thread::Thread::opening`]. Empty means the
+    /// thread has none, and every reader of these omits the blank one rather
+    /// than painting an empty heading.
+    pub opening: String,
+    pub closing: String,
     pub entries: Vec<ThreadEntryView>,
 }
 
@@ -586,6 +591,16 @@ pub enum PanelLink {
     EditThreadNotes {
         index: usize,
     },
+    /// `editthreadopening:I` / `editthreadclosing:I` — prompt, then set the
+    /// commentary that bookends thread I's passages. Separate verbs rather than
+    /// one carrying a side, so a shell cannot land an opening in the closing by
+    /// mis-parsing a field.
+    EditThreadOpening {
+        index: usize,
+    },
+    EditThreadClosing {
+        index: usize,
+    },
     EditWeaveNotes {
         index: usize,
     },
@@ -695,6 +710,8 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
         "deletetag" => PanelLink::DeleteTag { index: rest.parse().ok()? },
         "deleteweave" => PanelLink::DeleteWeave { index: rest.parse().ok()? },
         "editthreadnotes" => PanelLink::EditThreadNotes { index: rest.parse().ok()? },
+        "editthreadopening" => PanelLink::EditThreadOpening { index: rest.parse().ok()? },
+        "editthreadclosing" => PanelLink::EditThreadClosing { index: rest.parse().ok()? },
         "editweavenotes" => PanelLink::EditWeaveNotes { index: rest.parse().ok()? },
         "editentrynote" => {
             let (t, e) = rest.split_once(':')?;
@@ -1545,17 +1562,31 @@ pub fn thread_detail(src: &dyn PanelSource, index: usize, edit: bool) -> Vec<Blo
         stats.push(Run::new("🗑", sz::TITLE, Color::Faded).link(format!("deletethread:{index}")).end());
     }
     out.push(Block::para(stats));
-    // Thread notes: the text reads in both modes; edit mode adds the same
-    // "Notes ＋" header the word card uses.
-    if edit {
-        out.push(Block::para(vec![
-            Run::new(s("panel.notesHeader"), sz::LABEL, Color::Ink).bold(),
-            Run::new("＋", sz::LABEL, Color::Gold).link(format!("editthreadnotes:{index}")).end(),
-        ]));
-    }
-    if !t.notes.is_empty() {
-        out.push(Block::para(vec![Run::new(&t.notes, sz::NOTE, Color::Faded)]));
-    }
+    // The three documents a thread carries, in reading order: the OPENING
+    // before the first passage, the entries, then the CLOSING after the last —
+    // with `notes`, the author's own working document, above all of it where it
+    // has always been.
+    //
+    // A blank one is ABSENT, not empty: read mode paints nothing for it, so a
+    // thread with no bookends reads exactly as it did before they existed, and
+    // clearing one takes its heading away with it rather than leaving a label
+    // over a gap. Only EDIT mode shows the "＋" header unconditionally — that
+    // header is how an absent document gets written in the first place.
+    let doc = |label: &'static str, verb: String, text: &str| {
+        let mut blocks = Vec::new();
+        if edit {
+            blocks.push(Block::para(vec![
+                Run::new(s(label), sz::LABEL, Color::Ink).bold(),
+                Run::new("＋", sz::LABEL, Color::Gold).link(verb).end(),
+            ]));
+        }
+        if !text.is_empty() {
+            blocks.push(Block::para(vec![Run::new(text, sz::NOTE, Color::Faded)]));
+        }
+        blocks
+    };
+    out.extend(doc("panel.notesHeader", format!("editthreadnotes:{index}"), &t.notes));
+    out.extend(doc("panel.openingHeader", format!("editthreadopening:{index}"), &t.opening));
     let last = t.entries.len().saturating_sub(1);
     for (e, en) in t.entries.iter().enumerate() {
         out.push(Block::Rule);
@@ -1590,6 +1621,14 @@ pub fn thread_detail(src: &dyn PanelSource, index: usize, edit: bool) -> Vec<Blo
                 out.push(Block::para(vec![Run::new(format!("— {note}"), sz::NOTE, Color::Mono)]));
             }
         }
+    }
+    // The closing sits below the last passage, behind the same rule that
+    // separates the entries from each other — but only when there is something
+    // to separate, so a thread without one does not end on a stray line.
+    let tail = doc("panel.closingHeader", format!("editthreadclosing:{index}"), &t.closing);
+    if !tail.is_empty() {
+        out.push(Block::Rule);
+        out.extend(tail);
     }
     out
 }

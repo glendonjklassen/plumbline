@@ -550,6 +550,26 @@ char *plumbline_engine_thread_set_notes(struct PlumblineEngine *engine,
                                         const char *name,
                                         const char *notes);
 
+// Replace the OPENING of the thread named `name` — the commentary read before
+// its first passage. A blank string clears it. Null on success, else an owned
+// error. The thread must already exist.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_thread_set_opening(struct PlumblineEngine *engine,
+                                          const char *name,
+                                          const char *opening);
+
+// Replace the CLOSING of the thread named `name` — the commentary read after
+// its last passage. A blank string clears it. Null on success, else an owned
+// error. The thread must already exist.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_thread_set_closing(struct PlumblineEngine *engine,
+                                          const char *name,
+                                          const char *closing);
+
 // Set (or clear, with a null `note`) the note on entry `index` of the thread
 // named `name`. Null on success, else an owned error.
 //

@@ -940,6 +940,38 @@
       "langs": [
         "de"
       ]
+    },
+    {
+      "number": 92,
+      "id": "bei-dir-jesu-will-ich-bleiben",
+      "title": "Bei dir, Jesu, will ich bleiben",
+      "author": "Philipp Spitta",
+      "year": 1833,
+      "langs": [
+        "de"
+      ],
+      "optEn": "In Thy Service Will I Ever (tr. Richard Massie)"
+    },
+    {
+      "number": 93,
+      "id": "ich-bin-getauft-auf-deinen-namen",
+      "title": "Ich bin getauft auf deinen Namen",
+      "author": "Johann Jakob Rambach",
+      "year": 1734,
+      "langs": [
+        "de"
+      ],
+      "optEn": "Baptized Into Thy Name Most Holy (tr. Catherine Winkworth)"
+    },
+    {
+      "number": 94,
+      "id": "o-komm-du-geist-der-wahrheit",
+      "title": "O komm, du Geist der Wahrheit",
+      "author": "Philipp Spitta",
+      "year": 1827,
+      "langs": [
+        "de"
+      ]
     }
   ]
 }

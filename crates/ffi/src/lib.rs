@@ -2357,6 +2357,69 @@ pub unsafe extern "C" fn plumbline_engine_thread_set_notes(
     })
 }
 
+/// Replace the OPENING of the thread named `name` — the commentary read before
+/// its first passage. A blank string clears it. Null on success, else an owned
+/// error. The thread must already exist.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_thread_set_opening(
+    engine: *mut PlumblineEngine,
+    name: *const c_char,
+    opening: *const c_char,
+) -> *mut c_char {
+    set_thread_bookend(engine, name, opening, thread::set_thread_opening)
+}
+
+/// Replace the CLOSING of the thread named `name` — the commentary read after
+/// its last passage. A blank string clears it. Null on success, else an owned
+/// error. The thread must already exist.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_thread_set_closing(
+    engine: *mut PlumblineEngine,
+    name: *const c_char,
+    closing: *const c_char,
+) -> *mut c_char {
+    set_thread_bookend(engine, name, closing, thread::set_thread_closing)
+}
+
+/// The shared body of the two above — identical to `thread_set_notes` but for
+/// the field the caller names. Not `extern`: it is the Rust side of two ABI
+/// functions, and the bindgen header only ever sees those.
+///
+/// # Safety
+/// As the two callers document.
+unsafe fn set_thread_bookend(
+    engine: *mut PlumblineEngine,
+    name: *const c_char,
+    text: *const c_char,
+    set: fn(&[thread::LoadedThread], &str, &str, &str) -> Result<std::path::PathBuf, plumbline_core::Error>,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let (Some(name), Some(text)) = (opt_str(name), opt_str(text)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let mut study = engine.study_write();
+        match set(&study.threads, name, text, &now_stamp()) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
 /// Set (or clear, with a null `note`) the note on entry `index` of the thread
 /// named `name`. Null on success, else an owned error.
 ///
@@ -3057,6 +3120,8 @@ impl PanelSource for PlumblineEngine {
             .map(|lt| panel::ThreadView {
                 name: lt.thread.name.clone(),
                 notes: lt.thread.notes.clone(),
+                opening: lt.thread.opening.clone(),
+                closing: lt.thread.closing.clone(),
                 entries: lt
                     .thread
                     .entries

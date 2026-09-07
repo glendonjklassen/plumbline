@@ -265,7 +265,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "plumbline-core"
-version = "0.67.0"
+version = "0.68.0"
 dependencies = [
  "bincode",
  "flate2",
@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "plumbline-ffi"
-version = "0.67.0"
+version = "0.68.0"
 dependencies = [
  "cbindgen",
  "plumbline-core",
@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "plumbline-hydrate"
-version = "0.67.0"
+version = "0.68.0"
 dependencies = [
  "plumbline-core",
  "plumbline-rnd",
@@ -296,14 +296,14 @@ dependencies = [
 
 [[package]]
 name = "plumbline-layout"
-version = "0.67.0"
+version = "0.68.0"
 dependencies = [
  "plumbline-core",
 ]
 
 [[package]]
 name = "plumbline-rnd"
-version = "0.67.0"
+version = "0.68.0"
 dependencies = [
  "plumbline-core",
  "serde",
