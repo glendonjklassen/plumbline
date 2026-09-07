@@ -40,11 +40,16 @@
     void s.studyEpoch;
     const q = s.q("plans", "");
     if (q == null) return held;
-    // The chip does NOT retire when a day's worth is read: finishing day 12
-    // advances `today` to day 13, and the chip shows it — "the next X verses to
-    // read", so a reader can work ahead (UAT, 2026-08-18; this reverses the
-    // 2026-08-12 stand-down, which readers met as being told to stop). The day
-    // number moving is what says the day's worth was banked.
+    // The chip RETIRES for the rest of the local day once a day's worth is read
+    // (`doneToday`, computed in the core against the reading store's dates), and
+    // comes back at the next local midnight with the next portion — same rule
+    // as the devotional chip below. History, because this has flipped twice:
+    // it retired (2026-08-12), then kept showing the next portion so a reader
+    // could work ahead (UAT, 2026-08-18), and now retires again (maintainer,
+    // 2026-09-07: "when you are done the reading for the day, it should clear
+    // that badge rather than just start the next day"). Working ahead is still
+    // open from the Study hub, which keeps showing the next portion — only the
+    // bookmark row stops asking.
     return (held = todayPlans(q));
   });
 
@@ -105,6 +110,7 @@
    *  what a screen reader hears and what a desktop tooltip shows. */
   const planTiles = $derived(
     plans.flatMap((p: any, i: number) => {
+      if (p.doneToday) return [];
       const target = firstUnread(p);
       if (!target) return [];
       const passage = chapterSpan(remaining(p));

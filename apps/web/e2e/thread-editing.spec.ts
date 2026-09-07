@@ -48,7 +48,7 @@ test("a thread holding the same verse twice still presents", async ({ page }) =>
 
   await page.evaluate(() => {
     const s = (window as any).__plumbline;
-    s.presentThreadName = s.gospelThread();
+    s.presentThreadName = "Romans Road"; // the thread the setup above edited — not the gospel default, which is now How to Be Saved
     s.showPresent = true;
   });
   await expect(page.locator(".present")).toBeVisible({ timeout: 30_000 });
@@ -88,7 +88,7 @@ test("a focused verse scrolls when long and centres when short", async ({ page }
   });
   await page.evaluate(() => {
     const s = (window as any).__plumbline;
-    s.presentThreadName = s.gospelThread();
+    s.presentThreadName = "Romans Road"; // the thread the setup above edited — not the gospel default, which is now How to Be Saved
     s.showPresent = true;
   });
   await expect(page.locator(".present")).toBeVisible({ timeout: 30_000 });
@@ -194,8 +194,8 @@ test("Share walks the thread chosen in Settings", async ({ page }) => {
     await s.fetchQ("threads");
   });
 
-  // Nothing chosen yet: the stock road is the default.
-  expect(await page.evaluate(() => (window as any).__plumbline.gospelThread())).toBe("Romans Road");
+  // Nothing chosen yet: the shipped walk is the default.
+  expect(await page.evaluate(() => (window as any).__plumbline.gospelThread())).toBe("How to Be Saved");
 
   await page.evaluate(() => {
     const s = (window as any).__plumbline;
@@ -219,7 +219,7 @@ test("Share walks the thread chosen in Settings", async ({ page }) => {
   });
   await expect
     .poll(async () => await page.evaluate(() => (window as any).__plumbline.gospelThread()), { timeout: 20_000 })
-    .toBe("Romans Road");
+    .toBe("How to Be Saved");
 });
 
 // The overview's rows are <button> flex items in a scrollable column, and a button's

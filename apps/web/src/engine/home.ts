@@ -78,7 +78,55 @@ export interface VirtualHome {
   installSuggestedWeaves(bundle: Uint8Array): Promise<number>;
 }
 
+/** The all-or-nothing seeding marker — read forever, written no more (the
+ *  per-path record below replaced it, 2026-09-06). An install carrying only
+ *  this boolean seeded exactly [`LEGACY_STOCK_PATHS`]. */
 const STOCK_SEEDED = "meta:stockSeeded";
+/** JSON array of every stock path ever seeded here. Seeding is PER FILE: a
+ *  stock path not in this set seeds on the next boot, which is what lets a
+ *  release ship a new stock thread that reaches existing installs — while a
+ *  path in the set never seeds again, which is what keeps the reader's edits
+ *  and deletions theirs. Like STOCK_SEEDED before it: losing this key re-seeds
+ *  the whole set, resurrecting every stock file the reader threw away. */
+const STOCK_SEEDED_PATHS = "meta:stockSeededPaths";
+/** The stock set as it stood while seeding was all-or-nothing (≤ v0.68) — the
+ *  migration for an install carrying only the boolean: these count as seeded
+ *  there (so one the reader deleted stays deleted), and anything else in the
+ *  pack's stock set is genuinely new and seeds. Frozen history, never appended
+ *  to — a NEW stock file must not be listed here, the same way
+ *  GERMAN_INSTALLED_LEGACY stays what it was. */
+const LEGACY_STOCK_PATHS: readonly string[] = [
+  "tags/false-teaching.json",
+  "threads/romans-road.json",
+  "weaves/a-priest-after-the-order-of-melchizedek.json",
+  "weaves/a-royal-priesthood.json",
+  "weaves/abraham-believed-god.json",
+  "weaves/be-ye-holy-for-i-am-holy.json",
+  "weaves/born-in-bethlehem.json",
+  "weaves/cyrus-decree.json",
+  "weaves/davids-mighty-men.json",
+  "weaves/davids-song-twice.json",
+  "weaves/honour-thy-father-and-mother.json",
+  "weaves/jairus-daughter-and-the-woman-with-the-issue-of-blood.json",
+  "weaves/naaman-in-the-jordan.json",
+  "weaves/rejoice-thou-barren.json",
+  "weaves/stephens-witness.json",
+  "weaves/surely-blessing-i-will-bless-thee.json",
+  "weaves/swords-into-plowshares.json",
+  "weaves/the-centurions-servant.json",
+  "weaves/the-cross-foretold.json",
+  "weaves/the-father-of-many-nations.json",
+  "weaves/the-first-and-the-last-adam.json",
+  "weaves/the-fool-hath-said.json",
+  "weaves/the-generations-from-adam.json",
+  "weaves/the-just-shall-live-by-faith.json",
+  "weaves/the-other-sons-of-abraham.json",
+  "weaves/the-sons-of-esau.json",
+  "weaves/the-sons-of-levi.json",
+  "weaves/the-twelve-sons-of-israel.json",
+  "weaves/the-two-creation-accounts.json",
+  "weaves/the-two-shall-be-one-flesh.json",
+];
 const BUNDLED = "meta:bundled";
 /** Set once the suggested-weave bundle has been unpacked here. Separate from
  *  STOCK_SEEDED so that turning the bundled set off and on again does not silently
@@ -246,23 +294,37 @@ export async function buildHome(
   stockPaths: Set<string> = new Set(),
 ): Promise<VirtualHome> {
   const root = new Map<string, Directory | File>();
-  const [userFiles, seededFlag, bundledFlag, suggestedFlag, langsFlag, germanFlag] = await Promise.all([
-    idbEntries("user"),
-    idbGet("cache", STOCK_SEEDED),
-    idbGet("cache", BUNDLED),
-    idbGet("cache", SUGGESTED_INSTALLED),
-    idbGet("cache", LANGS_INSTALLED),
-    idbGet("cache", GERMAN_INSTALLED_LEGACY),
-  ]);
+  const [userFiles, seededFlag, seededPathsFlag, bundledFlag, suggestedFlag, langsFlag, germanFlag] =
+    await Promise.all([
+      idbEntries("user"),
+      idbGet("cache", STOCK_SEEDED),
+      idbGet("cache", STOCK_SEEDED_PATHS),
+      idbGet("cache", BUNDLED),
+      idbGet("cache", SUGGESTED_INSTALLED),
+      idbGet("cache", LANGS_INSTALLED),
+      idbGet("cache", GERMAN_INSTALLED_LEGACY),
+    ]);
   const bundledOn = bundledFlag ? dec.decode(bundledFlag) !== "off" : true;
   // Both are mutable and read through getters below: an install has to change the
   // answer inside the session that made it, or Settings keeps offering a download
   // the reader has already completed.
   let suggestedOn = suggestedFlag !== undefined;
   const langsOn = decodeLangs(langsFlag, germanFlag);
-  // The stock set seeds ONCE: after that the user's own copies rule, so edits and
-  // deletions stick across pack updates.
-  const seedStock = bundledOn && !seededFlag;
+  // Which stock paths have ever seeded here: the per-path record; failing that,
+  // the legacy boolean, which meant "the legacy set, all of it"; failing both,
+  // nothing — a fresh install.
+  const seededPaths = new Set<string>(
+    seededPathsFlag
+      ? (JSON.parse(dec.decode(seededPathsFlag)) as string[])
+      : seededFlag
+        ? LEGACY_STOCK_PATHS
+        : [],
+  );
+  // Each stock file seeds ONCE: on a fresh install that is all of them, on an
+  // upgraded one exactly the files this release added. After that the reader's
+  // own copy rules, so edits and deletions stick across pack updates.
+  const toSeed = new Set<string>();
+  if (bundledOn) for (const p of stockPaths) if (pack.has(p) && !seededPaths.has(p)) toSeed.add(p);
 
   // The PRISTINE bytes of every bundled stock file, kept for the session so the OFF
   // toggle can tell an untouched example from one the reader made their own (see
@@ -273,7 +335,7 @@ export async function buildHome(
   for (const [path, bytes] of pack) if (stockPaths.has(path)) pristineStock.set(path, bytes);
 
   for (const [path, bytes] of pack) {
-    if (stockPaths.has(path) && !seedStock) continue;
+    if (stockPaths.has(path) && !toSeed.has(path)) continue;
     insertFile(root, path, bytes);
   }
 
@@ -312,16 +374,22 @@ export async function buildHome(
     return run;
   }
 
-  if (seedStock) {
-    // Persist the seeded stock as the user's own files + set the marker.
+  if (toSeed.size > 0 || (seededFlag && !seededPathsFlag)) {
+    // Persist the seeded copies as the reader's own files, then the record.
+    // Only the paths seeded THIS boot — an upgrade boot must not rewrite the
+    // whole subtree. Bytes are read back off the tree, where a same-named file
+    // the reader already had has just overwritten the seed (userFiles landed
+    // above), so what persists is theirs.
     const seeded = new Map<string, Uint8Array>();
-    for (const d of USER_DIRS) {
-      const dir = root.get(d);
-      if (dir instanceof Directory) collectFiles(d, dir, seeded);
+    for (const p of toSeed) {
+      const bytes = readFile(root, p);
+      if (bytes) seeded.set(p, bytes);
     }
-    await idbApply("user", seeded);
-    await idbApply("cache", new Map([[STOCK_SEEDED, enc.encode("1")]]));
-    synced.clear();
+    if (seeded.size > 0) await idbApply("user", seeded);
+    for (const p of toSeed) seededPaths.add(p);
+    // Written even when nothing seeded: a legacy install's first boot on this
+    // build moves onto the per-path record here, once.
+    await idbApply("cache", new Map([[STOCK_SEEDED_PATHS, enc.encode(JSON.stringify([...seededPaths].sort()))]]));
     for (const [path, bytes] of seeded) synced.set(path, fingerprint(bytes));
   }
 
@@ -448,7 +516,10 @@ export async function buildHome(
       await idbApply("cache", new Map([[BUNDLED, enc.encode(on ? "on" : "off")]]));
       if (on) {
         // Re-seed on next boot: missing stock files come back, kept edits win.
-        await idbApply("cache", new Map(), [STOCK_SEEDED]);
+        // BOTH markers go — with only the per-path record cleared, the legacy
+        // boolean would migrate right back to "the legacy set is seeded" and
+        // an ON toggle would bring back none of it.
+        await idbApply("cache", new Map(), [STOCK_SEEDED, STOCK_SEEDED_PATHS]);
         return;
       }
       // OFF removes the examples, not the reader's work: a stock thread or weave

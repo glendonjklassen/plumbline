@@ -391,6 +391,13 @@ export class Session {
   /** Present opens straight into this thread when set (first-run "Sharing
    *  the gospel" → the Romans Road); consumed on open. */
   presentThreadName = $state<string | null>(null);
+  /** Whether the walk Present is showing arrived by a shared link. The end card
+   *  reads it to offer the next step (the new-believer devotional) — an offer
+   *  that only makes sense on the recipient's own device, not on a phone being
+   *  handed across, which is why the owner's picker path never sets it. Set by
+   *  [[openSharedThread]]; PresentHost clears it whenever the walk it described
+   *  ends (✕, back-peel, or backing out to the picker). */
+  presentFromShare = $state(false);
   /** Whether the bundled stock set is on (worker home state, mirrored). */
   bundledOn = $state(true);
   /** The machine-tier pack's lifecycle this session. Phones boot with the
@@ -1305,6 +1312,7 @@ export class Session {
     const threads = (await this.fetchQ("threads").catch(() => null))?.threads ?? [];
     if (!threads.some((t: { name: string }) => t.name === name)) return;
     this.presentThreadName = name;
+    this.presentFromShare = true;
     this.showPresent = true;
   }
 
@@ -1688,7 +1696,7 @@ export class Session {
    * another. The name of the shipped thread, and the fallback for a chosen one
    * that has since been renamed or deleted.
    */
-  static readonly GOSPEL_THREAD_DEFAULT = "Romans Road";
+  static readonly GOSPEL_THREAD_DEFAULT = "How to Be Saved";
 
   /**
    * The thread the Share screen's gospel button (and the first-run path of the
@@ -1702,12 +1710,19 @@ export class Session {
    */
   gospelThread(): string {
     const chosen = String(this.config.gospelThread ?? "").trim();
-    if (!chosen) return Session.GOSPEL_THREAD_DEFAULT;
-    const threads = (this.q("threads")?.threads ?? []) as { name: string }[];
-    if (threads.length && !threads.some((t) => t.name === chosen)) {
-      return Session.GOSPEL_THREAD_DEFAULT;
-    }
-    return chosen;
+    const threads = (this.q("threads")?.threads ?? []) as {
+      name: string;
+      lang?: string | null;
+      gospelDefault?: boolean;
+    }[];
+    if (chosen && (!threads.length || threads.some((t) => t.name === chosen))) return chosen;
+    // Nothing chosen (or the choice is gone): the per-language default —
+    // core::thread::gospel_default's rule, applied to the flags the threads
+    // wire carries. The stock thread flagged for the reader's language, else
+    // the one flagged for English, else the constant while threads load.
+    const flagged = (l: string): string | undefined =>
+      threads.find((t) => t.gospelDefault && t.lang === l)?.name;
+    return flagged(lang()) ?? flagged("en") ?? Session.GOSPEL_THREAD_DEFAULT;
   }
 
   /** Write the reader's config once, on the boot that found none.
