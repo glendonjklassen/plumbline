@@ -332,6 +332,12 @@ pub struct WireThread {
     pub closing: String,
     pub created: String,
     pub entries: Vec<WireThreadEntry>,
+    /// The language of the thread's notes and bookends, or null when unknown
+    /// (every authored thread). Additive.
+    pub lang: Option<String>,
+    /// Whether this is the gospel walk for readers of `lang` — see
+    /// `thread::gospel_default`. Always present; false for authored threads.
+    pub gospel_default: bool,
 }
 
 #[derive(Serialize)]
@@ -344,6 +350,10 @@ pub struct WireThreadEntry {
     pub text: Vec<String>,
     pub note: Option<String>,
     pub added: String,
+    /// The verse the entry runs to (same chapter) — a range stop, or null.
+    /// Always present on the wire, like the bookends: a fixed shape for
+    /// strict decoders.
+    pub end: Option<u16>,
 }
 
 pub fn threads_to_wire(loaded: &[LoadedThread]) -> WireThreads {
@@ -368,8 +378,11 @@ pub fn threads_to_wire(loaded: &[LoadedThread]) -> WireThreads {
                             text: e.text.clone(),
                             note: e.note.clone(),
                             added: e.added.clone(),
+                            end: e.end,
                         })
                         .collect(),
+                    lang: t.lang.clone(),
+                    gospel_default: t.gospel_default,
                 }
             })
             .collect(),

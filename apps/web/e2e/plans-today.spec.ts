@@ -144,10 +144,13 @@ test("finishing a chapter advances the chip and its label", async ({ page }) => 
   });
 });
 
-// Finishing the day's worth advances the chip to the next day's portion rather than
-// standing it down, so a reader can work ahead. `doneToday` stays on the wire (the
-// Study hub's band uses it), so this also dies if it falls off.
-test("reading the day's worth advances the chip to the next day", async ({ page }) => {
+// Finishing the day's worth RETIRES the chip for the rest of the local day (maintainer,
+// 2026-09-07 — reversing the 2026-08-18 work-ahead rule, under which this test asserted
+// the chip stayed up showing "Day 2"). `doneToday` is the signal, computed in the core;
+// the Study hub still shows the next portion, so working ahead is not lost, only the
+// bookmark row stops asking. Dies if `doneToday` falls off the wire or the chip ignores
+// it — under the previous rule the visibility assertion below is exactly what fails.
+test("reading the day's worth retires the chip for the day", async ({ page }) => {
   await boot(page);
   const today = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
@@ -176,8 +179,7 @@ test("reading the day's worth advances the chip to the next day", async ({ page 
       }),
     )
     .toBe(true);
-  await expect(chip).toBeVisible();
-  await expect(chip).toHaveAttribute("aria-label", /Day 2 · /);
+  await expect(chip, "the chip must stand down once the day's worth is banked").not.toBeVisible();
 });
 
 // Pause sets a plan aside whole and Resume brings it back with nothing lost. Dies

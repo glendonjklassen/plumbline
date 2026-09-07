@@ -1,0 +1,389 @@
+{
+ "format": "overlay-thread-v1",
+ "name": "Wie man gerettet wird",
+ "lang": "de",
+ "gospelDefault": true,
+ "tokenization": "kjv1769-tok2",
+ "notes": "",
+ "opening": "Die folgenden Verse erklären, wie ein Mensch gerettet wird. Gerettet zu sein bedeutet, dass du nach deinem Tod für immer mit Gott im Himmel sein wirst. Bitte lies diese Worte und denke sorgfältig darüber nach.",
+ "entries": [
+  {
+   "ref": "Rom 3:23",
+   "span": [
+    0,
+    11
+   ],
+   "text": [
+    "For",
+    "all",
+    "have",
+    "sinned",
+    "and",
+    "come",
+    "short",
+    "of",
+    "the",
+    "glory",
+    "of",
+    "God"
+   ],
+   "note": "Jeder von uns hat Dinge getan, die falsch sind.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rom 6:23",
+   "span": [
+    0,
+    6
+   ],
+   "text": [
+    "For",
+    "the",
+    "wages",
+    "of",
+    "sin",
+    "is",
+    "death"
+   ],
+   "note": "Die Bibel sagt, dass der Lohn der Sünde der Tod ist, aber nicht nur der körperliche Tod.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rev 20:14",
+   "span": [
+    0,
+    15
+   ],
+   "text": [
+    "And",
+    "death",
+    "and",
+    "hell",
+    "were",
+    "cast",
+    "into",
+    "the",
+    "lake",
+    "of",
+    "fire",
+    "This",
+    "is",
+    "the",
+    "second",
+    "death"
+   ],
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rev 20:15",
+   "span": [
+    0,
+    17
+   ],
+   "text": [
+    "And",
+    "whosoever",
+    "was",
+    "not",
+    "found",
+    "written",
+    "in",
+    "the",
+    "book",
+    "of",
+    "life",
+    "was",
+    "cast",
+    "into",
+    "the",
+    "lake",
+    "of",
+    "fire"
+   ],
+   "note": "Der körperliche Tod ist der erste Tod, aber nach dem Tod werden diejenigen, die nicht gerettet sind, für ihre Sünden die Ewigkeit in der Hölle verbringen. Das ist die schlechte Nachricht.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rom 6:23",
+   "span": [
+    7,
+    19
+   ],
+   "text": [
+    "but",
+    "the",
+    "gift",
+    "of",
+    "God",
+    "is",
+    "eternal",
+    "life",
+    "through",
+    "Jesus",
+    "Christ",
+    "our",
+    "Lord"
+   ],
+   "note": "Die gute Nachricht ist, dass Gott jedem ein Geschenk anbietet: das ewige Leben durch Jesus Christus.",
+   "added": "2026-09-06T00:00:01Z"
+  },
+  {
+   "ref": "Rom 5:8",
+   "span": [
+    0,
+    17
+   ],
+   "text": [
+    "But",
+    "God",
+    "commendeth",
+    "his",
+    "love",
+    "toward",
+    "us",
+    "in",
+    "that",
+    "while",
+    "we",
+    "were",
+    "yet",
+    "sinners",
+    "Christ",
+    "died",
+    "for",
+    "us"
+   ],
+   "note": "Vor mehr als 2000 Jahren sandte Gott seinen Sohn, um am Kreuz für all die Sünde zu sterben, die du und ich begangen haben und je begehen werden.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Eph 2:8",
+   "span": [
+    0,
+    18
+   ],
+   "text": [
+    "For",
+    "by",
+    "grace",
+    "are",
+    "ye",
+    "saved",
+    "through",
+    "faith",
+    "and",
+    "that",
+    "not",
+    "of",
+    "yourselves",
+    "it",
+    "is",
+    "the",
+    "gift",
+    "of",
+    "God"
+   ],
+   "note": "Die Rettung ist ein Geschenk. Für ein Geschenk musst du nicht arbeiten.",
+   "added": "2026-09-06T00:00:00Z",
+   "end": 9
+  },
+  {
+   "ref": "Acts 16:31",
+   "span": [
+    0,
+    13
+   ],
+   "text": [
+    "And",
+    "they",
+    "said",
+    "Believe",
+    "on",
+    "the",
+    "Lord",
+    "Jesus",
+    "Christ",
+    "and",
+    "thou",
+    "shalt",
+    "be",
+    "saved"
+   ],
+   "note": "Dieser Vers sagt dir, wie du gerettet wirst. Du musst nur die Worte auf dieser Seite glauben und das Geschenk der Rettung annehmen.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rom 10:9",
+   "span": [
+    0,
+    28
+   ],
+   "text": [
+    "That",
+    "if",
+    "thou",
+    "shalt",
+    "confess",
+    "with",
+    "thy",
+    "mouth",
+    "the",
+    "Lord",
+    "Jesus",
+    "and",
+    "shalt",
+    "believe",
+    "in",
+    "thine",
+    "heart",
+    "that",
+    "God",
+    "hath",
+    "raised",
+    "him",
+    "from",
+    "the",
+    "dead",
+    "thou",
+    "shalt",
+    "be",
+    "saved"
+   ],
+   "note": "Bete zu Gott. Erkenne an, dass du ein Sünder bist und seine Rettung brauchst. Bitte ihn, dich jetzt gleich zu retten.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rom 10:13",
+   "span": [
+    0,
+    12
+   ],
+   "text": [
+    "For",
+    "whosoever",
+    "shall",
+    "call",
+    "upon",
+    "the",
+    "name",
+    "of",
+    "the",
+    "Lord",
+    "shall",
+    "be",
+    "saved"
+   ],
+   "note": "Wenn du Gott anrufst, nimmst du damit sein unverdientes Geschenk an.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "John 6:47",
+   "span": [
+    0,
+    13
+   ],
+   "text": [
+    "Verily",
+    "verily",
+    "I",
+    "say",
+    "unto",
+    "you",
+    "He",
+    "that",
+    "believeth",
+    "on",
+    "me",
+    "hath",
+    "everlasting",
+    "life"
+   ],
+   "note": "Wenn du an Jesus glaubst, empfängst du sein Geschenk des ewigen Lebens. Ewig bedeutet für immer. Du kannst es nicht verlieren, sonst wäre es nicht ewig.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "John 10:28",
+   "span": [
+    0,
+    21
+   ],
+   "text": [
+    "And",
+    "I",
+    "give",
+    "unto",
+    "them",
+    "eternal",
+    "life",
+    "and",
+    "they",
+    "shall",
+    "never",
+    "perish",
+    "neither",
+    "shall",
+    "any",
+    "man",
+    "pluck",
+    "them",
+    "out",
+    "of",
+    "my",
+    "hand"
+   ],
+   "note": "Niemand kann dir deine Rettung wegnehmen – nicht Gott, nicht der Teufel, nicht du selbst. Du bist Gottes Kind, wenn du geglaubt hast.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "1John 5:13",
+   "span": [
+    0,
+    38
+   ],
+   "text": [
+    "These",
+    "things",
+    "have",
+    "I",
+    "written",
+    "unto",
+    "you",
+    "that",
+    "believe",
+    "on",
+    "the",
+    "name",
+    "of",
+    "the",
+    "Son",
+    "of",
+    "God",
+    "that",
+    "ye",
+    "may",
+    "know",
+    "that",
+    "ye",
+    "have",
+    "eternal",
+    "life",
+    "and",
+    "that",
+    "ye",
+    "may",
+    "believe",
+    "on",
+    "the",
+    "name",
+    "of",
+    "the",
+    "Son",
+    "of",
+    "God"
+   ],
+   "note": "Gott möchte, dass du weißt, dass du gerettet bist. Mögest du mit Freude und Frieden erfüllt sein, im Wissen, dass du gerettet bist.",
+   "added": "2026-09-06T00:00:00Z"
+  }
+ ],
+ "created": "2026-09-06T00:00:00Z"
+}

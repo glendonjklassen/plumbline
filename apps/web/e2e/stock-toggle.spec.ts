@@ -138,9 +138,10 @@ test("turning the bundled study set off keeps the reader's edits and takes only 
   await expect
     .poll(() => studyFiles(page).then((f) => f[STOCK_THREAD] ?? ""), { timeout: 30_000 })
     .toContain(MINE);
+  // The four stock threads (Romans Road, How to Be Saved in en/de/pa) plus the reader's own.
   await expect
     .poll(() => studyFiles(page).then((f) => countUnder(f, "threads")), { timeout: 30_000 })
-    .toBe(2);
+    .toBe(5);
 
   // A one-byte, same-length edit to a stock weave, in the store only.
   const otherTabBytes = await editStoredByOneByte(page, otherTabWeave);

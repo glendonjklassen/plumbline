@@ -1841,7 +1841,14 @@ pub unsafe extern "C" fn plumbline_engine_thread_add(
             }
             None => ((0, 0), Vec::new()),
         };
-        let entry = ThreadEntry { vref, span, text, note: opt_str(note).map(str::to_string), added: added.to_string() };
+        let entry = ThreadEntry {
+            vref,
+            span,
+            text,
+            note: opt_str(note).map(str::to_string),
+            added: added.to_string(),
+            end: None,
+        };
         let mut study = engine.study_write();
         match thread::add_to_thread(&home, &study.threads, name, canon::TOKENIZATION_VERSION, entry) {
             Ok(_) => {

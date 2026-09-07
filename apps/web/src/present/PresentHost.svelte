@@ -49,14 +49,48 @@
     s.presentThreadName = null;
   });
 
+  /** The live text an entry covers — its SPAN of the corpus verse, not the
+   *  whole verse. A thread stop may deliberately hold half a verse ("For the
+   *  wages of sin is death" walked apart from "but the gift of God…"), and
+   *  `v.body` ignores that, painting the second half three cards early.
+   *  Sliced from the corpus tokens rather than the entry's snapshot so a
+   *  non-English corpus presents in its own language; the snapshot stays the
+   *  no-corpus fallback. A full-cover span keeps `body`, which also carries a
+   *  psalm title. */
+  function spanBody(v: any, e: any): string {
+    const [a, b] = Array.isArray(e.span) ? e.span : [0, -1];
+    if (!v?.tokens?.length || (a === 0 && b >= v.tokens.length - 1)) return v?.body ?? "";
+    return v.tokens
+      .slice(a, b + 1)
+      .map((t: any) => t.render)
+      .join(" ");
+  }
+
+  /** A range stop ("Eph 2:8–9") flows its verses as one card: the first
+   *  verse's span, then every verse through `end` whole, from the live
+   *  corpus. */
+  function rangeBody(e: any, v: any): string {
+    let out = spanBody(v, e);
+    if (typeof e.end !== "number" || !out) return out;
+    const colon = e.verse.lastIndexOf(":");
+    const start = Number(e.verse.slice(colon + 1));
+    for (let n = start + 1; n <= e.end; n++) {
+      const next = s.q("verse", `${e.verse.slice(0, colon + 1)}${n}`);
+      if (next?.body) out += ` ${next.body}`;
+    }
+    return out;
+  }
+
   const entries = $derived.by((): Entry[] => {
     if (!thread) return [];
     return (thread.entries ?? []).map((e: any) => {
       const v = s.q("verse", e.verse);
+      const display = v?.display ?? e.display ?? e.verse;
       return {
         ref: e.verse,
-        display: v?.display ?? e.display ?? e.verse,
-        body: v?.body || (e.text ?? []).join(" "),
+        // A range stop names both ends — "Ephesians 2:8–9".
+        display: typeof e.end === "number" ? `${display}–${e.end}` : display,
+        body: rangeBody(e, v) || (e.text ?? []).join(" "),
         // An entry note is `null` when absent and `""` is the same thing here.
         // Trimmed so a note of only whitespace does not open a gap under the
         // verse that reads as a rendering bug.
@@ -101,6 +135,7 @@
     if (!s.showPresent && thread !== null) {
       thread = null;
       focus = null;
+      s.presentFromShare = false;
     }
   });
 
@@ -108,11 +143,35 @@
     s.showPresent = false;
     thread = null;
     focus = null;
+    s.presentFromShare = false;
   }
   function back(): void {
     if (focus !== null) focus = null;
-    else if (thread) thread = null;
-    else close();
+    else if (thread) {
+      // Leaving the walk for the picker ends the shared visit: a thread the
+      // reader then picks themselves is an ordinary presentation, and its end
+      // card must not offer a stranger's next step.
+      thread = null;
+      s.presentFromShare = false;
+    } else close();
+  }
+
+  /** The new-believer booklet this reader could start, if the catalogue —
+   *  already filtered by the engine to booklets in the reader's language —
+   *  carries one. Null hides the offer rather than showing a button that
+   *  would land on pages the reader cannot read. */
+  const nbBooklet = $derived.by(() => {
+    if (!s.presentFromShare) return null;
+    void s.studyEpoch;
+    return (s.devotionals()?.catalogue ?? []).find((b: any) => b.newBeliever) ?? null;
+  });
+  /** Start (or resume) the new-believer devotional and land on its open day.
+   *  `openSharedDevotional` is the shared-link path, so an already-running
+   *  booklet keeps its banked days rather than restarting. */
+  async function startNbDevotional(): Promise<void> {
+    const id = nbBooklet?.id as string | undefined;
+    close();
+    if (id) await s.openSharedDevotional(id);
   }
 
   function shareText(): string {
@@ -292,6 +351,19 @@
         <p class="mark" aria-hidden="true">✦</p>
         <p class="fref">{thread.name}</p>
         <p class="endnote">{t("present.endNote")}</p>
+        {#if s.presentFromShare}
+          <!-- The walk arrived by a shared link, so the person at this card is
+               the recipient on their own device — the one place an offer to
+               keep going makes sense. Start is the same start a
+               `?devotional=` link performs; Dismiss is the ✕'s close under
+               the name the moment deserves. -->
+          <div class="nextstep">
+            {#if nbBooklet}
+              <button class="nbstart" onclick={startNbDevotional}>{t("present.startDevotional")}</button>
+            {/if}
+            <button class="nbdismiss" onclick={close}>{t("present.dismiss")}</button>
+          </div>
+        {/if}
         <!-- ONE QR, and it carries the passage: the end card's job is to hand
              this thread over, so the code opens the app AT its first verse
              rather than at whatever the recipient last read. The app-link button
@@ -486,20 +558,22 @@
     color: #6c665d;
     font-style: italic;
   }
-  /* A bookend row is the presenter's own words, not a passage — italic and
-     inset, so the eye can tell at a glance where the scripture starts and
-     stops without needing a label to say so. */
-  .entry.bookend {
-    padding-inline-start: 14px;
-    border-inline-start: 2px solid #d8cba8;
-  }
+  /* A bookend row is the presenter's own words, not a passage — set upright, a
+     step smaller and a shade softer than the scripture around it. Deliberately
+     NOT italics-with-an-inset: that costume reads as a parenthetical aside, and
+     the bookends are the walk's front door and send-off, spoken in the
+     presenter's main voice. The missing small-caps ref line is what marks the
+     row as not-scripture. */
   .entry.bookend .body {
-    font-style: italic;
+    font-size: calc(18px * var(--uiScale, 1));
     color: #453f36;
   }
-  /* The focused bookend card reuses `.fbody`'s size; only the voice changes. */
+  /* The focused bookend card (opening and closing both): the same voice shift —
+     upright, one size step below the verse, softer ink. */
   .focus .fbody:only-child {
-    font-style: italic;
+    font-size: clamp(22px, 4vw, 44px);
+    line-height: 1.45;
+    color: #453f36;
   }
   .fnote {
     /* Sits with `.fbody` in the same non-shrinking position — see `.focus`. */
@@ -594,6 +668,28 @@
   .endnote {
     color: #6c665d;
     font-style: italic;
+  }
+  /* The recipient's next step — restated sunlight literals like everything
+     else on this fixed-light surface. The filled button is the one strong
+     call on the card; Dismiss stays quiet beside it. */
+  .nextstep {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .nbstart {
+    background: #6b5417;
+    color: #fcf9f4;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: calc(16px * var(--uiScale, 1));
+    font-weight: 600;
+  }
+  .nbdismiss {
+    color: #6c665d;
+    font-size: calc(14px * var(--uiScale, 1));
+    text-decoration: underline;
   }
   .qr {
     display: flex;

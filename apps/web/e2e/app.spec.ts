@@ -1008,7 +1008,8 @@ test("Present shares the passage as a QR whose link opens at the first verse", a
   // welcome's "Sharing the gospel" path is gone.
   await page.getByRole("navigation").getByRole("button", { name: "Share", exact: true }).click();
   await page.getByRole("button", { name: "Present the Gospel" }).click();
-  await expect(page.locator(".present .title")).toContainText("Romans Road");
+  // The gospel default for an English reader (per-language since v0.69.0).
+  await expect(page.locator(".present .title")).toContainText("How to Be Saved");
 
   // Record what the copy button hands over, without needing clipboard perms.
   await page.evaluate(() => {

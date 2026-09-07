@@ -1,0 +1,389 @@
+{
+ "format": "overlay-thread-v1",
+ "name": "How to Be Saved",
+ "lang": "en",
+ "gospelDefault": true,
+ "tokenization": "kjv1769-tok2",
+ "notes": "",
+ "opening": "The following verses explain how a person is saved. Being saved means that after you die you will be in heaven forever with God. Please read and consider these words carefully.",
+ "entries": [
+  {
+   "ref": "Rom 3:23",
+   "span": [
+    0,
+    11
+   ],
+   "text": [
+    "For",
+    "all",
+    "have",
+    "sinned",
+    "and",
+    "come",
+    "short",
+    "of",
+    "the",
+    "glory",
+    "of",
+    "God"
+   ],
+   "note": "Every one of us has done things that are wrong.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rom 6:23",
+   "span": [
+    0,
+    6
+   ],
+   "text": [
+    "For",
+    "the",
+    "wages",
+    "of",
+    "sin",
+    "is",
+    "death"
+   ],
+   "note": "The Bible says that the payment for sin is death, but not just physical death.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rev 20:14",
+   "span": [
+    0,
+    15
+   ],
+   "text": [
+    "And",
+    "death",
+    "and",
+    "hell",
+    "were",
+    "cast",
+    "into",
+    "the",
+    "lake",
+    "of",
+    "fire",
+    "This",
+    "is",
+    "the",
+    "second",
+    "death"
+   ],
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rev 20:15",
+   "span": [
+    0,
+    17
+   ],
+   "text": [
+    "And",
+    "whosoever",
+    "was",
+    "not",
+    "found",
+    "written",
+    "in",
+    "the",
+    "book",
+    "of",
+    "life",
+    "was",
+    "cast",
+    "into",
+    "the",
+    "lake",
+    "of",
+    "fire"
+   ],
+   "note": "Physical death is the first death, but after death those who are not saved will spend eternity in hell for their sins. This is the bad news.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rom 6:23",
+   "span": [
+    7,
+    19
+   ],
+   "text": [
+    "but",
+    "the",
+    "gift",
+    "of",
+    "God",
+    "is",
+    "eternal",
+    "life",
+    "through",
+    "Jesus",
+    "Christ",
+    "our",
+    "Lord"
+   ],
+   "note": "The good news is that God has a free gift available to anyone: eternal life through Jesus Christ.",
+   "added": "2026-09-06T00:00:01Z"
+  },
+  {
+   "ref": "Rom 5:8",
+   "span": [
+    0,
+    17
+   ],
+   "text": [
+    "But",
+    "God",
+    "commendeth",
+    "his",
+    "love",
+    "toward",
+    "us",
+    "in",
+    "that",
+    "while",
+    "we",
+    "were",
+    "yet",
+    "sinners",
+    "Christ",
+    "died",
+    "for",
+    "us"
+   ],
+   "note": "More than 2000 years ago, God sent his son to die on a cross for all of the sin that you and I have committed and will ever commit.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Eph 2:8",
+   "span": [
+    0,
+    18
+   ],
+   "text": [
+    "For",
+    "by",
+    "grace",
+    "are",
+    "ye",
+    "saved",
+    "through",
+    "faith",
+    "and",
+    "that",
+    "not",
+    "of",
+    "yourselves",
+    "it",
+    "is",
+    "the",
+    "gift",
+    "of",
+    "God"
+   ],
+   "note": "Salvation is a free gift. You do not have to work for a gift.",
+   "added": "2026-09-06T00:00:00Z",
+   "end": 9
+  },
+  {
+   "ref": "Acts 16:31",
+   "span": [
+    0,
+    13
+   ],
+   "text": [
+    "And",
+    "they",
+    "said",
+    "Believe",
+    "on",
+    "the",
+    "Lord",
+    "Jesus",
+    "Christ",
+    "and",
+    "thou",
+    "shalt",
+    "be",
+    "saved"
+   ],
+   "note": "This verse tells you how to be saved. All you have to do is believe the words on this page and accept the free gift of salvation.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rom 10:9",
+   "span": [
+    0,
+    28
+   ],
+   "text": [
+    "That",
+    "if",
+    "thou",
+    "shalt",
+    "confess",
+    "with",
+    "thy",
+    "mouth",
+    "the",
+    "Lord",
+    "Jesus",
+    "and",
+    "shalt",
+    "believe",
+    "in",
+    "thine",
+    "heart",
+    "that",
+    "God",
+    "hath",
+    "raised",
+    "him",
+    "from",
+    "the",
+    "dead",
+    "thou",
+    "shalt",
+    "be",
+    "saved"
+   ],
+   "note": "Pray to God. Admit that you are a sinner and that you need his salvation. Ask him to save you right now.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "Rom 10:13",
+   "span": [
+    0,
+    12
+   ],
+   "text": [
+    "For",
+    "whosoever",
+    "shall",
+    "call",
+    "upon",
+    "the",
+    "name",
+    "of",
+    "the",
+    "Lord",
+    "shall",
+    "be",
+    "saved"
+   ],
+   "note": "Calling upon God is how you accept His free gift.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "John 6:47",
+   "span": [
+    0,
+    13
+   ],
+   "text": [
+    "Verily",
+    "verily",
+    "I",
+    "say",
+    "unto",
+    "you",
+    "He",
+    "that",
+    "believeth",
+    "on",
+    "me",
+    "hath",
+    "everlasting",
+    "life"
+   ],
+   "note": "When you believe on Jesus, you receive his gift of eternal life. Eternal means forever. You cannot lose it, or it would not be eternal.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "John 10:28",
+   "span": [
+    0,
+    21
+   ],
+   "text": [
+    "And",
+    "I",
+    "give",
+    "unto",
+    "them",
+    "eternal",
+    "life",
+    "and",
+    "they",
+    "shall",
+    "never",
+    "perish",
+    "neither",
+    "shall",
+    "any",
+    "man",
+    "pluck",
+    "them",
+    "out",
+    "of",
+    "my",
+    "hand"
+   ],
+   "note": "No one, not God, nor the devil, nor yourself can take away your salvation. You are God's child if you have believed.",
+   "added": "2026-09-06T00:00:00Z"
+  },
+  {
+   "ref": "1John 5:13",
+   "span": [
+    0,
+    38
+   ],
+   "text": [
+    "These",
+    "things",
+    "have",
+    "I",
+    "written",
+    "unto",
+    "you",
+    "that",
+    "believe",
+    "on",
+    "the",
+    "name",
+    "of",
+    "the",
+    "Son",
+    "of",
+    "God",
+    "that",
+    "ye",
+    "may",
+    "know",
+    "that",
+    "ye",
+    "have",
+    "eternal",
+    "life",
+    "and",
+    "that",
+    "ye",
+    "may",
+    "believe",
+    "on",
+    "the",
+    "name",
+    "of",
+    "the",
+    "Son",
+    "of",
+    "God"
+   ],
+   "note": "God wants you to know you are saved. May you be filled with joy and peace knowing that you are saved.",
+   "added": "2026-09-06T00:00:00Z"
+  }
+ ],
+ "created": "2026-09-06T00:00:00Z"
+}

@@ -3256,8 +3256,10 @@ fn share_palette_options_and_link_via_abi() {
         // corpus resolves them.
         for lang in ["en", "ar", "zht"] {
             let o = options(lang);
-            assert_eq!(o["threads"].as_array().unwrap().len(), 1, "{lang}");
+            assert_eq!(o["threads"].as_array().unwrap().len(), 4, "{lang}");
             assert_eq!(find(&o, "threads", "Romans Road")["available"], true, "Romans Road in {lang}");
+            assert_eq!(find(&o, "threads", "How to Be Saved")["available"], true, "How to Be Saved in {lang}");
+            assert_eq!(find(&o, "threads", "Wie man gerettet wird")["available"], true, "German walk in {lang}");
         }
 
         // ── the devotionals ──────────────────────────────────────────────────

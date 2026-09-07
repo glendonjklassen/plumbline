@@ -33,11 +33,32 @@ const FORMAT: &str = "overlay-thread-v1";
 /// `stock_threads_are_the_shipped_set` holds it to `stock/threads/`, so adding a
 /// file there without adding it here fails rather than quietly staying
 /// unshareable.
-pub const STOCK_THREADS: [&str; 1] = ["Romans Road"];
+///
+/// The shell seeds stock PER FILE (`meta:stockSeededPaths`, engine/home.ts), so
+/// a thread added here reaches existing installs on their next boot after the
+/// release — while their edits and deletions of the rest stick.
+///
+/// "How to Be Saved" ships once per language it has been translated into, each
+/// a thread of its own (a thread's notes are in ONE language), flagged
+/// `gospelDefault` for its `lang` — see [`gospel_default`].
+pub const STOCK_THREADS: [&str; 4] = ["Romans Road", "How to Be Saved", "Wie man gerettet wird", "ਮੁਕਤੀ ਕਿਵੇਂ ਮਿਲਦੀ ਹੈ"];
 
-/// The thread "share the gospel" opens when the reader has not chosen another.
-/// The shell's `GOSPEL_THREAD_DEFAULT` is this same string.
-pub const GOSPEL_DEFAULT: &str = STOCK_THREADS[0];
+/// The thread "share the gospel" opens when the reader has chosen none and no
+/// stock thread is flagged for their language — the English "How to Be Saved"
+/// (2026-09-07: the walk written for the person being shown, with the bookends;
+/// the Romans Road stays stock for study). The shell's `GOSPEL_THREAD_DEFAULT`
+/// is this same string, its answer until the threads have loaded.
+pub const GOSPEL_DEFAULT: &str = STOCK_THREADS[1];
+
+/// The thread "share the gospel" opens for a reader of `lang` who has chosen
+/// none: the thread flagged `gospelDefault` in their language, else the one
+/// flagged for English, else [`GOSPEL_DEFAULT`] by name if it is loaded at all.
+/// Per-language defaults (maintainer, 2026-09-07): a German reader hands over
+/// the German walk without ever visiting Settings.
+pub fn gospel_default<'a>(threads: &'a [Thread], lang: &str) -> Option<&'a Thread> {
+    let flagged = |l: &str| threads.iter().find(|t| t.gospel_default && t.lang.as_deref() == Some(l));
+    flagged(lang).or_else(|| flagged("en")).or_else(|| threads.iter().find(|t| t.name == GOSPEL_DEFAULT))
+}
 
 /// One passage on a thread: where it is, which words it covered (a snapshot),
 /// and an optional note.
@@ -50,6 +71,13 @@ pub struct ThreadEntry {
     pub note: Option<String>,
     /// UTC timestamp the entry was added.
     pub added: String,
+    /// The verse this entry runs TO (same book and chapter), making the stop a
+    /// range — "Eph 2:8–9" walked as one card rather than two. Additive against
+    /// the frozen format, exactly like the v0.68 bookends: absent means the
+    /// single verse `vref` names, an older build reading a file that carries it
+    /// keeps it through a save via the entry's unknown-key ride-along, and
+    /// `span`/`text` keep describing the FIRST verse only.
+    pub end: Option<u16>,
 }
 
 // On-disk form: the ref is the compact key string ("Rom 3:23").
@@ -62,6 +90,8 @@ struct EntryRepr {
     #[serde(default)]
     note: Option<String>,
     added: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    end: Option<u16>,
     /// Unknown keys on this entry — see [`Thread::extra`]. Unlike the thread's
     /// own, these are carried by the *file* rather than by the loaded value:
     /// [`ThreadEntry`] is built field by field in `crates/ffi`, so it cannot gain
@@ -92,6 +122,7 @@ impl ThreadEntry {
             text: self.text.clone(),
             note: self.note.clone(),
             added: self.added.clone(),
+            end: self.end,
             extra,
         }
     }
@@ -102,7 +133,7 @@ impl<'de> Deserialize<'de> for ThreadEntry {
         let r = EntryRepr::deserialize(d)?;
         let vref =
             VRef::parse_ref_key(&r.ref_key).ok_or_else(|| D::Error::custom(format!("bad entry ref: {}", r.ref_key)))?;
-        Ok(ThreadEntry { vref, span: r.span, text: r.text, note: r.note, added: r.added })
+        Ok(ThreadEntry { vref, span: r.span, text: r.text, note: r.note, added: r.added, end: r.end })
     }
 }
 
@@ -136,6 +167,17 @@ pub struct Thread {
     pub id: Option<String>,
     /// UTC stamp of the last mutating save. See [`crate::tag::Tag::updated`].
     pub updated: Option<String>,
+    /// The language of the thread's OWN words — notes and bookends — as a code
+    /// the i18n registry knows ("en", "de", "pa"). Additive: absent on every
+    /// thread a reader authored and on stock from before translations existed,
+    /// and absent means unknown, not English. Read by [`gospel_default`].
+    pub lang: Option<String>,
+    /// Whether this is the walk "share the gospel" opens for readers of `lang`
+    /// who have chosen none — the stock set's per-language default. Same shape
+    /// as the devotional catalogue's `newBeliever`, and carrying the same trap:
+    /// a serde rename that does not match the data silently reads false, which
+    /// only a test over the SHIPPED files catches (`stock_gospel_defaults_load`).
+    pub gospel_default: bool,
     /// Every key in the file this build has never heard of, carried back out
     /// again on save.
     ///
@@ -171,6 +213,10 @@ struct ThreadRepr {
     id: Option<String>,
     #[serde(default)]
     updated: Option<String>,
+    #[serde(default)]
+    lang: Option<String>,
+    #[serde(default, rename = "gospelDefault")]
+    gospel_default: bool,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -201,6 +247,12 @@ struct ThreadOut<'a> {
     id: &'a Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     updated: &'a Option<String>,
+    /// Both skipped when unset, for the reason `id`/`updated` are: an authored
+    /// thread never carries them and must be written exactly as it was.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lang: &'a Option<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not", rename = "gospelDefault")]
+    gospel_default: bool,
     #[serde(flatten)]
     extra: &'a Map<String, Value>,
 }
@@ -235,6 +287,8 @@ impl Thread {
             created: &self.created,
             id: &self.id,
             updated: &self.updated,
+            lang: &self.lang,
+            gospel_default: self.gospel_default,
             extra: &self.extra,
         }
     }
@@ -256,6 +310,8 @@ impl<'de> Deserialize<'de> for Thread {
             created: r.created,
             id: r.id,
             updated: r.updated,
+            lang: r.lang,
+            gospel_default: r.gospel_default,
             extra: r.extra,
         })
     }
@@ -418,6 +474,9 @@ pub fn add_to_thread(
             // same path an edited one is.
             id: None,
             updated: None,
+            // An authored thread names no language and is nobody's default.
+            lang: None,
+            gospel_default: false,
             // The one place a new file's provenance can honestly be recorded:
             // its refKeys are being written NOW, in the language the reader is
             // reading. A writer would be the wrong place — it also runs on
@@ -595,6 +654,51 @@ mod tests {
         assert_eq!(shipped, declared, "stock/threads/ and thread::STOCK_THREADS disagree");
     }
 
+    /// The per-language gospel defaults, read off the SHIPPED files: one thread
+    /// flagged `gospelDefault` per translated language, and [`gospel_default`]
+    /// resolving each reader to theirs, an untranslated one to English, and the
+    /// Romans Road to nobody. Over the shipped files on purpose — a serde rename
+    /// that stops matching the data reads false without an error, and only
+    /// loading what ships can notice (the devotional catalogue's lesson).
+    #[test]
+    fn stock_gospel_defaults_load() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../stock/threads");
+        if !dir.is_dir() {
+            eprintln!("no stock/threads beside the crate — skipping");
+            return;
+        }
+        let threads: Vec<Thread> = std::fs::read_dir(&dir)
+            .expect("stock/threads")
+            .filter_map(|e| {
+                let path = e.ok()?.path();
+                (path.extension()? == "json").then_some(path)
+            })
+            .map(|p| serde_json::from_str(&std::fs::read_to_string(&p).expect("stock thread")).expect("loads"))
+            .collect();
+        let mut flagged: Vec<(String, String)> = threads
+            .iter()
+            .filter(|t| t.gospel_default)
+            .map(|t| (t.lang.clone().expect("a flagged thread names its language"), t.name.clone()))
+            .collect();
+        flagged.sort();
+        assert_eq!(
+            flagged,
+            vec![
+                ("de".to_string(), "Wie man gerettet wird".to_string()),
+                ("en".to_string(), "How to Be Saved".to_string()),
+                ("pa".to_string(), "ਮੁਕਤੀ ਕਿਵੇਂ ਮਿਲਦੀ ਹੈ".to_string()),
+            ]
+        );
+        assert_eq!(gospel_default(&threads, "de").unwrap().name, "Wie man gerettet wird");
+        assert_eq!(gospel_default(&threads, "pa").unwrap().name, "ਮੁਕਤੀ ਕਿਵੇਂ ਮਿਲਦੀ ਹੈ");
+        assert_eq!(gospel_default(&threads, "fr").unwrap().name, GOSPEL_DEFAULT, "untranslated falls back to English");
+        let romans = threads.iter().find(|t| t.name == "Romans Road").unwrap();
+        assert!(!romans.gospel_default && romans.lang.is_none(), "the study road carries no flags");
+        // A thread written by hand carries neither key, and saving it must not add them.
+        let out = serde_json::to_string(romans).unwrap();
+        assert!(!out.contains("gospelDefault") && !out.contains("\"lang\""), "{out}");
+    }
+
     const SAMPLE: &str = r#"{
       "format":"overlay-thread-v1","name":"Romans Road",
       "tokenization":"kjv1769-tok2","notes":"the gospel in Romans","created":"2026-07-03T00:00:00Z",
@@ -705,6 +809,7 @@ mod tests {
             text: vec!["a".into(), "b".into()],
             note: note.map(String::from),
             added: "2026-01-01T00:00:00Z".into(),
+            end: None,
         };
 
         // First add creates the file.
@@ -752,6 +857,7 @@ mod tests {
             text: vec!["For".into()],
             note: None,
             added: "2026-01-01T00:00:00Z".into(),
+            end: None,
         };
         let (loaded, _) = load_threads(&home);
         let path = add_to_thread(&home, &loaded, "Plan", "kjv1769-tok2", entry).unwrap();
@@ -796,6 +902,7 @@ mod tests {
             text: vec!["For".into()],
             note: None,
             added: "2026-01-01T00:00:00Z".into(),
+            end: None,
         };
         let (loaded, _) = load_threads(&home);
         add_to_thread(&home, &loaded, "Romans Road", "kjv1769-tok2", entry).unwrap();
@@ -861,6 +968,7 @@ mod tests {
                 text: vec!["For".into(), "the".into(), "wages".into()],
                 note: None,
                 added: "2026-09-01T00:00:00Z".into(),
+                end: None,
             },
         )
         .unwrap();
@@ -993,6 +1101,7 @@ mod tests {
             text: vec!["For".into()],
             note: None,
             added: added.into(),
+            end: None,
         };
         let read = |path: &Path| -> Value { serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap() };
 
