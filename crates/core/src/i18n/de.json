@@ -743,6 +743,7 @@
   "share.preview": "Vorschau",
   "share.savePreset": "Vorlage speichern",
   "share.scanForApp": "Für die App scannen",
+  "share.scanTarget": "Scannen, um {name} zu öffnen",
   "share.sub": "Kostenlos, offline, ohne Konto.",
   "share.subChurch": "Kostenlos, privat, offline, kein Konto nötig.",
   "share.text": "Plumbline — die Heilige Schrift, kostenlos und offline{from}: {url}",

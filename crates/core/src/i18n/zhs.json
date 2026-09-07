@@ -743,6 +743,7 @@
   "share.preview": "预览",
   "share.savePreset": "保存预设",
   "share.scanForApp": "扫码获取应用",
+  "share.scanTarget": "扫码打开{name}",
   "share.sub": "免费、离线、无需账号。",
   "share.subChurch": "免费、私密、离线，无需账号。",
   "share.text": "Plumbline——圣经，免费且可离线使用{from}：{url}",

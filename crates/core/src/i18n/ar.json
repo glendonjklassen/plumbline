@@ -743,6 +743,7 @@
   "share.preview": "معاينة",
   "share.savePreset": "حفظ الإعداد",
   "share.scanForApp": "امسح للحصول على التطبيق",
+  "share.scanTarget": "امسح لفتح {name}",
   "share.sub": "مجانًا، بلا اتصال، وبلا حساب.",
   "share.subChurch": "مجانًا، وخصوصية، وبلا اتصال، وبلا حاجة إلى حساب.",
   "share.text": "Plumbline — الكتاب المقدس، مجانًا وبلا اتصال{from}: {url}",

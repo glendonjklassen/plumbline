@@ -60,6 +60,9 @@ struct WireShareLang {
     endonym: String,
     /// Its English name, so a sender can find Punjabi by typing "Punjabi".
     exonym: String,
+    /// Whether text in this language runs right to left — for the one place the
+    /// palette paints the RECIPIENT's language, the caption under the code.
+    rtl: bool,
 }
 
 /// One offerable destination or path, and whether it exists in the chosen
@@ -72,9 +75,30 @@ struct WireShareLang {
 struct WireShareOption {
     /// The token the link carries (`sharing`, `new-believer-30`, `Romans Road`).
     id: String,
-    /// What to show for it, already in the chosen language where there is one.
+    /// What to show for it, in the SENDER's language where there is one.
     label: String,
+    /// What to show for it in the RECIPIENT's language — the caption under the
+    /// code is the one thing on the palette the person being handed the phone
+    /// reads. A thread's name is its own name in every language; a booklet's is
+    /// its title in `lang`.
+    target_label: String,
     available: bool,
+    /// Threads only: whether this is one of the per-language gospel walks
+    /// (`thread::gospel_default`). The palette swaps such a thread for its
+    /// sibling when the recipient's language changes, and leaves any other
+    /// choice alone.
+    gospel: bool,
+}
+
+/// Two strings the palette paints in the RECIPIENT's language, under the code —
+/// so a sender who cannot read that language still shows the person in front of
+/// them something they can. Templates: `scan_target` carries `{name}` for the
+/// shell to fill with the destination's `target_label`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireShareCaptions {
+    scan_app: String,
+    scan_target: String,
 }
 
 /// Everything the share palette may offer, for one chosen language.
@@ -89,6 +113,10 @@ struct WireShareOptions {
     languages: Vec<WireShareLang>,
     threads: Vec<WireShareOption>,
     devotionals: Vec<WireShareOption>,
+    /// The gospel walk for a reader of `lang` — what the thread box defaults to,
+    /// and what a gospel thread becomes when the language changes.
+    gospel_default: String,
+    captions: WireShareCaptions,
 }
 
 /// What a shared link may carry: every shipped language, the four first-run
@@ -129,6 +157,13 @@ pub unsafe extern "C" fn plumbline_engine_share_options_json(
         let l = opt_str(lang).map(i18n::Lang::parse).unwrap_or(i18n::Lang::En);
         let ui = opt_str(ui_lang).map(i18n::Lang::parse).unwrap_or(l);
         let code = l.code();
+        // The loaded threads carry the stock set's flags (`lang`, `gospelDefault`);
+        // the NAMES offered still come from `STOCK_THREADS` below, because a
+        // sender's deletion changes nothing about what the recipient seeds.
+        let loaded: Vec<thread::Thread> = e.study_read().threads.iter().map(|t| t.thread.clone()).collect();
+        let gospel_default = thread::gospel_default(&loaded, code)
+            .map(|t| t.name.clone())
+            .unwrap_or_else(|| thread::GOSPEL_DEFAULT.to_string());
         out_json(&WireShareOptions {
             lang: code.to_string(),
             ui_lang: ui.code().to_string(),
@@ -138,6 +173,7 @@ pub unsafe extern "C" fn plumbline_engine_share_options_json(
                     code: x.code().to_string(),
                     endonym: x.spec().endonym.to_string(),
                     exonym: x.spec().exonym.to_string(),
+                    rtl: x.is_rtl(),
                 })
                 .collect(),
             // The STOCK set, not this reader's threads: what the RECIPIENT's
@@ -149,11 +185,14 @@ pub unsafe extern "C" fn plumbline_engine_share_options_json(
                 .map(|name| WireShareOption {
                     id: (*name).to_string(),
                     label: (*name).to_string(),
+                    // A thread's name is data, the same in every language.
+                    target_label: (*name).to_string(),
                     // A thread is a list of refs, so every corpus resolves it:
-                    // there is no language in which Romans Road is missing. What
-                    // is not translated yet is the ANNOTATIONS, and the stock
-                    // thread carries none in any language.
+                    // there is no language in which Romans Road is missing. The
+                    // annotations are in the language of the thread that carries
+                    // them, which is why the walk ships once per language.
                     available: true,
+                    gospel: loaded.iter().any(|t| t.name == *name && t.gospel_default),
                 })
                 .collect(),
             devotionals: e
@@ -163,11 +202,20 @@ pub unsafe extern "C" fn plumbline_engine_share_options_json(
                     id: d.id.clone(),
                     // Named for the sender, who is the one reading this list.
                     label: crate::devotionals::booklet_name(d, ui.code()),
+                    target_label: crate::devotionals::booklet_name(d, code),
                     // The one real gate today: `new-believer-30` is written in
                     // English and nothing else.
                     available: d.has_lang(code),
+                    gospel: false,
                 })
                 .collect(),
+            gospel_default,
+            // In the RECIPIENT's language, on purpose: this is what the sender
+            // shows across the table. `{name}` stays for the shell to fill.
+            captions: WireShareCaptions {
+                scan_app: i18n::t(l, "present.scanToOpenApp", &[]),
+                scan_target: i18n::t(l, "share.scanTarget", &[]),
+            },
         })
     })
 }

@@ -677,6 +677,7 @@
   "share.preview": "Preview",
   "share.savePreset": "Save Preset",
   "share.scanForApp": "Scan for the app",
+  "share.scanTarget": "Scan to open {name}",
   "share.sub": "Free, offline, no account.",
   "share.subChurch": "Free, private, offline, no account required.",
   "share.text": "Plumbline — the Holy Bible, free and offline{from}: {url}",

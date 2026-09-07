@@ -84,10 +84,25 @@ test("the palette offers every language and marks what is not written yet", asyn
   // Thread out and blanked the reader's choice under them.
   await expect(dest.locator('option[value="thread"]')).not.toHaveAttribute("disabled", /.*/);
   await dest.selectOption("thread");
-  await expect(field(card, "Thread")).toHaveValue("Romans Road");
+  // Choosing the destination fills it with the GOSPEL WALK for the chosen
+  // language — Arabic has none of its own, so the English one — not merely the
+  // first stock name (2026-09-07; it used to fill with the Romans Road).
+  await expect(field(card, "Thread")).toHaveValue("How to Be Saved");
   await langs.selectOption("pa");
   await expect(dest.locator('option[value="thread"]')).not.toHaveAttribute("disabled", /.*/);
+  // A gospel walk FOLLOWS the language: aimed at Punjabi it becomes the Punjabi
+  // walk, and the caption under the code — the one line on this screen written
+  // for the recipient — names it in Gurmukhi, tagged with the language.
+  await expect(field(card, "Thread")).toHaveValue("ਮੁਕਤੀ ਕਿਵੇਂ ਮਿਲਦੀ ਹੈ");
+  const caption = page.locator("[data-target-caption]");
+  await expect(caption).toContainText("ਮੁਕਤੀ ਕਿਵੇਂ ਮਿਲਦੀ ਹੈ");
+  await expect(caption).toHaveAttribute("lang", "pa");
+  // A DELIBERATE choice of another thread survives a language change: only the
+  // gospel walks move with the language.
+  await field(card, "Thread").selectOption("Romans Road");
+  await langs.selectOption("ar");
   await expect(field(card, "Thread")).toHaveValue("Romans Road");
+  await expect(caption).toHaveAttribute("dir", "rtl");
 
   // Back in English the booklet is reachable, and choosing the destination FILLS
   // it — "Destination: Devotional" with an empty box beneath is a question the
@@ -100,7 +115,10 @@ test("the palette offers every language and marks what is not written yet", asyn
   await expect(booklets.locator('option[value=""]')).toHaveCount(0);
   expect(await builtLink(page), "a filled destination reaches the link").toContain("devotional=");
 
-  // Selecting a thread fills it the same way, with no empty option to fall into.
+  // Selecting a thread fills it the same way, with no empty option to fall into —
+  // and with the thread the sender deliberately chose above (the Romans Road),
+  // which survives a detour through another destination: filling is for an empty
+  // box, never for overruling a choice.
   await dest.selectOption("thread");
   const threads = field(card, "Thread");
   await expect(threads).toHaveValue("Romans Road");
@@ -130,6 +148,9 @@ test("a custom link carries the palette's choices and the recipient lands on the
   const readout = page.locator(".preview");
   await expect(readout.getByText("Romans Road")).toBeVisible();
   await expect(readout.getByText("Punjabi")).toBeVisible();
+  // And under the code, the recipient's line: the thread's name inside the
+  // Punjabi "scan to open" sentence, not the sender's English.
+  await expect(page.locator("[data-target-caption]")).toContainText("Romans Road ਖੋਲ੍ਹਣ ਲਈ ਸਕੈਨ ਕਰੋ");
 
   // Now BE the recipient: a fresh profile opening that link. Asserting on where
   // the app ENDS UP, not on the string, is what makes this cover the boot half —

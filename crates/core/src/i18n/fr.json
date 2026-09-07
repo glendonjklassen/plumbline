@@ -743,6 +743,7 @@
   "share.preview": "Aperçu",
   "share.savePreset": "Enregistrer le préréglage",
   "share.scanForApp": "Scanner pour l'application",
+  "share.scanTarget": "Scannez pour ouvrir {name}",
   "share.sub": "Gratuit, hors connexion, sans compte.",
   "share.subChurch": "Gratuit, privé, hors connexion, sans compte requis.",
   "share.text": "Plumbline — la Sainte Bible, gratuite et hors connexion{from} : {url}",

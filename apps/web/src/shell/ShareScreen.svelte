@@ -20,7 +20,7 @@
     sharedThread,
     visitChurch,
   } from "./church";
-  import { t } from "../lib/i18n.svelte";
+  import { fill, t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -34,14 +34,45 @@
   // that language changes, because that is when the answers change.
   const options = $derived(s.shareOptions());
   const draft = $derived(s.shareDraft);
-  const langRows = $derived((options?.languages ?? []) as { code: string; endonym: string; exonym: string }[]);
+  const langRows = $derived(
+    (options?.languages ?? []) as { code: string; endonym: string; exonym: string; rtl?: boolean }[],
+  );
   const threadRows = $derived((options?.threads ?? []) as Opt[]);
   const devotionalRows = $derived((options?.devotionals ?? []) as Opt[]);
   interface Opt {
     id: string;
     label: string;
+    /** The same thing named in the RECIPIENT's language — see `targetCaption`. */
+    targetLabel: string;
     available: boolean;
+    /** Threads: one of the per-language gospel walks. */
+    gospel?: boolean;
   }
+  /** The gospel walk for the language the link is aimed at — what the thread
+   *  box defaults to, and what a gospel thread turns into when that language
+   *  changes (a German sender aiming at Punjabi hands over the Punjabi walk). */
+  const gospelDefault = $derived((options?.gospelDefault ?? "") as string);
+
+  /** What the person being shown the code can READ: the destination's name and
+   *  a "scan to open" line in the recipient's language, painted under the QR.
+   *  Only when a language has been chosen — with the link left on the device's
+   *  language there is nobody's language to write it in — and only once the
+   *  engine has answered for that language, so it never paints the previous
+   *  language's words under the new one's code. The rest of the card stays in
+   *  the sender's language: this line is the one part meant for the other side
+   *  of the table (maintainer, 2026-09-07). */
+  const targetCaption = $derived.by((): { text: string; lang: string; rtl: boolean } | null => {
+    if (!draft.lang || !loaded || !options?.captions) return null;
+    const captions = options.captions as { scanApp: string; scanTarget: string };
+    const row =
+      draft.target === "thread"
+        ? threadRows.find((th) => th.id === draft.thread)
+        : draft.target === "devotional"
+          ? devotionalRows.find((d) => d.id === draft.devotional)
+          : undefined;
+    const text = row?.available ? fill(captions.scanTarget, { name: row.targetLabel }) : captions.scanApp;
+    return { text, lang: draft.lang, rtl: langRows.find((l) => l.code === draft.lang)?.rtl === true };
+  });
 
   /** A language's name IN THE SENDER'S language — "Punjabi" for an English
    *  reader, "Arabisch" for a German one.
@@ -81,6 +112,10 @@
 
   /** The first thing a destination can actually offer, for defaulting into. */
   const firstOpen = (rows: Opt[]): string => rows.find((r) => r.available)?.id ?? "";
+  /** The thread to default into: the gospel walk for the chosen language when
+   *  the palette offers it, else whatever comes first. */
+  const defaultThread = (): string =>
+    threadRows.some((th) => th.id === gospelDefault && th.available) ? gospelDefault : firstOpen(threadRows);
 
   // Keeping the draft coherent with what the chosen language actually has.
   //
@@ -97,7 +132,20 @@
     // undone mid-switch.
     if (!loaded) return;
     if (draft.target === "thread" && !threadRows.some((th) => th.id === draft.thread && th.available)) {
-      draft.thread = firstOpen(threadRows);
+      draft.thread = defaultThread();
+    }
+    // A gospel walk FOLLOWS the language: aim a link carrying the English walk
+    // at Punjabi and it becomes the Punjabi walk, which is the one the recipient
+    // can read. Only gospel threads move — a sender who picked the Romans Road
+    // picked it, and a language change is not a reason to overrule them.
+    if (
+      draft.target === "thread" &&
+      gospelDefault &&
+      draft.thread !== gospelDefault &&
+      threadRows.some((th) => th.id === draft.thread && th.gospel) &&
+      threadRows.some((th) => th.id === gospelDefault && th.available)
+    ) {
+      draft.thread = gospelDefault;
     }
     if (draft.target === "devotional" && !devotionalRows.some((d) => d.id === draft.devotional && d.available)) {
       draft.devotional = firstOpen(devotionalRows);
@@ -244,6 +292,14 @@
       <h3>{t("share.title")}</h3>
       <p class="sub">{hasChurch(s.church) ? t("share.subChurch") : t("share.sub")}</p>
       <QrCode size={220} text={link} />
+      {#if targetCaption}
+        <!-- The one line on this screen in the RECIPIENT's language — what the
+             sender holds up across the table. Tagged with that language and its
+             direction so the browser shapes and aligns it as its readers expect. -->
+        <p class="target" lang={targetCaption.lang} dir={targetCaption.rtl ? "rtl" : "ltr"} data-target-caption>
+          {targetCaption.text}
+        </p>
+      {/if}
       <p class="sub">plumblinebible.org</p>
       {#if hasChurch(s.church)}
         <p class="with">{t("share.with", { church: s.church.name })}</p>
@@ -462,6 +518,17 @@
     align-items: center;
     background: #ffffff;
     color: #101010;
+  }
+  /* The recipient's line: set larger than anything else on the card, because it
+     is read from across a table by someone who cannot read the rest of it. On
+     the fixed white of the code's card, so contrast never depends on the theme. */
+  .target {
+    margin: 4px 0 0;
+    max-width: 22em;
+    text-align: center;
+    font-size: calc(19px * var(--uiScale, 1));
+    font-weight: 600;
+    line-height: 1.35;
   }
   h3 {
     margin: 0;

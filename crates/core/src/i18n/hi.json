@@ -743,6 +743,7 @@
   "share.preview": "पूर्वावलोकन",
   "share.savePreset": "सेट सहेजें",
   "share.scanForApp": "ऐप के लिए स्कैन करें",
+  "share.scanTarget": "{name} खोलने के लिए स्कैन करें",
   "share.sub": "निःशुल्क, ऑफ़लाइन, कोई खाता नहीं।",
   "share.subChurch": "निःशुल्क, निजी, ऑफ़लाइन, किसी खाते की ज़रूरत नहीं।",
   "share.text": "Plumbline — पवित्र बाइबल, निःशुल्क और ऑफ़लाइन{from}: {url}",
