@@ -743,6 +743,7 @@
   "share.preview": "預覽",
   "share.savePreset": "儲存預設",
   "share.scanForApp": "掃描以取得應用程式",
+  "share.scanTarget": "掃描即可開啟 {name}",
   "share.sub": "免費、離線、無需帳號。",
   "share.subChurch": "免費、私密、離線，不需要帳號。",
   "share.text": "Plumbline——聖經，免費且離線可用{from}：{url}",

@@ -3261,6 +3261,26 @@ fn share_palette_options_and_link_via_abi() {
             assert_eq!(find(&o, "threads", "How to Be Saved")["available"], true, "How to Be Saved in {lang}");
             assert_eq!(find(&o, "threads", "Wie man gerettet wird")["available"], true, "German walk in {lang}");
         }
+        // The per-language gospel walk, the flags the palette moves by, and the
+        // captions in the RECIPIENT's language — the one thing on the palette
+        // written for the person being handed the phone. This engine's home has
+        // no stock threads loaded, so the default falls back to the constant and
+        // no thread is flagged; the captions and the RTL flag are what is really
+        // under test here, and they need no stock.
+        let pa = options("pa");
+        assert_eq!(pa["gospelDefault"], thread::GOSPEL_DEFAULT);
+        assert_eq!(find(&pa, "threads", "Romans Road")["gospel"], false);
+        assert_eq!(find(&pa, "threads", "Romans Road")["targetLabel"], "Romans Road");
+        let cap = pa["captions"]["scanTarget"].as_str().unwrap();
+        assert!(cap.contains("{name}") && cap.contains("ਸਕੈਨ"), "Punjabi template with the slot kept: {cap}");
+        assert!(pa["captions"]["scanApp"].as_str().unwrap().contains("Plumbline"));
+        assert_eq!(options("en")["captions"]["scanTarget"], "Scan to open {name}");
+        let ar = options("ar");
+        let ar_row = ar["languages"].as_array().unwrap().iter().find(|l| l["code"] == "ar").unwrap();
+        assert_eq!(ar_row["rtl"], true);
+        assert_eq!(de_row["rtl"], false);
+        // A booklet's target label is its title in the recipient's language.
+        assert_eq!(find(&options("de"), "devotionals", "also-german")["targetLabel"], "Beide");
 
         // ── the devotionals ──────────────────────────────────────────────────
         // Both booklets are always LISTED; only availability moves.
