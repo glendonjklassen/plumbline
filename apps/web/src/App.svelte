@@ -4,7 +4,7 @@
   // progress messages. Fonts load here too, for painting; the worker loads its own
   // copy for layout measurement.
   import { bootErrorCopy } from "./engine/bootError";
-  import { deviceLocale, lastLang, setCatalog, t, readerFace } from "./lib/i18n.svelte";
+  import { deviceLocale, langChosen, lastLang, rememberLangChosen, setCatalog, t, readerFace } from "./lib/i18n.svelte";
   import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "./engine/fonts.generated";
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import {
@@ -117,6 +117,52 @@
     return FONT_FILES[token]?.italic ? 2 : 1;
   }
 
+  // A link that names something this install does not have — the stash that
+  // carries it across the reload into a newer build, and the guard against
+  // reloading twice for the same address.
+  const PENDING_LINK = "plumbline.pendingLink";
+  const RETRIED_LINK = "plumbline.retriedLink";
+
+  /** The query string the previous page of this tab stashed before reloading
+   *  into an update, consumed once. sessionStorage: this tab only, gone with it. */
+  function takePendingLink(): string {
+    try {
+      const v = sessionStorage.getItem(PENDING_LINK) ?? "";
+      if (v) {
+        sessionStorage.removeItem(PENDING_LINK);
+        sessionStorage.setItem(RETRIED_LINK, v);
+      }
+      return v;
+    } catch {
+      return "";
+    }
+  }
+
+  /** The link named a thread or booklet this install lacks. The likeliest reason
+   *  is a release behind: new stock ships in the pack, a warm boot never asks for
+   *  one, and a phone that served last release's shell from cache consumed the
+   *  link and then offered the update — after which the address was gone. So: if
+   *  a newer build is deployed, stash the address and reload into it; the new
+   *  build distrusts the old pin, fetches the pack, seeds the stock, and finds the
+   *  thread. This reader has JUST arrived, so the reload yanks nothing away —
+   *  the one case the never-auto-reload rule behind `updateReady` does not cover.
+   *  Once per address: what still resolves to nothing on the new build is
+   *  something the app genuinely does not have. */
+  async function retryAfterUpdate(s: Session, search: string): Promise<void> {
+    try {
+      if (sessionStorage.getItem(RETRIED_LINK) === search) return;
+    } catch {
+      return;
+    }
+    if (!(await s.checkForUpdate(true))) return;
+    try {
+      sessionStorage.setItem(PENDING_LINK, search);
+    } catch {
+      return;
+    }
+    s.applyUpdate();
+  }
+
   async function start(): Promise<void> {
     try {
       const rpc = new EngineRpc();
@@ -130,13 +176,28 @@
       const hinted = hintedTextFont();
       // Read before the boot message, because `?lang=` decides which CORPUS gets
       // inflated — a language resolved after the engine opens picks nothing.
-      const linkLang = sharedLang(location.search) ?? "";
+      // The address this visit ARRIVED with: the page's own query string, or —
+      // after the reload that takes an update — the one `retryAfterUpdate`
+      // stashed, so a link's destination survives the update that delivers it.
+      const search = location.search || takePendingLink();
+      const linkLang = sharedLang(search) ?? "";
       const [info] = await Promise.all([
         // `textFont` is a hint from localStorage, like `lang`: the real choice is
         // in a config only the worker can read, but the worker needs a face before
         // the first layout. Guess, overlap the download with boot, and reconcile
         // below — a wrong guess costs one relayout before anything is painted.
-        rpc.boot({ deferRnd, locale: deviceLocale(), lang: lastLang(), sharedLang: linkLang, textFont: hinted }),
+        // Which code picks the CORPUS: the link's, when it carries one and this
+        // reader has never chosen a language of their own; else the device's last
+        // resolved code. `lastLang()` alone cannot serve — it is written on every
+        // boot, so it says "en" for anyone who ever opened the app in English, and
+        // a Punjabi link was opening an English Bible under a Punjabi shell.
+        rpc.boot({
+          deferRnd,
+          locale: deviceLocale(),
+          lang: linkLang && !langChosen() ? linkLang : lastLang(),
+          sharedLang: linkLang,
+          textFont: hinted,
+        }),
         ...documentFaces(hinted),
       ]);
       // The worker measures layout with its own FontFaceSet. If its load failed it
@@ -174,7 +235,7 @@
       // A shared link can carry the sender's church. Save it as this reader's
       // own (theirs wins if they've already set one), then strip it from the
       // address bar so a bookmark or a reload isn't a link about a church.
-      const shared = churchFromQuery(location.search);
+      const shared = churchFromQuery(search);
       if (shared && !s.config.church?.name) {
         // Through `setChurch`, not by assigning `config.church`: the meeting time
         // is stored separately in `config.sundayService`, and only setChurch knows
@@ -191,12 +252,12 @@
       }
       // A shared passage opens where it points (`?at=Ps 23:1`) — the QR on the
       // Present end card hands over the weave, not just the app.
-      const at = sharedAtRef(location.search);
+      const at = sharedAtRef(search);
       // The palette's destinations. Names and ids, resolved below against what
       // THIS install actually has — a link asserts nothing about the phone that
       // opens it, so anything unmatched falls through to an ordinary boot.
-      const linkThread = sharedThread(location.search);
-      const linkDevotional = sharedDevotional(location.search);
+      const linkThread = sharedThread(search);
+      const linkDevotional = sharedDevotional(search);
       // The language the link asked for, kept only if this reader had none of
       // their own — the rule `boot()` already applied when it opened the corpus,
       // written down here so a reload stays in the language this visit resolved.
@@ -204,10 +265,14 @@
         s.config.language = info.i18n?.lang ?? linkLang;
         s.saveConfig();
       }
+      // What stage 1 reads NEXT time (`langChosen`): true once the config carries
+      // a language — from Settings, or from the link just above. Written on every
+      // boot so an install from before the flag learns its answer here.
+      rememberLangChosen(!!s.config.language);
       // A launcher shortcut names a destination (`?open=review`, from the
       // manifest's `shortcuts`). Stripped with the rest: a destination is a way in,
       // and a reload should reopen the reader, not the drill.
-      const opened = launchDestination(location.search);
+      const opened = launchDestination(search);
       if (shared || at || opened || linkLang || linkThread || linkDevotional) {
         history.replaceState(null, "", location.pathname + location.hash);
       }
@@ -264,8 +329,13 @@
       }
       // Straight to what the link named. There is no welcome in the way: a
       // person handed this over, and they provide the context it used to.
-      if (linkDevotional) void s.openSharedDevotional(linkDevotional);
-      else if (linkThread) void s.openSharedThread(linkThread);
+      const arrive = (found: Promise<boolean>): void => {
+        void found.then((ok) => {
+          if (!ok) void retryAfterUpdate(s, search);
+        });
+      };
+      if (linkDevotional) arrive(s.openSharedDevotional(linkDevotional));
+      else if (linkThread) arrive(s.openSharedThread(linkThread));
       // The on-device boot numbers (also under Settings → boot diagnostics).
       void rpc.bootTrace().then((t) => {
         s.bootTrace = t;

@@ -1308,12 +1308,15 @@ export class Session {
    *  walked through a passage at a time. The name is resolved against the LOADED
    *  threads exactly as [[gospelThread]] resolves a configured one, so a
    *  stranger's `?thread=` cannot put the reader on an empty surface. */
-  async openSharedThread(name: string): Promise<void> {
+  async openSharedThread(name: string): Promise<boolean> {
     const threads = (await this.fetchQ("threads").catch(() => null))?.threads ?? [];
-    if (!threads.some((t: { name: string }) => t.name === name)) return;
+    // False, not silence: the caller (App.svelte) can tell the difference between
+    // a thread this install lacks and one a release behind would supply.
+    if (!threads.some((t: { name: string }) => t.name === name)) return false;
     this.presentThreadName = name;
     this.presentFromShare = true;
     this.showPresent = true;
+    return true;
   }
 
   /** Open a devotional a shared link named, starting it if it is not running.
@@ -1325,12 +1328,13 @@ export class Session {
    *  link naming an untranslated one lands them in the app rather than on pages
    *  they cannot read. Already running is left alone: restarting would throw
    *  away their banked days. */
-  async openSharedDevotional(id: string): Promise<void> {
+  async openSharedDevotional(id: string): Promise<boolean> {
     const wire = await this.fetchQ("devotionals", lang(), localDay()).catch(() => null);
-    if (!(wire?.catalogue ?? []).some((b: { id: string }) => b.id === id)) return;
+    if (!(wire?.catalogue ?? []).some((b: { id: string }) => b.id === id)) return false;
     const running = ((wire?.running ?? []) as { id: string; day?: number }[]).find((r) => r.id === id);
     if (!running) await this.author("devotionalStart", id, nowStamp());
     this.openDevotional(id, typeof running?.day === "number" ? running.day : 1);
+    return true;
   }
 
   setChurch(c: Church): void {

@@ -22,8 +22,7 @@
     plural,
     readerFace,
     script,
-    t,
-  } from "../lib/i18n.svelte";
+    t, rememberLangChosen } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -190,6 +189,9 @@
   async function setLanguage(code: string): Promise<void> {
     if ((s.config.language ?? "") === code) return;
     s.config.language = code;
+    // A CHOICE, which is what lets a later shared link's `?lang=` be declined —
+    // see `langChosen`.
+    rememberLangChosen(!!code);
     const target = await s.rpc
       .static("i18nCatalog", code, deviceLocale())
       .then((c: any) => c?.strings ?? null)
