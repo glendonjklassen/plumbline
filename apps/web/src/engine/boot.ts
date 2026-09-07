@@ -126,8 +126,13 @@ export async function boot(
   // from whichever this boot loads from — deciding up front against a manifest not yet
   // read is how a boot skips every corpus, English included. The corpus arrives through
   // `also` because stage 1 fetches `text`, and other Bibles are not on that stage.
-  // `sharedLang` is last: it only decides for a reader who has none of their own,
-  // and `lang` (this device's last resolved code) is empty exactly then.
+  // `lang` is the main thread's answer to WHICH code should pick the corpus: the
+  // link's, when the visit arrived with `?lang=` and this reader has never chosen
+  // a language (App.svelte decides that with `langChosen`), else this device's
+  // last resolved code. `sharedLang` alone is the fallback for a device that has
+  // never resolved any. Not `lastLang() || sharedLang`: the last resolved code is
+  // written on every boot, so it read "en" for every returning English reader and
+  // a Punjabi link opened an English Bible under a Punjabi shell.
   const corpusFor = (m: PackManifest) =>
     corpusRoleFor(lang || sharedLang, locale, (role) => manifestHasCorpus(m, role));
   const stage1 = (m: PackManifest) => {

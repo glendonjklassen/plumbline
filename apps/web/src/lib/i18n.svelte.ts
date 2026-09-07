@@ -30,6 +30,37 @@ export function lastLang(): string {
   }
 }
 
+const LANG_CHOSEN = "plumbline.langChosen";
+
+/** Whether this reader has CHOSEN a language — in Settings, or through a link
+ *  that introduced the app in one — as opposed to being served the device's.
+ *  `lastLang` cannot tell the two apart: it is the RESOLVED code and is written
+ *  on every boot, so it reads "en" for anyone who has ever opened the app in
+ *  English. The difference decides whether a shared link's `?lang=` may pick
+ *  the corpus (App.svelte): a link may introduce the app in a language, never
+ *  re-language an app someone chose their own for. Main-thread only, like
+ *  `lastLang`, and for the same reason — stage 1 needs it before there is an
+ *  engine to ask. */
+export function langChosen(): boolean {
+  try {
+    return localStorage.getItem(LANG_CHOSEN) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Record whether the config now carries a chosen language. Called wherever
+ *  `config.language` is written, and once after every boot, so an install from
+ *  before the flag existed learns its own answer on its first boot here. */
+export function rememberLangChosen(chosen: boolean): void {
+  try {
+    if (chosen) localStorage.setItem(LANG_CHOSEN, "1");
+    else localStorage.removeItem(LANG_CHOSEN);
+  } catch {
+    /* blocked storage: the next boot treats the reader as unchosen, which errs toward the link */
+  }
+}
+
 /** The device's own languages, most-preferred first, as BCP-47 tags. */
 export function deviceLocale(): string {
   return navigator.languages?.[0] || navigator.language || "en";
