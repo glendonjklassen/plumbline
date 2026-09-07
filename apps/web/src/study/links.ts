@@ -205,6 +205,23 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       if (notes !== null) report(s, s.author("threadSetNotes", thread.name, notes));
       break;
     }
+    // The bookends. Same shape as the notes editor above, one verb each — and
+    // the prompt opens on whatever is already there, so editing an existing
+    // bookend does not mean retyping it.
+    case "editThreadOpening":
+    case "editThreadClosing": {
+      const thread = (await s.fetchQ("threads"))?.threads?.[link.index];
+      if (!thread) break;
+      const isOpening = link.verb === "editThreadOpening";
+      const label = t(isOpening ? "panel.openingHeader" : "panel.closingHeader");
+      const current = (isOpening ? thread.opening : thread.closing) ?? "";
+      const text = await s.askText(`${label} — ${thread.name}`, current, true);
+      // `null` is a CANCELLED prompt and must not be written; `""` is the
+      // reader deliberately emptying the box, which the engine reads as
+      // "clear it". Collapsing the two would make Cancel destructive.
+      if (text !== null) report(s, s.author(isOpening ? "threadSetOpening" : "threadSetClosing", thread.name, text));
+      break;
+    }
     case "editEntryNote": {
       const thread = (await s.fetchQ("threads"))?.threads?.[link.thread];
       if (!thread) break;

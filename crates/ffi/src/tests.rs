@@ -2096,6 +2096,8 @@ fn link_verb(l: &crate::wire::WirePanelLink) -> &'static str {
         L::DeleteTag { .. } => "deleteTag",
         L::DeleteWeave { .. } => "deleteWeave",
         L::EditThreadNotes { .. } => "editThreadNotes",
+        L::EditThreadOpening { .. } => "editThreadOpening",
+        L::EditThreadClosing { .. } => "editThreadClosing",
         L::EditWeaveNotes { .. } => "editWeaveNotes",
         L::EditEntryNote { .. } => "editEntryNote",
         L::MoveEntry { .. } => "moveEntry",

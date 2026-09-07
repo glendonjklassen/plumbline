@@ -112,6 +112,19 @@ pub struct Thread {
     pub name: String,
     pub tok_version: String,
     pub notes: String,
+    /// Commentary that BOOKENDS the trail: `opening` reads before the first
+    /// passage, `closing` after the last. Separate from [`notes`](Thread::notes),
+    /// which stays the author's own working document — a thread walked in front
+    /// of someone needs a way in and a way out that is not the same text as the
+    /// scratchpad behind it.
+    ///
+    /// Empty means ABSENT, not "an empty bookend": every reader of these skips a
+    /// blank one entirely rather than painting a heading with nothing under it,
+    /// and the setters below trim to empty so a whitespace-only edit clears
+    /// rather than leaving a bookend nobody can see but every screen makes room
+    /// for.
+    pub opening: String,
+    pub closing: String,
     pub entries: Vec<ThreadEntry>,
     pub created: String,
     /// Stable identity — 32 hex chars, minted once, never derived from the name
@@ -148,6 +161,10 @@ struct ThreadRepr {
     #[serde(default)]
     notes: String,
     #[serde(default)]
+    opening: String,
+    #[serde(default)]
+    closing: String,
+    #[serde(default)]
     entries: Vec<ThreadEntry>,
     created: String,
     #[serde(default)]
@@ -167,7 +184,16 @@ struct ThreadOut<'a> {
     name: &'a str,
     tokenization: &'a str,
     notes: &'a str,
+    /// Skipped when blank, so a thread with no bookends — which is every thread
+    /// written before they existed, including the stock Romans Road — is written
+    /// byte for byte as it was rather than growing two empty keys on its next
+    /// save. Same reasoning as `id`/`updated` below.
+    #[serde(skip_serializing_if = "str::is_empty")]
+    opening: &'a str,
     entries: Vec<EntryRepr>,
+    /// After the entries, because that is where it is read.
+    #[serde(skip_serializing_if = "str::is_empty")]
+    closing: &'a str,
     created: &'a str,
     /// Both additive, and both skipped when absent — a thread from before ids
     /// existed is written exactly as it was.
@@ -195,6 +221,8 @@ impl Thread {
             name: &self.name,
             tokenization: &self.tok_version,
             notes: &self.notes,
+            opening: &self.opening,
+            closing: &self.closing,
             entries: self
                 .entries
                 .iter()
@@ -222,6 +250,8 @@ impl<'de> Deserialize<'de> for Thread {
             name: r.name,
             tok_version: r.tokenization,
             notes: r.notes,
+            opening: r.opening,
+            closing: r.closing,
             entries: r.entries,
             created: r.created,
             id: r.id,
@@ -380,6 +410,8 @@ pub fn add_to_thread(
             name: name.trim().to_string(),
             tok_version: tok_version.to_string(),
             notes: String::new(),
+            opening: String::new(),
+            closing: String::new(),
             entries: vec![entry],
             created: created.clone(),
             // Both filled by the writer, so a new thread is stamped through the
@@ -409,14 +441,48 @@ fn find_thread<'a>(loaded: &'a [LoadedThread], name: &str) -> Result<&'a LoadedT
         .ok_or_else(|| Error::Corpus(format!("no thread named {name}")))
 }
 
+/// Edit one field of the thread named `name` and save it — the shared body of
+/// the three document setters below.
+fn edit_thread(
+    loaded: &[LoadedThread],
+    name: &str,
+    now: &str,
+    edit: impl FnOnce(&mut Thread),
+) -> Result<PathBuf, Error> {
+    let lt = find_thread(loaded, name)?;
+    let mut thread = lt.thread.clone();
+    edit(&mut thread);
+    write_thread(&lt.file, &thread, now)?;
+    Ok(lt.file.clone())
+}
+
 /// Replace the running notes document of the thread named `name`. The thread
 /// must already exist among `loaded`.
 pub fn set_thread_notes(loaded: &[LoadedThread], name: &str, notes: &str, now: &str) -> Result<PathBuf, Error> {
-    let lt = find_thread(loaded, name)?;
-    let mut thread = lt.thread.clone();
-    thread.notes = notes.to_string();
-    write_thread(&lt.file, &thread, now)?;
-    Ok(lt.file.clone())
+    edit_thread(loaded, name, now, |t| t.notes = notes.to_string())
+}
+
+/// Replace the [`opening`](Thread::opening) — the commentary read before the
+/// first passage. Whitespace-only clears it, the way an entry note clears.
+pub fn set_thread_opening(loaded: &[LoadedThread], name: &str, opening: &str, now: &str) -> Result<PathBuf, Error> {
+    edit_thread(loaded, name, now, |t| t.opening = blank_to_empty(opening))
+}
+
+/// Replace the [`closing`](Thread::closing) — the commentary read after the last
+/// passage. Whitespace-only clears it.
+pub fn set_thread_closing(loaded: &[LoadedThread], name: &str, closing: &str, now: &str) -> Result<PathBuf, Error> {
+    edit_thread(loaded, name, now, |t| t.closing = blank_to_empty(closing))
+}
+
+/// A bookend of only whitespace is no bookend. Trims nothing off a real one —
+/// an author's own line breaks and indentation are theirs — it only collapses
+/// the all-blank case to the empty string every reader treats as absent.
+fn blank_to_empty(s: &str) -> String {
+    if s.trim().is_empty() {
+        String::new()
+    } else {
+        s.to_string()
+    }
 }
 
 /// Set (or clear, with `None`) the note on entry `index` of the thread named
@@ -660,6 +726,62 @@ mod tests {
         assert_eq!(t.name, "Romans Road");
         assert_eq!(t.entries.len(), 2);
         assert_eq!(t.entries[1].vref, VRef::new("Rom", 6, 23));
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// The bookends: they persist, they clear, and — the part that matters for a
+    /// FROZEN FORMAT — a thread that has none is written with no trace of them.
+    ///
+    /// The middle assertion is the regression. `opening`/`closing` are
+    /// `skip_serializing_if = "str::is_empty"`, and dropping that attribute is a
+    /// one-character mistake that no round-trip test would catch: the values
+    /// still load, so `Thread == Thread` stays true either way. What actually
+    /// breaks is every thread file on every device gaining two empty keys on its
+    /// next save — including the stock Romans Road, whose bytes ship in the pack
+    /// and sit inside already-issued backup zips. So this compares the BYTES of a
+    /// bookendless save against the literal key names, which is the only thing
+    /// that fails when the skip goes away.
+    #[test]
+    fn bookends_persist_clear_and_stay_out_of_a_file_without_them() {
+        let home = std::env::temp_dir().join(format!("plumbline-thread-bookends-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let entry = ThreadEntry {
+            vref: VRef::new("Rom", 3, 23),
+            span: (0, 1),
+            text: vec!["For".into()],
+            note: None,
+            added: "2026-01-01T00:00:00Z".into(),
+        };
+        let (loaded, _) = load_threads(&home);
+        let path = add_to_thread(&home, &loaded, "Plan", "kjv1769-tok2", entry).unwrap();
+
+        // A thread nobody has given bookends writes neither key.
+        let bare = std::fs::read_to_string(&path).unwrap();
+        assert!(!bare.contains("opening"), "a thread with no opening must not write the key:\n{bare}");
+        assert!(!bare.contains("closing"), "a thread with no closing must not write the key:\n{bare}");
+
+        // Both set, both kept, and each lands in its own field.
+        let (loaded, _) = load_threads(&home);
+        set_thread_opening(&loaded, "plan", "Read this first.", "2026-07-30T00:00:00Z").unwrap();
+        let (loaded, _) = load_threads(&home);
+        set_thread_closing(&loaded, "Plan", "And then this.", "2026-07-30T00:00:00Z").unwrap();
+        let (loaded, _) = load_threads(&home);
+        let t = &loaded[0].thread;
+        assert_eq!(t.opening, "Read this first.");
+        assert_eq!(t.closing, "And then this.");
+        // Setting a bookend leaves the working notes and the entries alone.
+        assert_eq!(t.notes, "");
+        assert_eq!(t.entries.len(), 1);
+
+        // Whitespace-only clears rather than storing a bookend no screen can
+        // show but every screen makes room for — and the key goes away with it.
+        set_thread_opening(&loaded, "Plan", "   \n  ", "2026-07-31T00:00:00Z").unwrap();
+        let (loaded, _) = load_threads(&home);
+        assert_eq!(loaded[0].thread.opening, "");
+        let cleared = std::fs::read_to_string(&path).unwrap();
+        assert!(!cleared.contains("\"opening\""), "a cleared opening must not linger:\n{cleared}");
+        assert!(cleared.contains("\"closing\""), "clearing one bookend must not touch the other");
 
         let _ = std::fs::remove_dir_all(&home);
     }

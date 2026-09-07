@@ -1,0 +1,31 @@
+{
+  "id": "ich-bin-getauft-auf-deinen-namen",
+  "number": 93,
+  "tune": "O DASS ICH TAUSEND ZUNGEN HÄTTE",
+  "meter": "9.8.9.8.8.8",
+  "key": "G",
+  "texts": {
+    "en": null,
+    "de": {
+      "title": "Ich bin getauft auf deinen Namen",
+      "author": "Johann Jakob Rambach",
+      "translator": null,
+      "year": 1734,
+      "stanzas": [
+        "[G]Ich bin ge[D]tauft auf [G]deinen [D]Namen,\nGott [G]Vater, [C]Sohn und [D]Heilger [G]Geist;\nich [G]bin ge[D]zählt zu [G]deinem [D]Samen,\nzum [G]Volk, das [C]dir ge[D]heiligt [G]heißt;\nich [C]bin in [G]Christus [D]einge[G]senkt,\nich [C]bin mit [G]seinem [D]Geist be[G]schenkt.",
+        "Du hast zu deinem Kind und Erben,\nmein lieber Vater, mich erklärt;\ndu hast die Frucht von deinem Sterben,\nmein treuer Heiland, mir gewährt;\ndu willst in aller Not und Pein,\no guter Geist, mein Tröster sein.",
+        "Doch hab ich dir auch Furcht und Liebe,\nTreu und Gehorsam zugesagt;\nich hab, o Herr, aus reinem Triebe\ndein Eigentum zu sein gewagt;\nhingegen sagt ich bis ins Grab\ndes Satans bösen Werken ab.",
+        "Mein treuer Gott, auf deiner Seite\nbleibt dieser Bund wohl feste stehn;\nwenn aber ich ihn überschreite,\nso lass mich nicht verloren gehn;\nnimm mich, dein Kind, zu Gnaden an,\nwenn ich hab einen Fall getan.",
+        "Ich gebe dir, mein Gott, aufs Neue\nLeib, Seel und Herz zum Opfer hin;\nerwecke mich zu neuer Treue\nund nimm Besitz von meinem Sinn.\nEs sei in mir kein Tropfen Blut,\nder nicht, Herr, deinen Willen tut.",
+        "Weich, weich, du Fürst der Finsternisse!\nIch bleibe mit dir unvermengt.\nHier ist zwar ein befleckt Gewissen,\njedoch mit Jesu Blut besprengt.\nWeich, eitle Welt, du Sünde, weich!\nGott hört es: Ich entsage euch.",
+        "Lass diesen Vorsatz nimmer wanken,\nGott Vater, Sohn und Heilger Geist.\nHalt mich in deines Bundes Schranken,\nbis mich dein Wille sterben heißt.\nSo leb ich dir, so sterb ich dir,\nso lob ich dich dort für und für."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_ich_bin_getauft_auf_deinen_namen.html",
+        "https://de.wikipedia.org/wiki/Liste_der_Kernlieder_im_Evangelischen_Gesangbuch"
+      ]
+    }
+  },
+  "notes": "EG 200, one of the 33 Kernlieder the EKD names as the common minimum repertoire; text Johann Jakob Rambach (1693–1735), so public domain by a wide margin. Seven stanzas as evangeliums.net prints them. TUNE AND CHART ARE NOT GUESSED: evangeliums.net gives the melody as 'O, dass ich tausend Zungen hätte', which this hymnal already ships as hymn 82 — so the tune name, the meter and the guitar key are taken from that file rather than re-derived, and the chart here is that file's stanza-1 chart moved across position for position. The two texts scan identically, which is what makes that legitimate: both are 9.8.9.8.8.8, and every chord lands on the same syllable number as its counterpart there (1/4/6/8 on the nine-syllable lines, 2/4/6/8 on the eight-syllable ones). Meter confirmed by counting rather than by assertion — 'Ich bin ge-tauft auf dei-nen Na-men' is nine, 'Gott Va-ter, Sohn und Heil-ger Geist' is eight. Ships German-only for now: Catherine Winkworth translated this text as 'Baptized into thy name most holy' and that translation is public domain, but it could not be sourced in this session — see the worklist's optEn. Adding it later is purely additive to this file."
+}

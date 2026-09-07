@@ -1,0 +1,31 @@
+{
+  "id": "o-komm-du-geist-der-wahrheit",
+  "number": 94,
+  "tune": "BEFIEHL DU DEINE WEGE",
+  "meter": "7.6.7.6 D",
+  "key": "Dm",
+  "texts": {
+    "en": null,
+    "de": {
+      "title": "O komm, du Geist der Wahrheit",
+      "author": "Philipp Spitta",
+      "translator": null,
+      "year": 1827,
+      "stanzas": [
+        "[Dm]O komm, du Geist [Gm]der [A]Wahr[Dm]heit,\nund [E]keh[F]re bei [E]uns [Am]ein,\n[Dm]verbreite Licht [Gm]und [A]Klar[Dm]heit,\nver[E]ban[F]ne Trug [E]und [Am]Schein.\n[Dm]Gieß [E7]aus [Am]dein heilig [F]Feuer,\n[D7]rühr [Gm]Herz [F]und Lip[C7]pen [F]an,\n[A]dass [Bb]jegli[F]cher [A7]ge[Dm]treu[A]er\nden Herrn [F]beken[A7]nen [D]kann.",
+        "O du, den unser größter\nRegent uns zugesagt:\nkomm zu uns, werter Tröster,\nund mach uns unverzagt.\nGib uns in dieser schlaffen\nund glaubensarmen Zeit\ndie scharf geschliffnen Waffen\nder ersten Christenheit.",
+        "Unglaub und Torheit brüsten\nsich frecher jetzt als je;\ndarum musst du uns rüsten\nmit Waffen aus der Höh.\nDu musst uns Kraft verleihen,\nGeduld und Glaubenstreu\nund musst uns ganz befreien\nvon aller Menschenscheu.",
+        "Es gilt ein frei Geständnis\nin dieser unsrer Zeit,\nein offenes Bekenntnis\nbei allem Widerstreit,\ntrotz aller Feinde Toben,\ntrotz allem Heidentum\nzu preisen und zu loben\ndas Evangelium.",
+        "In aller Heiden Lande\nerschallt dein kräftig Wort,\nsie werfen Satans Bande\nund ihre Götzen fort;\nvon allen Seiten kommen\nsie in das Reich herein;\nach soll es uns genommen,\nfür uns verschlossen sein?",
+        "O wahrlich, wir verdienen\nsolch strenges Strafgericht;\nuns ist das Licht erschienen,\nallein wir glauben nicht.\nAch lasset uns gebeugter\num Gottes Gnade flehn,\ndass er bei uns den Leuchter\ndes Wortes lasse stehn.",
+        "Du Heilger Geist, bereite\nein Pfingstfest nah und fern;\nmit deiner Kraft begleite\ndas Zeugnis von dem Herrn.\nO öffne du die Herzen\nder Welt und uns den Mund,\ndass wir in Freud und Schmerzen\ndas Heil ihr machen kund."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_o_komm_du_geist_der_wahrheit.html",
+        "https://de.wikipedia.org/wiki/Liste_der_Kernlieder_im_Evangelischen_Gesangbuch"
+      ]
+    }
+  },
+  "notes": "EG 136, a Pentecost Kernlied; text Philipp Spitta (1801–1859), the same author as hymn 92 — this and 'Bei dir, Jesu, will ich bleiben' are the two Spitta texts in the book. Seven stanzas as evangeliums.net prints them. TUNE AND CHART ARE NOT GUESSED: evangeliums.net names three melodies for this text — 'Lob Gott getrost mit Singen', 'Befiehl du deine Wege' and 'Wir haben einen Felsen' — and the second of those is already in this hymnal as hymn 67, so its tune name, meter and guitar key are reused rather than re-derived, and the chart here is that file's stanza-1 chart moved across position for position. Both texts are 7.6.7.6 D and every chord keeps its syllable number: on the seven-syllable lines 1/5/6/7, then 1/2/3/6, then 1/2/4/5/6/7; on the six-syllable lines 2/3/5/6, then 1/2/3/5/6, then 3/5/6. Meter confirmed by counting — 'O komm, du Geist der Wahr-heit' is seven, 'und keh-re bei uns ein' is six. Choosing 'Befiehl du deine Wege' over the other two is a deliberate call, not a coin flip: it is the one melody a reader of this book already has in front of them, so the chart is playable the moment they open it. Ships German-only; no public-domain English translation of Spitta's Pentecost text was sourced in this session."
+}

@@ -322,6 +322,14 @@ pub struct WireThreads {
 pub struct WireThread {
     pub name: String,
     pub notes: String,
+    /// Commentary that bookends the passages — see `thread::Thread::opening`.
+    /// Additive, and ALWAYS PRESENT on the wire even when the thread carries
+    /// none: a strict decoder binds them as plain strings, and `""` is the
+    /// shell's own "there is no bookend" test. (The FILE omits an empty one;
+    /// that asymmetry is deliberate — the file is a document, the wire is a
+    /// fixed shape.)
+    pub opening: String,
+    pub closing: String,
     pub created: String,
     pub entries: Vec<WireThreadEntry>,
 }
@@ -347,6 +355,8 @@ pub fn threads_to_wire(loaded: &[LoadedThread]) -> WireThreads {
                 WireThread {
                     name: t.name.clone(),
                     notes: t.notes.clone(),
+                    opening: t.opening.clone(),
+                    closing: t.closing.clone(),
                     created: t.created.clone(),
                     entries: t
                         .entries
@@ -1089,6 +1099,8 @@ pub enum WirePanelLink {
     DeleteTag { index: usize },
     DeleteWeave { index: usize },
     EditThreadNotes { index: usize },
+    EditThreadOpening { index: usize },
+    EditThreadClosing { index: usize },
     EditWeaveNotes { index: usize },
     EditEntryNote { thread: usize, entry: usize },
     MoveEntry { thread: usize, entry: usize, delta: i32 },
@@ -1121,6 +1133,8 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::DeleteTag { index } => WirePanelLink::DeleteTag { index },
         PanelLink::DeleteWeave { index } => WirePanelLink::DeleteWeave { index },
         PanelLink::EditThreadNotes { index } => WirePanelLink::EditThreadNotes { index },
+        PanelLink::EditThreadOpening { index } => WirePanelLink::EditThreadOpening { index },
+        PanelLink::EditThreadClosing { index } => WirePanelLink::EditThreadClosing { index },
         PanelLink::EditWeaveNotes { index } => WirePanelLink::EditWeaveNotes { index },
         PanelLink::EditEntryNote { thread, entry } => WirePanelLink::EditEntryNote { thread, entry },
         PanelLink::MoveEntry { thread, entry, delta } => WirePanelLink::MoveEntry { thread, entry, delta },

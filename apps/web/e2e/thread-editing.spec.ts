@@ -265,3 +265,83 @@ test.describe("phone-sized Present", () => {
   });
 });
 
+
+// ── the bookends ────────────────────────────────────────────────────────────
+
+// A thread carries three documents now: `notes` (the author's own scratchpad),
+// plus an `opening` read before the first passage and a `closing` after the
+// last. Present walks all of it — bookends as their own cards, each entry's
+// note under its verse — so a plan of salvation can be shown the way it was
+// written rather than as a bare verse list.
+//
+// The invariant this pins is the ABSENT case, which is the one that goes wrong
+// quietly: a thread with no bookends, or one whose bookend was cleared, must
+// produce exactly as many steps as it has verses. Nothing here is proved by
+// mutation (CLAUDE.md); the reasoning is that both halves are counted against
+// the SAME thread. The step count is read off the rendered `.entry` rows, and
+// the verse count off the engine, so the two cannot drift together: render a
+// blank card for an empty bookend — the obvious way to break this, since
+// `opening` is always present on the wire as `""` — and the first expectation
+// sees rows > verses while the engine still reports the same entries. A test
+// that only checked "the opening card appears when set" would pass against
+// exactly that bug.
+test("bookends are their own cards, and an absent one takes up no room", async ({ page }) => {
+  await boot(page);
+
+  const verses = async (): Promise<number> => (await order(page, "Romans Road")).length;
+  const openPresent = async (): Promise<void> => {
+    await page.evaluate(() => {
+      const s = (window as any).__plumbline;
+      s.showPresent = false;
+      s.presentThreadName = "Romans Road";
+      s.showPresent = true;
+    });
+    await expect(page.locator(".present")).toBeVisible({ timeout: 30_000 });
+    const pick = page.locator(".pick").first();
+    if (await pick.isVisible().catch(() => false)) await pick.click();
+    await expect(page.locator(".overview")).toBeVisible({ timeout: 30_000 });
+  };
+
+  // The stock thread has no bookends: the walk is exactly its verses.
+  await openPresent();
+  expect(await page.locator(".overview .entry").count()).toBe(await verses());
+  expect(await page.locator(".overview .entry.bookend").count()).toBe(0);
+
+  // Both set: two more steps than there are verses, one at each end.
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.author("threadSetOpening", "Romans Road", "Here is where this begins.");
+    await s.author("threadSetClosing", "Romans Road", "And here is what it asks.");
+    await s.fetchQ("threads");
+  });
+  await openPresent();
+  const rows = page.locator(".overview .entry");
+  expect(await rows.count()).toBe((await verses()) + 2);
+  await expect(rows.first()).toHaveClass(/bookend/);
+  await expect(rows.first()).toContainText("Here is where this begins.");
+  await expect(rows.last()).toHaveClass(/bookend/);
+  await expect(rows.last()).toContainText("And here is what it asks.");
+
+  // An entry note rides under its own verse, and only there.
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.author("threadEntrySetNote", "Romans Road", 0, "the diagnosis");
+    await s.fetchQ("threads");
+  });
+  await openPresent();
+  await expect(page.locator(".overview .entry .note")).toHaveText(["the diagnosis"]);
+
+  // CLEARED — whitespace only — and the cards go with them rather than leaving
+  // blanks. This is the half the reader asked for by name.
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.author("threadSetOpening", "Romans Road", "   ");
+    await s.author("threadSetClosing", "Romans Road", "");
+    await s.author("threadEntrySetNote", "Romans Road", 0, "");
+    await s.fetchQ("threads");
+  });
+  await openPresent();
+  expect(await page.locator(".overview .entry").count()).toBe(await verses());
+  expect(await page.locator(".overview .entry.bookend").count()).toBe(0);
+  expect(await page.locator(".overview .entry .note").count()).toBe(0);
+});

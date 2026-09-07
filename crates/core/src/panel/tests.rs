@@ -576,6 +576,8 @@ fn threads_list_and_detail() {
         threads: vec![ThreadView {
             name: "Grace".into(),
             notes: "on unmerited favour".into(),
+            opening: String::new(),
+            closing: String::new(),
             entries: vec![
                 ThreadEntryView {
                     verse: "John 1:14".into(),
@@ -655,6 +657,67 @@ fn threads_list_and_detail() {
 
     // An out-of-range index falls back to the list.
     assert_eq!(text_of(&thread_detail(&f, 9, false)[0]), "Threads (1)");
+}
+
+/// The bookends: their text reads in both modes, their "＋" headers appear only
+/// in edit mode, and a thread that HAS NONE renders neither — no heading over a
+/// gap, and no stray rule below the last passage.
+///
+/// The absent case is checked against the same `Fake` as the present one, so
+/// the two cannot pass for the same reason. Rendering an empty bookend
+/// unconditionally — the natural mistake, since `ThreadView` carries `opening`
+/// as a plain `String` that is always there — leaves the read view's block
+/// count unchanged only if the blank block is invisible, which it is not: the
+/// bare-thread assertions below count blocks and would see the extra ones.
+#[test]
+fn thread_bookends_render_only_when_they_exist() {
+    let with = |opening: &str, closing: &str| Fake {
+        threads: vec![ThreadView {
+            name: "Plan".into(),
+            notes: String::new(),
+            opening: opening.into(),
+            closing: closing.into(),
+            entries: vec![ThreadEntryView {
+                verse: "Rom 3:23".into(),
+                display: "Romans 3:23".into(),
+                text: vec!["all".into(), "have".into(), "sinned".into()],
+                note: None,
+            }],
+        }],
+        ..Default::default()
+    };
+
+    // Set: the text reads in BOTH modes — a presenter reads it without first
+    // entering an editor — and lands on the right side of the passages.
+    let f = with("Start here.", "End here.");
+    let read = thread_detail(&f, 0, false);
+    let texts: Vec<String> = read.iter().map(text_of).collect();
+    let open_at = texts.iter().position(|t| t == "Start here.").expect("the opening reads");
+    let verse_at = texts.iter().position(|t| t.starts_with("Romans 3:23")).expect("the passage");
+    let close_at = texts.iter().position(|t| t == "End here.").expect("the closing reads");
+    assert!(open_at < verse_at, "the opening must come before the first passage: {texts:?}");
+    assert!(close_at > verse_at, "the closing must come after the last passage: {texts:?}");
+    // Read mode offers no way to edit them; edit mode offers exactly one each.
+    assert!(!uris(&read).iter().any(|u| u.starts_with("editthread")));
+    let u = uris(&thread_detail(&f, 0, true));
+    assert!(u.contains(&"editthreadopening:0".to_string()), "{u:?}");
+    assert!(u.contains(&"editthreadclosing:0".to_string()), "{u:?}");
+
+    // ABSENT: read mode paints nothing for either — no header, and no trailing
+    // rule where the closing would have gone.
+    let bare = with("", "");
+    let read = thread_detail(&bare, 0, false);
+    let texts: Vec<String> = read.iter().map(text_of).collect();
+    assert!(!texts.iter().any(|t| t == "Opening" || t == "Closing"), "{texts:?}");
+    assert!(!matches!(read.last(), Some(Block::Rule)), "a bookendless thread must not end on a rule");
+    // Two bookends' worth of blocks fewer than the thread that has them — the
+    // count is what catches a blank block being emitted for an empty bookend.
+    assert_eq!(read.len() + 2, thread_detail(&with("Start here.", "End here."), 0, false).len() - 1);
+    // Edit mode still shows both headers — that is how an absent one is written.
+    let editing = thread_detail(&bare, 0, true);
+    let texts: Vec<String> = editing.iter().map(text_of).collect();
+    assert!(texts.iter().any(|t| t.starts_with("Opening")), "{texts:?}");
+    assert!(texts.iter().any(|t| t.starts_with("Closing")), "{texts:?}");
 }
 
 #[test]

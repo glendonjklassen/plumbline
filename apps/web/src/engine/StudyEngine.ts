@@ -538,6 +538,14 @@ export class StudyEngine {
   threadSetNotes(name: string, notes: string): string | null {
     return this.#author("plumbline_engine_thread_set_notes", (f, ...p) => f(this.#engine, ...p), [name, notes]);
   }
+  /** The commentary that bookends the passages: `opening` reads before the
+   *  first, `closing` after the last. A blank string clears one. */
+  threadSetOpening(name: string, opening: string): string | null {
+    return this.#author("plumbline_engine_thread_set_opening", (f, ...p) => f(this.#engine, ...p), [name, opening]);
+  }
+  threadSetClosing(name: string, closing: string): string | null {
+    return this.#author("plumbline_engine_thread_set_closing", (f, ...p) => f(this.#engine, ...p), [name, closing]);
+  }
   /** Drop entry `index`. The thread survives its last entry — deleting the thread
    *  itself is `threadRemove`. */
   threadEntryRemove(name: string, index: number): string | null {
