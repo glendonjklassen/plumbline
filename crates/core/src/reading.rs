@@ -585,6 +585,87 @@ pub fn books(corpus: &Corpus, words: &ChapterWords, store: &Store, now: &str) ->
         .collect()
 }
 
+// ── the forecast ─────────────────────────────────────────────────────────────
+
+/// When the reader will have read the whole Bible at their pace so far — the
+/// Study screen's line under the coverage bar.
+///
+/// The pace is the words of every chapter with a full read, over the days from
+/// the earliest such read to today (inclusive, so a first day of reading is one
+/// day, not none). Words, not chapters: Psalm 117 and Psalm 119 are one chapter
+/// each and the finish date must not depend on which of them came first. The
+/// window opens at the earliest `lastRead` on the map rather than at `_since`
+/// (the day the map was first opened): a reader who logged years of paper
+/// reading by hand starts where their reading did, and one who opened the app
+/// long before they began a read-through is measured from when they began.
+///
+/// `None` until something has been read through, and once everything has.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Forecast {
+    /// The day the pace is measured from — the earliest full read on the map.
+    pub start: String,
+    /// Days in the window, `start` through today inclusive (never below 1).
+    pub days: i64,
+    /// Words in the chapters read through, over the whole map.
+    pub words_read: u32,
+    /// Words in the chapters still to read.
+    pub words_left: u32,
+    pub chapters_read: u16,
+    pub chapters_left: u16,
+    /// The projected day the last chapter is read, `YYYY-MM-DD`.
+    pub finish: String,
+}
+
+/// The finish-date forecast over the whole map at `now`. Chapters the corpus
+/// has no words for are left out on both sides, as [`books`] leaves them out of
+/// "all of it read".
+pub fn forecast(words: &ChapterWords, store: &Store, now: &str) -> Option<Forecast> {
+    let today = date_to_days(now)?;
+    let (mut words_read, mut words_left) = (0u32, 0u32);
+    let (mut chapters_read, mut chapters_left) = (0u16, 0u16);
+    let mut start: Option<i64> = None;
+    for book in canon::book_ids() {
+        let recs = store.get(book);
+        for c in 1..=words.chapters(book) {
+            let w = words.words(book, c);
+            if w == 0 {
+                continue;
+            }
+            let last = recs.and_then(|v| v.iter().find(|r| r.chapter == c)).and_then(|r| r.last_read.as_deref());
+            match last.and_then(date_to_days) {
+                Some(d) => {
+                    words_read += w;
+                    chapters_read += 1;
+                    start = Some(start.map_or(d, |s| s.min(d)));
+                }
+                None => {
+                    words_left += w;
+                    chapters_left += 1;
+                }
+            }
+        }
+    }
+    let start = start?;
+    if chapters_left == 0 || words_read == 0 {
+        return None;
+    }
+    // A read dated after today (a hand-logged date, a clock put back) does not
+    // make the window negative; it is one day of reading like any other.
+    let days = (today - start).max(0) + 1;
+    let per_day = f64::from(words_read) / days as f64;
+    let days_left = (f64::from(words_left) / per_day).ceil().max(1.0) as i64;
+    Some(Forecast {
+        start: days_to_date(start),
+        days,
+        words_read,
+        words_left,
+        chapters_read,
+        chapters_left,
+        finish: days_to_date(today + days_left),
+    })
+}
+
 // ── the dwell tracker ────────────────────────────────────────────────────────
 
 /// The most a single sample may credit. A tick that arrives very late means the
@@ -1589,5 +1670,40 @@ mod tests {
 "#
         );
         let _ = std::fs::remove_dir_all(&home);
+    }
+    #[test]
+    fn forecast_measures_pace_from_the_first_read_and_projects_the_rest() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        let home = scratch("forecast");
+        // Nothing read: nothing to project.
+        assert_eq!(forecast(&w, &load(&home).0, NOW), None);
+
+        // Gen 1 (10 words) on the 20th, Gen 2 (20 words) on the 27th, asked on the
+        // 28th: 30 words over the 9 days from the 20th through the 28th, and 5 words
+        // (Gen 3) still to go → ceil(5 / 3.33) = 2 days → the 30th.
+        mark_read(&home, "Gen", 1, "2026-07-20").unwrap();
+        mark_read(&home, "Gen", 2, "2026-07-27T09:00:00Z").unwrap();
+        let f = forecast(&w, &load(&home).0, NOW).unwrap();
+        assert_eq!(f.start, "2026-07-20");
+        assert_eq!(f.days, 9);
+        assert_eq!((f.words_read, f.words_left), (30, 5));
+        assert_eq!((f.chapters_read, f.chapters_left), (2, 1));
+        assert_eq!(f.finish, "2026-07-30");
+
+        // A first day of reading is one day, not zero: three chapters' worth read
+        // today projects at today's pace, never divides by nothing.
+        let home2 = scratch("forecast-today");
+        mark_read(&home2, "Gen", 1, NOW).unwrap();
+        let f = forecast(&w, &load(&home2).0, NOW).unwrap();
+        assert_eq!(f.days, 1);
+        // 10 words a day, 25 left → 3 days.
+        assert_eq!(f.finish, "2026-07-31");
+
+        // Everything read: the map is full, and the counter (not this) says so.
+        mark_read(&home, "Gen", 3, NOW).unwrap();
+        assert_eq!(forecast(&w, &load(&home).0, NOW), None);
+        let _ = std::fs::remove_dir_all(&home);
+        let _ = std::fs::remove_dir_all(&home2);
     }
 }

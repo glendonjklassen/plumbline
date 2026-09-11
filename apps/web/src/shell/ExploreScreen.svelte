@@ -12,7 +12,7 @@
   import { dispatchLink } from "../study/links";
   import { dayStamp, localDay } from "../engine/StudyEngine";
   import { chapterSpan, firstUnread, remaining, todayPlans } from "./planToday";
-  import { lang, plural, t } from "../lib/i18n.svelte";
+  import { dateLocale, lang, plural, t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -81,6 +81,20 @@
   });
 
   const nf = $derived(new Intl.NumberFormat(lang()));
+
+  // The finish-date forecast, worked out in the core from the map (`reading::forecast`):
+  // the words read through since the earliest full read, projected over what is left.
+  // Absent until a chapter has been read through, and once every chapter has.
+  const forecast = $derived((booksQ?.forecast ?? null) as { start: string; finish: string } | null);
+
+  /** "30 Jul 2026" from the wire's `YYYY-MM-DD`, in the reader's language. Parsed
+   *  by parts: `new Date("2026-07-30")` is UTC midnight, which is the 29th in the
+   *  Americas. */
+  function dayLabel(ymd: string): string {
+    const [y, m, d] = ymd.split("-").map(Number);
+    if (!y || !m || !d) return ymd;
+    return new Date(y, m - 1, d).toLocaleDateString(dateLocale(), { day: "numeric", month: "short", year: "numeric" });
+  }
 
   // The lifetime counter: how many times this reader has been through the whole
   // Bible. Seeded ONCE by hand and earned after that — the only thing that moves
@@ -252,6 +266,10 @@
               <span class="cov-bar" aria-hidden="true">
                 <span class="cov-fill" style="width: {(coverage.frac * 100).toFixed(2)}%"></span>
               </span>
+              {#if forecast}
+                <span class="cov-forecast">{t("explore.finishForecast", { date: dayLabel(forecast.finish) })}</span>
+                <span class="cov-pace">{t("explore.finishPace", { start: dayLabel(forecast.start) })}</span>
+              {/if}
             </button>
           {/if}
         </div>
@@ -449,6 +467,16 @@
     height: 100%;
     border-radius: 999px;
     background: var(--readDone, #6f8f6a);
+  }
+  /* The forecast under the bar: the date in ink, its basis quieter. */
+  .cov-forecast {
+    font-size: calc(14.5px * var(--uiScale, 1));
+    color: var(--ink, #211f1a);
+  }
+  .cov-pace {
+    font-size: calc(12.5px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+    margin-top: -3px;
   }
   .grid {
     display: grid;

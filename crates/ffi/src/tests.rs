@@ -3178,6 +3178,53 @@ fn word_usage_reads_the_real_index() {
     }
 }
 
+/// The original-word lens answers for the whole derivation family, the way the
+/// surface lens answers "ruler" for "rulers": ἀγάπη (G26, "from G25") rides with
+/// ἀγαπάω, so a reader who tapped "loved" sees "love" the noun in the same evidence
+/// — and `code_family` names the fold, so the card can say so.
+#[test]
+fn code_usage_folds_in_the_derivation_family() {
+    const KJV2: &str = concat!(
+        r#"{"format":"x","tokenization":"kjv1769-tok2","verses":2}"#,
+        "\n",
+        r#"{"b":"John","c":3,"t":[["","God","",["G2316"],0],["","so","",[],0],["","loved","",["G25"],0]],"v":16}"#,
+        "\n",
+        r#"{"b":"1John","c":4,"t":[["","God","",["G2316"],0],["","is","",[],0],["","love",".",["G26"],0]],"v":8}"#,
+    );
+    const STRONGS2: &str = r#"{
+      "G2316":{"lemma":"θεός","xlit":"theos"},
+      "G25":{"lemma":"ἀγαπάω","xlit":"agapaō","derivation":"perhaps from (much) (or compare G5689);"},
+      "G26":{"lemma":"ἀγάπη","xlit":"agapē","derivation":"from G25 (ἀγαπάω);"}
+    }"#;
+    unsafe {
+        let mut err: *mut c_char = ptr::null_mut();
+        let e =
+            plumbline_engine_open_from_bytes(KJV2.as_ptr(), KJV2.len(), STRONGS2.as_ptr(), STRONGS2.len(), &mut err);
+        assert!(err.is_null() && !e.is_null(), "{:?}", take(err));
+        let eng = &*e;
+        assert_eq!(panel::PanelSource::code_family(eng, "G25"), ["G25", "G26"]);
+        assert_eq!(panel::PanelSource::code_family(eng, "G26"), ["G25", "G26"]);
+        assert_eq!(panel::PanelSource::code_family(eng, "G2316"), ["G2316"]);
+
+        // Either member's lens covers both verses, each hit being that verse's own member.
+        for code in ["G25", "G26"] {
+            let lens = panel::PanelSource::code_usage(eng, code, "all", 0).unwrap();
+            assert_eq!(lens.total, 2, "{code}");
+            let hits: Vec<String> =
+                lens.lines.iter().flat_map(|l| l.segs.iter().filter(|(_, h)| *h).map(|(t, _)| t.clone())).collect();
+            assert_eq!(hits, ["loved", "love"], "{code}");
+        }
+        // A code with no relatives is unchanged: the family is itself.
+        let solo = panel::PanelSource::code_usage(eng, "G2316", "all", 0).unwrap();
+        assert_eq!(solo.total, 2);
+
+        // The chip carries the transliteration beside the lemma now.
+        let chip = panel::PanelSource::chip(eng, "G26");
+        assert_eq!((chip.lemma.as_deref(), chip.xlit.as_deref()), (Some("ἀγάπη"), Some("agapē")));
+        plumbline_engine_free(e);
+    }
+}
+
 /// A two-language devotional catalogue: one booklet written in English only, one
 /// in English AND German. Enough to tell "no booklets" from "this booklet is not
 /// translated yet", which is the distinction the palette exists to show.

@@ -160,6 +160,12 @@
     } catch {
       return;
     }
+    // The language the link chose went into the config a moment ago, on the
+    // save debounce; the reload would tear the worker down under it, and the
+    // next boot would then resolve the device's language over a Bible this one
+    // picked for the link's. Land it before the reload.
+    s.flushConfig();
+    await s.rpc.flush();
     s.applyUpdate();
   }
 

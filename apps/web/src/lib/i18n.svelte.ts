@@ -170,6 +170,14 @@ export function lang(): string {
   return code;
 }
 
+/** The language being painted as a tag `Intl` formats by. Every code but the
+ *  two Chinese rows IS one; `zhs`/`zht` are shipped codes, not tags, and handed
+ *  to `toLocaleDateString` they fall through to the browser's default locale —
+ *  an English date under a Chinese interface. */
+export function dateLocale(): string {
+  return code === "zhs" ? "zh-Hans" : code === "zht" ? "zh-Hant" : code;
+}
+
 /** Every language this build ships, each labelled in itself. Empty until the
  *  boot reply lands. */
 export function languages(): LanguageChoice[] {

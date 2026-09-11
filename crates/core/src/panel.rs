@@ -162,12 +162,14 @@ pub struct StrongsView {
     pub kjv: Option<String>,
 }
 
-/// A concept chip: the code plus its English gloss and original lemma.
+/// A concept chip: the code plus its English gloss, original lemma and the
+/// lemma's transliteration.
 #[derive(Debug, Clone, Default)]
 pub struct ChipView {
     pub code: String,
     pub gloss: Option<String>,
     pub lemma: Option<String>,
+    pub xlit: Option<String>,
 }
 
 /// One English rendering of a code and how often it occurs.
@@ -448,6 +450,14 @@ pub trait PanelSource {
     /// rendering. Same `None` semantics as [`PanelSource::word_usage`].
     fn code_usage(&self, _code: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
         None
+    }
+
+    /// Every code sharing `code`'s root in the dictionary's own derivations,
+    /// `code` included, in code order — [`crate::strongs::Families`]. What the
+    /// original-word lens's evidence covers, so [`PanelSource::code_usage`] and
+    /// this must agree. Just `[code]` for a source without a dictionary.
+    fn code_family(&self, code: &str) -> Vec<String> {
+        vec![code.to_string()]
     }
 
     fn bridge_partners(&self, code: &str) -> Vec<BridgePartnerView>;
@@ -761,8 +771,60 @@ fn concept_chips(src: &dyn PanelSource, size: f32, codes: &[String]) -> Vec<Run>
         if let (Some(_), Some(lemma)) = (&c.gloss, &c.lemma) {
             runs.push(Run::new(format!(" {lemma}"), size - 1.0, Color::Lemma));
         }
+        // The transliteration rides beside the letters wherever they appear, for
+        // a reader who does not read the script (maintainer, 2026-09-10).
+        if let (Some(_), Some(x)) = (&c.lemma, &c.xlit) {
+            runs.push(Run::new(format!(" {x}"), size - 1.0, Color::Faded).italic());
+        }
     }
     runs
+}
+
+/// The original word as ONE line: the lemma in its own script, then its
+/// transliteration beside it for a reader who does not read that script — beside,
+/// not under, so the eye reads them as one word. Either half alone when that is all
+/// the dictionary has.
+fn lemma_line(e: &StrongsView, out: &mut Vec<Block>) {
+    let mut runs = Vec::new();
+    if let Some(l) = &e.lemma {
+        runs.push(Run::new(l, sz::LEMMA, Color::Ink));
+    }
+    if let Some(x) = &e.xlit {
+        if !runs.is_empty() {
+            runs.push(Run::new("  ", sz::SMALL, Color::Ink));
+        }
+        runs.push(Run::new(x, sz::SMALL, Color::Ink).italic());
+    }
+    if !runs.is_empty() {
+        out.push(Block::para(runs));
+    }
+}
+
+/// The lens's relatives — every other code under the same root in the
+/// dictionary's derivations, each named by lemma and transliteration and opening
+/// its own dictionary card. Nothing when the code stands alone.
+///
+/// These are IN the evidence below: the source's `code_usage` answers for the
+/// whole family, the way the surface lens answers for every form of a word
+/// ("devils" was showing only δαιμόνιον, never δαίμων — maintainer, 2026-09-10).
+/// So the row is what tells a reader why a line they did not expect is bold.
+fn same_root_row(src: &dyn PanelSource, code: &str, out: &mut Vec<Block>) {
+    let family = src.code_family(code);
+    let others: Vec<&String> = family.iter().filter(|c| c.as_str() != code).collect();
+    if others.is_empty() {
+        return;
+    }
+    let mut runs = vec![Run::new(s("panel.sameRoot"), sz::SMALL, Color::Faded)];
+    for (i, o) in others.iter().enumerate() {
+        runs.push(Run::new(if i == 0 { "  " } else { "  ·  " }, sz::SMALL, Color::Faded));
+        let e = src.strongs(o);
+        let lemma = e.as_ref().and_then(|e| e.lemma.clone()).unwrap_or_else(|| o.to_string());
+        runs.push(Run::new(lemma, sz::SMALL, Color::Gold).link(format!("code:{o}")));
+        if let Some(x) = e.and_then(|e| e.xlit) {
+            runs.push(Run::new(format!(" {x}"), sz::SMALL, Color::Faded).italic());
+        }
+    }
+    out.push(Block::para(runs));
 }
 
 /// The tier-mark glyphs — additive, never one "winning" tier — plus a research flask.
@@ -910,12 +972,7 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
 
     match src.strongs(code) {
         Some(e) => {
-            if let Some(l) = &e.lemma {
-                out.push(Block::para(vec![Run::new(l, sz::LEMMA, Color::Ink)]));
-            }
-            if let Some(x) = &e.xlit {
-                out.push(Block::para(vec![Run::new(x, sz::SMALL, Color::Ink).italic()]));
-            }
+            lemma_line(&e, out);
             if let Some(p) = &e.pron {
                 out.push(Block::para(vec![Run::new(format!("/{p}/"), sz::SMALL, Color::Mono)]));
             }
@@ -1285,26 +1342,29 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
             Run::new(q.word, sz::LABEL, Color::Gold).link(wusage_uri(q.word, scope, 0))
         });
         for code in q.codes {
-            let lemma = src.strongs(code).and_then(|e| e.lemma).unwrap_or_else(|| code.clone());
+            let e = src.strongs(code);
+            let lemma = e.as_ref().and_then(|e| e.lemma.clone()).unwrap_or_else(|| code.clone());
             runs.push(Run::new("  ·  ", sz::LABEL, Color::Faded));
             runs.push(if q.lens == Some(code.as_str()) {
                 Run::new(lemma, sz::LABEL, Color::Ink).bold()
             } else {
                 Run::new(lemma, sz::LABEL, Color::Gold).link(lusage_uri(code, q.word, scope, 0))
             });
+            // The transliteration beside the chip too, so the row reads before
+            // it is tapped.
+            if let Some(x) = e.and_then(|e| e.xlit) {
+                runs.push(Run::new(format!(" {x}"), sz::SMALL, Color::Faded).italic());
+            }
         }
         out.push(Block::para(runs));
-        // In the lens, name the original word properly: lemma large, then the
-        // transliteration for a reader who does not read the script.
+        // In the lens, name the original word properly — lemma large with the
+        // transliteration beside it — and then its relatives, which the evidence
+        // below includes.
         if let Some(code) = q.lens {
             if let Some(e) = src.strongs(code) {
-                if let Some(l) = &e.lemma {
-                    out.push(Block::para(vec![Run::new(l, sz::LEMMA, Color::Ink)]));
-                }
-                if let Some(x) = &e.xlit {
-                    out.push(Block::para(vec![Run::new(x, sz::SMALL, Color::Ink).italic()]));
-                }
+                lemma_line(&e, &mut out);
             }
+            same_root_row(src, code, &mut out);
         }
     }
 
@@ -1454,10 +1514,13 @@ pub fn concordance(src: &dyn PanelSource, code: &str) -> Vec<Block> {
         )
         .italic()])];
     }
-    let lemma = src.strongs(code).and_then(|e| e.lemma);
+    let entry = src.strongs(code);
     let mut head = vec![Run::new(code, sz::TITLE, Color::Ink).bold()];
-    if let Some(l) = lemma {
+    if let Some(l) = entry.as_ref().and_then(|e| e.lemma.as_deref()) {
         head.push(Run::new(format!("  {l}"), sz::TITLE, Color::Ink));
+        if let Some(x) = entry.as_ref().and_then(|e| e.xlit.as_deref()) {
+            head.push(Run::new(format!("  {x}"), sz::SMALL, Color::Faded).italic());
+        }
     }
     out.push(Block::para(head));
     out.push(Block::para(vec![Run::new(

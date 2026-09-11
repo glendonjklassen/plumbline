@@ -21,6 +21,7 @@ import {
   type PackFile,
   fetchManifest,
   fetchPack,
+  fetchPackEntries,
   fetchStageLocal,
   type PackManifest,
 } from "./pack";
@@ -78,6 +79,47 @@ export interface BootResult {
  *  this is a question for the manifest, not for the reader's install history. */
 function manifestHasCorpus(manifest: PackManifest, role: string): boolean {
   return manifest.files.some((f) => f.role === role);
+}
+
+/** Bring the home's text into line with the language the engine is about to open
+ *  in — see the call site. `inflated` is the corpus role stage 1 put in the home.
+ *
+ *  Answers the role the home now holds for `resolved`, and the manifest to carry
+ *  on with: refreshed from the network in one case only, a pin written by an older
+ *  build that has never heard of this language's corpus, where the pin's manifest
+ *  would otherwise answer "the KJV" for a Bible the pack does ship. Offline, the
+ *  pin's answer stands and the KJV is the honest fallback. */
+async function reconcileCorpus(
+  manifest: PackManifest,
+  home: VirtualHome,
+  resolved: string,
+  inflated: string,
+  stale: boolean,
+  trace: [string, number][],
+): Promise<{ role: string; manifest: PackManifest }> {
+  let m = manifest;
+  const wantIn = (mm: PackManifest) => corpusRoleFor(resolved, "", (role) => manifestHasCorpus(mm, role));
+  let want = wantIn(m);
+  if (want === "corpusCache" && resolved !== "en" && stale) {
+    try {
+      const live = await fetchManifest();
+      if (wantIn(live) !== "corpusCache") m = live;
+      want = wantIn(m);
+    } catch {
+      /* offline: the pin's manifest is what this device has */
+    }
+  }
+  if (want === inflated) return { role: want, manifest: m };
+  const entry = m.files.find((f) => f.role === want);
+  if (!entry) return { role: inflated, manifest: m };
+  // Read-through: the depot's copy when it has one (every Bible ships in the
+  // background, so usually), the network only when it does not.
+  const got = await fetchPackEntries(m.version, [entry]);
+  const bytes = got.get(entry.path);
+  if (!bytes) return { role: inflated, manifest: m };
+  home.addFiles(new Map([[entry.path, bytes]]));
+  trace.push([`corpus reconciled (${want}; the hint said ${inflated})`, 1]);
+  return { role: want, manifest: m };
 }
 
 export async function boot(
@@ -207,7 +249,27 @@ export async function boot(
   // reason.) The engine resolves and validates; an unshipped code falls back
   // exactly as an unshipped setting would.
   const chosen = typeof cfg.language === "string" ? cfg.language : "";
-  i18nSetLanguage(wasm, chosen || sharedLang, locale);
+  const resolved = i18nSetLanguage(wasm, chosen || sharedLang, locale);
+
+  // The corpus stage 1 inflated was picked from a HINT — `lang`, this device's last
+  // resolved code or the link's — before there was a config to read. The language
+  // just resolved is the truth, and the engine opens whatever text the home holds
+  // under it, falling back to the KJV when that text is absent (`open_corpus`). So a
+  // hint that guessed wrong paints Punjabi chrome over the KJV (a `langChosen` flag
+  // left behind by a restored backup; a pin from before the language shipped), or —
+  // the other way round — fails the open outright, the KJV having been skipped for
+  // a Bible the config does not want. Reconcile the home with the resolved language
+  // before the open: its corpus from the depot, the network only when the depot
+  // lacks it, and no request at all on the boot where the hint was right — which is
+  // every ordinary boot.
+  const stale = fromPin && pinIsFromAnOlderBuild(pinned);
+  // A `const` copy: the closure below cannot see the narrowing the `if` above did.
+  const loaded: PackManifest = manifest;
+  const settled = await timed("corpus reconcile", () =>
+    reconcileCorpus(loaded, home, resolved, wantCorpus, stale, trace),
+  );
+  manifest = settled.manifest;
+  wantCorpus = settled.role;
 
   onPhase({ phase: "open" });
   // Yield so the "opening" progress message lands before the synchronous parse.
@@ -249,6 +311,6 @@ export async function boot(
     trace,
     fromPin,
     corpusRole: wantCorpus,
-    staleManifest: fromPin && pinIsFromAnOlderBuild(pinned),
+    staleManifest: stale,
   };
 }
