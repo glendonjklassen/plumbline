@@ -772,21 +772,34 @@ test("the whole shell is stored after one visit, not just what this page loaded"
   // simply missing offline. The build emits the shell's exact file list instead,
   // and this asserts the depot holds all of it.
   await boot(page);
-  await page.waitForTimeout(1_500); // the precache runs at the first idle
 
-  const { missing, total } = await page.evaluate(async () => {
-    const manifest = await (await fetch("shell-manifest.json")).json();
-    const cache = await caches.open("plumbline-v1");
-    const missing: string[] = [];
-    for (const f of manifest.files) {
-      if (!(await cache.match(new URL(f, location.href).href, { ignoreVary: true }))) missing.push(f);
-    }
-    return { missing, total: manifest.files.length };
-  });
-  expect(total, "the shell manifest should list the bundles, the fonts and the icons").toBeGreaterThan(8);
-  expect(missing, "these shell files are not on the device — an offline launch would white-screen").toEqual(
-    [],
+  // The precache runs at the first idle — which on WebKit, with no
+  // `requestIdleCallback`, is a 1.2 s timer, and then a dozen fetches on a CI
+  // runner busy with three other workers. So poll for the files rather than
+  // sleep a fixed 1.5 s and look once: that was the fixed-ceiling trap
+  // (CLAUDE.md), and it went red twice in a row on a loaded runner, 2026-09-11.
+  // The property is unchanged — a chunk the manifest does not list is never
+  // fetched at all, so the poll never sees it arrive and the test still fails.
+  const total = await page.evaluate(
+    async () => ((await (await fetch("shell-manifest.json")).json()).files as string[]).length,
   );
+  expect(total, "the shell manifest should list the bundles, the fonts and the icons").toBeGreaterThan(8);
+  const missing = () =>
+    page.evaluate(async () => {
+      const manifest = await (await fetch("shell-manifest.json")).json();
+      const cache = await caches.open("plumbline-v1");
+      const missing: string[] = [];
+      for (const f of manifest.files as string[]) {
+        if (!(await cache.match(new URL(f, location.href).href, { ignoreVary: true }))) missing.push(f);
+      }
+      return missing;
+    });
+  await expect
+    .poll(missing, {
+      timeout: 30_000,
+      message: "these shell files are not on the device — an offline launch would white-screen",
+    })
+    .toEqual([]);
 });
 
 test("the engine worker measures with the real reader font, not a fallback", async ({ page }) => {
