@@ -52,6 +52,7 @@ pub unsafe extern "C" fn plumbline_engine_reading_books_json(
             books: reading::books(&e.corpus, e.reading_words(), &store, now),
             since,
             spec: reading::spec(),
+            forecast: reading::forecast(e.reading_words(), &store, now),
         })
     })
 }

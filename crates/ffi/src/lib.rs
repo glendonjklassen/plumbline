@@ -195,6 +195,10 @@ pub struct PlumblineEngine {
     /// Words per chapter for the whole canon — the reading map's denominators. Cached because
     /// the navigator asks for all 1,189 chapters every time it opens.
     reading_words: OnceLock<reading::ChapterWords>,
+    /// Strong's codes grouped by the root their derivations lead to (`core::strongs::Families`)
+    /// — the original-word lens's "every form of this word". Needs the dictionary, so it is
+    /// built on first use after that loads; ~14k short strings, once.
+    families: OnceLock<plumbline_core::strongs::Families>,
     /// How long the chapter on screen has really been read (`core::reading::DwellTracker`,
     /// driven by `plumbline_engine_reading_tick_json`). On the engine because it is per-reader
     /// state over a clock the core does not have: a shell samples once a second and the core
@@ -258,6 +262,7 @@ impl PlumblineEngine {
             concept: OnceLock::new(),
             leitwort: OnceLock::new(),
             reading_words: OnceLock::new(),
+            families: OnceLock::new(),
             dwell: std::sync::Mutex::new(reading::DwellTracker::default()),
             measure_memo: std::sync::Mutex::new(MeasureMemo::new()),
         }
@@ -302,6 +307,14 @@ impl PlumblineEngine {
     fn strongs(&self) -> &StrongsDict {
         static EMPTY: OnceLock<StrongsDict> = OnceLock::new();
         self.strongs.get().unwrap_or_else(|| EMPTY.get_or_init(StrongsDict::new))
+    }
+
+    /// The derivation families — None until the dictionary is in, and never cached over an
+    /// empty one (stage 1 on the web opens before Strong's arrives; a family index built
+    /// then would say every word stands alone for the rest of the session).
+    fn families(&self) -> Option<&plumbline_core::strongs::Families> {
+        self.strongs.get()?;
+        Some(self.families.get_or_init(|| plumbline_core::strongs::Families::build(self.strongs())))
     }
 
     /// The fused OT↔NT bridge — needs Strong's, so it is None until the
@@ -1158,7 +1171,7 @@ pub unsafe extern "C" fn plumbline_engine_open_from_bytes(
                 return ptr::null_mut();
             }
         };
-        let strongs: StrongsDict = match serde_json::from_slice(strongs_bytes) {
+        let strongs: StrongsDict = match strongs::parse_strongs(strongs_bytes) {
             Ok(s) => s,
             Err(e) => {
                 set_err(out_err, format!("could not parse strongs.json: {e}"));
@@ -2965,10 +2978,12 @@ impl PanelSource for PlumblineEngine {
         english_gloss(self, code)
     }
     fn chip(&self, code: &str) -> panel::ChipView {
+        let entry = self.strongs().get(code);
         panel::ChipView {
             code: code.to_string(),
             gloss: english_gloss(self, code),
-            lemma: self.strongs().get(code).and_then(|e| e.lemma.clone()),
+            lemma: entry.and_then(|e| e.lemma.clone()),
+            xlit: entry.and_then(|e| e.xlit.clone()),
         }
     }
     fn renderings(&self, code: &str) -> Vec<panel::RenderingView> {
@@ -3032,8 +3047,26 @@ impl PanelSource for PlumblineEngine {
     }
     fn code_usage(&self, code: &str, scope: &str, page: u32) -> Option<panel::WordUsageView> {
         let ix = self.search_ix_ready()?;
-        let all = ix.lemma_verses(code);
-        Some(usage_over(&self.corpus, all, scope, page, code.to_string(), &|t| t.strongs.iter().any(|s| s == code)))
+        // The whole derivation family, not the one code: the surface lens answers
+        // "rulers" with "ruler", and the original-word lens owes the same — δαίμων
+        // and "possessed with devils" (δαιμονίζομαι) beside δαιμόνιον. The card's
+        // same-root row names what was folded in; `code_family` and this must agree.
+        let family = panel::PanelSource::code_family(self, code);
+        let all: Vec<usize> = if family.len() == 1 {
+            ix.lemma_verses(code).to_vec()
+        } else {
+            let mut v: Vec<usize> = family.iter().flat_map(|c| ix.lemma_verses(c).iter().copied()).collect();
+            v.sort_unstable();
+            v.dedup();
+            v
+        };
+        let codes: std::collections::HashSet<String> = family.into_iter().collect();
+        Some(usage_over(&self.corpus, &all, scope, page, code.to_string(), &move |t| {
+            t.strongs.iter().any(|s| codes.contains(s))
+        }))
+    }
+    fn code_family(&self, code: &str) -> Vec<String> {
+        self.families().map(|f| f.family(code)).unwrap_or_else(|| vec![code.to_string()])
     }
     fn bridge_partners(&self, code: &str) -> Vec<panel::BridgePartnerView> {
         self.bridge_ready()

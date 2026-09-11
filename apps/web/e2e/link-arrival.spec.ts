@@ -51,6 +51,37 @@ test("a link's language picks the Bible for a reader who never chose one", async
   expect(await page.evaluate(() => localStorage.getItem("plumbline.langChosen"))).toBe("1");
 });
 
+test("the Bible follows the language the engine resolves, whatever the corpus hint said", async ({ page }) => {
+  // Stage 1 picks the corpus from a HINT in localStorage before there is a config
+  // to read; the engine then resolves the language from the config, and opens
+  // whatever text is in the home — the KJV, when the hinted one is not the
+  // resolved one. The two can disagree: here `langChosen` says a language was
+  // chosen while the config carries none, which is what a restored backup leaves
+  // behind (the flag is the shell's, the config the restore's). The hint is then
+  // the last resolved code ("en"); the engine resolves the link's "pa".
+  //
+  // Without the reconcile in `boot()` the trace says `corpus loaded (corpusCache)`
+  // and nothing corrects it: Punjabi chrome over the KJV, and the Gurmukhi
+  // assertion on the first verse is what goes red. With it, the home is brought
+  // into line before the open, and the trace carries the `corpus reconciled` line
+  // asserted below — so the test also fails if the reconcile silently stops
+  // running while some other path happens to pick the right Bible.
+  await page.goto("/");
+  await booted(page);
+  await page.evaluate(() => localStorage.setItem("plumbline.langChosen", "1"));
+  expect(await page.evaluate(() => localStorage.getItem("plumbline.lang"))).toBe("en");
+
+  await page.goto(`/?lang=pa&thread=${encodeURIComponent(PUNJABI_WALK)}`);
+  await expect(page.locator(".present .overview")).toBeVisible({ timeout: 180_000 });
+  expect(await page.evaluate(() => document.documentElement.lang)).toBe("pa");
+  const firstVerse = page.locator(".overview .entry .body").first();
+  await expect(firstVerse).toHaveText(/[਀-੿]/, { timeout: 60_000 });
+  const trace = (await page.evaluate(() => (window as any).__plumbline.rpc.bootTrace())) as [string, number][];
+  const stages = trace.map(([k]) => k);
+  expect(stages.find((k) => k.startsWith("corpus loaded"))).toBe("corpus loaded (corpusCache)");
+  expect(stages.some((k) => k.startsWith("corpus reconciled (corpus:pa"))).toBe(true);
+});
+
 test("a stashed link is honoured by the build that reloads into it", async ({ page }) => {
   await page.addInitScript(() => {
     if (!sessionStorage.getItem("plumbline.retriedLink"))

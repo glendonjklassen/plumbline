@@ -37,6 +37,7 @@ struct Fake {
     search: Option<SearchView>,
     word_usage: Option<WordUsageView>,
     code_usage: Option<WordUsageView>,
+    families: HashMap<String, Vec<String>>,
 }
 
 impl PanelSource for Fake {
@@ -58,6 +59,9 @@ impl PanelSource for Fake {
     fn code_usage(&self, _code: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
         self.code_usage.clone()
     }
+    fn code_family(&self, code: &str) -> Vec<String> {
+        self.families.get(code).cloned().unwrap_or_else(|| vec![code.to_string()])
+    }
     fn strongs(&self, code: &str) -> Option<StrongsView> {
         self.entries.get(code).cloned()
     }
@@ -69,6 +73,7 @@ impl PanelSource for Fake {
             code: code.to_string(),
             gloss: self.glosses.get(code).cloned(),
             lemma: self.lemmas.get(code).cloned(),
+            xlit: self.entries.get(code).and_then(|e| e.xlit.clone()),
         }
     }
     fn renderings(&self, code: &str) -> Vec<RenderingView> {
@@ -1249,6 +1254,48 @@ fn word_usage_card_lens_switches_to_the_original_word() {
     // Scope chips and paging carry the lens.
     assert_eq!(uri_of("Old Testament"), Some("lusage:0:H2617:mercy:ot".into()));
     assert_eq!(uri_of("›"), Some("lusage:2:H2617:mercy:all".into()));
+}
+
+#[test]
+fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
+    // The lens over a code whose derivation family has other members: the lemma
+    // and its transliteration share one line, and a row names each relative —
+    // the evidence the source folds in (its `code_usage` covers the family) —
+    // opening that relative's dictionary card. A code standing alone gets no row.
+    let codes = vec!["G1140".to_string()];
+    let mut f = Fake { code_usage: Some(usage_view()), ..Default::default() };
+    f.entries.insert(
+        "G1140".into(),
+        StrongsView { lemma: Some("δαιμόνιον".into()), xlit: Some("daimónion".into()), ..Default::default() },
+    );
+    f.entries.insert(
+        "G1142".into(),
+        StrongsView { lemma: Some("δαίμων".into()), xlit: Some("daímōn".into()), ..Default::default() },
+    );
+    f.entries.insert("G1139".into(), StrongsView { lemma: Some("δαιμονίζομαι".into()), ..Default::default() });
+    f.families.insert("G1140".into(), vec!["G1139".into(), "G1140".into(), "G1142".into()]);
+
+    let q = UsageQuery { word: "devils", lens: Some("G1140"), scope: "all", page: 0, origin: None, codes: &codes };
+    let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
+    let runs = flat_runs(&blocks);
+
+    // One line: letters, then the transliteration beside them.
+    let header = blocks.iter().find(|b| text_of(b).starts_with("δαιμόνιον")).expect("the lens header");
+    assert_eq!(text_of(header), "δαιμόνιον  daimónion");
+    // The relatives, each a door to its own card; the lensed code is not listed as its own relative.
+    let row = blocks.iter().find(|b| text_of(b).starts_with("Same root:")).expect("the same-root row");
+    assert_eq!(text_of(row), "Same root:  δαιμονίζομαι  ·  δαίμων daímōn");
+    let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
+    assert_eq!(uri_of("δαίμων"), Some("code:G1142".into()));
+    assert_eq!(uri_of("δαιμονίζομαι"), Some("code:G1139".into()));
+
+    // Alone in its family: no row at all.
+    let solo = vec!["G2316".to_string()];
+    let mut g = Fake { code_usage: Some(usage_view()), ..Default::default() };
+    g.entries.insert("G2316".into(), StrongsView { lemma: Some("θεός".into()), ..Default::default() });
+    let q = UsageQuery { word: "God", lens: Some("G2316"), scope: "all", page: 0, origin: None, codes: &solo };
+    let blocks = word_usage_card(&g, Gates::from_bits(0), &q);
+    assert!(!blocks.iter().any(|b| text_of(b).starts_with("Same root:")));
 }
 
 #[test]

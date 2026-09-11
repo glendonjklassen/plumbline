@@ -10,7 +10,7 @@
   import { getSession } from "../state/session.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
   import { dispatchLink } from "../study/links";
-  import { lang, t } from "../lib/i18n.svelte";
+  import { dateLocale, lang, t } from "../lib/i18n.svelte";
   import { localDay } from "../engine/StudyEngine";
 
   const s = getSession();
@@ -76,7 +76,7 @@
   function startedOn(stamp: string): string {
     const d = new Date(stamp);
     if (isNaN(d.getTime())) return stamp.slice(0, 10);
-    return d.toLocaleDateString(lang(), { day: "numeric", month: "short", year: "numeric" });
+    return d.toLocaleDateString(dateLocale(), { day: "numeric", month: "short", year: "numeric" });
   }
 
   /** refKey → the core's `go:` verb, split on the LAST space, as core `go_uri`

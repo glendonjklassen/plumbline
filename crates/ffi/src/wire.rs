@@ -1626,6 +1626,10 @@ pub struct WireReadingBooks {
     /// The date this reader started — the glow anchor for anything unread.
     pub since: String,
     pub spec: reading::Spec,
+    /// When the whole Bible is read at the pace so far (additive; absent until
+    /// a chapter has been read through, and once every chapter has).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub forecast: Option<reading::Forecast>,
 }
 
 /// One book's chapters, for the chapter grid.
