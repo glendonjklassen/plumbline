@@ -680,7 +680,7 @@
   "settings.suggestedInstalled": "Installés. Ils se trouvent sous Suggestions dans la bibliothèque de tissages, où vous pouvez garder ou rejeter chacun d'eux.",
   "settings.suggestedOffer": "Un grand ensemble de liens de versets proposés, à relire pour garder ou rejeter. Téléchargement unique de {kb} Ko.",
   "settings.sundayService": "Heure du culte du dimanche",
-  "settings.sundayServiceDesc": "Le signet du dimanche enregistre votre place à partir de cette heure jusqu'à 1,5 heure après. Laissez vide pour utiliser le dimanche matin.",
+  "settings.sundayServiceDesc": "Le signet du dimanche enregistre votre place de 30 minutes avant cette heure jusqu'à 1,5 heure après. Laissez vide pour utiliser le dimanche matin.",
   "settings.sundayServiceUnset": "Non défini",
   "settings.switchingTo": "Changement vers {language}…",
   "settings.textFont": "Police de l'Écriture",

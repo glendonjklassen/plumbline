@@ -680,7 +680,7 @@
   "settings.suggestedInstalled": "已安裝。這些項目會列在串珠庫的「建議」分類中，您可以逐一決定保留或拒絕。",
   "settings.suggestedOffer": "大量建議的經文連結，供您審核並決定保留或拒絕。一次性下載 {kb} KB。",
   "settings.sundayService": "週日聚會時間",
-  "settings.sundayServiceDesc": "週日書籤會從這個時間起到 1.5 小時後保存您的閱讀位置。留空則預設使用週日上午。",
+  "settings.sundayServiceDesc": "週日書籤會從這個時間前 30 分鐘起到 1.5 小時後保存您的閱讀位置。留空則預設使用週日上午。",
   "settings.sundayServiceUnset": "尚未設定",
   "settings.switchingTo": "正在切換為{language}…",
   "settings.textFont": "經文字型",

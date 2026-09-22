@@ -16,10 +16,18 @@
 export interface HistoryEntry {
   readonly book: string;
   readonly chapter: number;
+  /** The NAMED seating it was read in — a `core::session_slot` token, stamped
+   *  by `Session.pushHistory`. Absent for the everyday seating, and for every
+   *  entry written before seatings were stamped (2026-09-21); the key rides
+   *  through the core's config round trip untouched (config.rs keeps a history
+   *  entry's extra keys). */
+  readonly slot?: string;
 }
 
 export interface HistorySpan {
   readonly book: string;
+  /** The seating every entry in the run was read in — see [[HistoryEntry.slot]]. */
+  readonly slot?: string;
   /** What a tap opens: the chapter of the run's MOST RECENT entry, which is
    *  where the reader actually was — not the lowest number in the span. */
   readonly open: number;
@@ -36,17 +44,32 @@ export interface HistorySpan {
  * across that would rewrite the order they did things in. Contiguity is checked
  * against either end of the run, so reading forwards (which lands in the list
  * as 3, 2, 1) and reading backwards both collapse.
+ *
+ * AND IN THE SAME SEATING: a run that began on Saturday night and crossed into
+ * the pew is two things the reader did, and the seating's icon on the one line
+ * would otherwise claim the whole of it for church.
  */
 export function historySpans(history: readonly HistoryEntry[]): HistorySpan[] {
   const out: HistorySpan[] = [];
   for (const h of history) {
     const run = out[out.length - 1];
-    if (run && run.book === h.book && (h.chapter === run.lo - 1 || h.chapter === run.hi + 1)) {
+    if (
+      run &&
+      run.book === h.book &&
+      (run.slot ?? null) === (h.slot ?? null) &&
+      (h.chapter === run.lo - 1 || h.chapter === run.hi + 1)
+    ) {
       run.lo = Math.min(run.lo, h.chapter);
       run.hi = Math.max(run.hi, h.chapter);
       continue;
     }
-    out.push({ book: h.book, open: h.chapter, lo: h.chapter, hi: h.chapter });
+    out.push({
+      book: h.book,
+      open: h.chapter,
+      lo: h.chapter,
+      hi: h.chapter,
+      ...(h.slot ? { slot: h.slot } : {}),
+    });
   }
   return out;
 }

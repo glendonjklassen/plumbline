@@ -37,9 +37,11 @@ test("a Sunday service time redraws the Sunday seating as its window", async ({ 
       ([dd, m, sv]) => (window as any).__plumbline.rpc.static("sessionSlotAt", dd, m, sv),
       [d, min, svc] as const,
     );
-  // Church at 10:30 (630 minutes): the seating runs from the start until 1.5 hours after, so an
-  // early Sunday riser resumes their ordinary reading rather than last week's service.
-  expect(await at("2026-08-16", 10 * 60 + 29, 630)).toBe("other");
+  // Church at 10:30 (630 minutes): the seating runs from half an hour BEFORE the start — arriving
+  // is being there (maintainer, 2026-09-21) — until 1.5 hours after it, so an early Sunday riser
+  // resumes their ordinary reading rather than last week's service.
+  expect(await at("2026-08-16", 9 * 60 + 59, 630)).toBe("other");
+  expect(await at("2026-08-16", 10 * 60, 630)).toBe("sunday-morning");
   expect(await at("2026-08-16", 10 * 60 + 30, 630)).toBe("sunday-morning");
   expect(await at("2026-08-16", 11 * 60 + 59, 630)).toBe("sunday-morning");
   expect(await at("2026-08-16", 12 * 60, 630)).toBe("sunday-evening");
@@ -169,4 +171,81 @@ test("a reopened seating restores the scroll position, not just the chapter", as
       { timeout: 30_000 },
     )
     .toBe(savedVerse);
+});
+
+// ── the seating is asked again on a return to the foreground ──────────────────────────────────
+//
+// An installed PWA is almost never launched; it is brought back. Resolved once per launch, the
+// seating on Sunday in the pew was still Saturday night's: nothing restored, and the whole service
+// was saved to the everyday slot (maintainer, 2026-09-21: "when I'm at church on Sunday morning,
+// it's not working"). The clock is the page's own `Date`, which Playwright can fix; the seating is
+// asked of the engine WITH that date and minute, so the engine itself needs no faking.
+
+const SATURDAY_NIGHT = new Date("2026-09-19T21:00:00"); // local time: a Saturday
+const SUNDAY_IN_THE_PEW = new Date("2026-09-20T10:20:00"); // ten minutes before a 10:30 service
+const CHURCH_AT = 10 * 60 + 30;
+
+/** Come back to the foreground: the event the app listens for, fired by hand. A headless page is
+ *  already "visible", so the listener's own check passes. */
+const resume = (page: Page) =>
+  page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+
+// Can fail: without the foreground listener the slot never changes after boot, so the subtitle
+// stays on Genesis 5 and the Psalms expectation times out.
+test("a return to the foreground in a new seating reopens that seating's place", async ({ page }) => {
+  await page.clock.setFixedTime(SATURDAY_NIGHT);
+  await boot(page);
+  expect(await page.evaluate(() => (window as any).__plumbline.slot)).toBe("other");
+  await page.evaluate((svc) => {
+    const s = (window as any).__plumbline;
+    s.config.sundayService = svc;
+    // Last Sunday's place, planted: the reader has not been there this session.
+    s.config.slots = { ...(s.config.slots ?? {}), "sunday-morning": { book: "Ps", chapter: 23 } };
+    s.navigate(0, "Gen", 5);
+  }, CHURCH_AT);
+  await expect(page.locator(".subtitle")).toHaveText("Genesis 5", { timeout: 30_000 });
+  // Putting the phone down: the hide flush files Saturday's place under Saturday's seating.
+  await page.evaluate(() => (window as any).__plumbline.flushConfig());
+
+  await page.clock.setFixedTime(SUNDAY_IN_THE_PEW);
+  await resume(page);
+  await expect(page.locator(".subtitle")).toHaveText("Psalms 23", { timeout: 30_000 });
+  expect(await page.evaluate(() => (window as any).__plumbline.slot)).toBe("sunday-morning");
+  // Saturday's place is still Saturday's: the restore reads the new seating and does not rewrite
+  // the old one.
+  await page.evaluate(() => (window as any).__plumbline.flushConfig());
+  expect(await page.evaluate(() => (window as any).__plumbline.config.slots)).toMatchObject({
+    other: { book: "Gen", chapter: 5 },
+    "sunday-morning": { book: "Ps", chapter: 23 },
+  });
+});
+
+// Can fail: without the write-side re-ask in saveConfig, the slot is still "other" when the
+// foreground asks, the answer differs, and the planted Psalm 23 is restored over Romans 8.
+test("a window that opens while the reader is here moves the seating, not the reader", async ({ page }) => {
+  await page.clock.setFixedTime(SATURDAY_NIGHT);
+  await boot(page);
+  await page.evaluate((svc) => {
+    const s = (window as any).__plumbline;
+    s.config.sundayService = svc;
+    s.config.slots = { ...(s.config.slots ?? {}), "sunday-morning": { book: "Ps", chapter: 23 } };
+  }, CHURCH_AT);
+
+  // The window opens under a page that stays in the foreground: the reader turns to the sermon's
+  // passage at 10:20 with the app already open. The save that navigation makes asks the seating
+  // first, so the slot moves with it.
+  await page.clock.setFixedTime(SUNDAY_IN_THE_PEW);
+  await page.evaluate(() => (window as any).__plumbline.navigate(0, "Rom", 8));
+  await expect(page.locator(".subtitle")).toHaveText("Romans 8", { timeout: 30_000 });
+  await expect.poll(() => page.evaluate(() => (window as any).__plumbline.slot)).toBe("sunday-morning");
+
+  // A lock and unlock mid-sermon: the seating is unchanged, so nothing is restored. The answer
+  // is a few ms away; the wait is for the negative, which has no event to hang on.
+  await resume(page);
+  await page.waitForTimeout(500);
+  await expect(page.locator(".subtitle")).toHaveText("Romans 8");
+  await page.evaluate(() => (window as any).__plumbline.flushConfig());
+  expect(
+    await page.evaluate(() => (window as any).__plumbline.config.slots["sunday-morning"]),
+  ).toMatchObject({ book: "Rom", chapter: 8 });
 });

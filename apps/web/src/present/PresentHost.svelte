@@ -397,12 +397,15 @@
     top: 0;
     left: 0;
     right: 0;
-    /* `max` and not a sum: in portrait `--bottomNavH` is the bar's MEASURED
-       height and the bar already carries the inset inside it, so adding the
-       inset here would count the home indicator twice. In landscape the bar is
-       gone (`--bottomNavH` is 0) and the inset is all there is — and landscape
-       is exactly how this screen gets held up to someone. */
-    bottom: max(var(--bottomNavH, 0px), var(--safeBottom));
+    /* Stop ABOVE the destination bar, whose MEASURED height already carries the
+       inset inside it; the destinations stay reachable mid-presentation. Where
+       there is no bar (`--bottomNavH` is 0: landscape, an unfolded Fold — and
+       landscape is exactly how this screen gets held up to someone) Present
+       runs to the edge and carries the inset as PADDING, below, so the cream is
+       what sits under the home indicator. It used to stop at the inset instead,
+       and the frame's paper showed through the gap: a dark band under a cream
+       screen on a dark theme (maintainer, 2026-09-21). */
+    bottom: var(--bottomNavH, 0px);
     z-index: 60;
     background: #fcf9f4;
     color: #211f1a;
@@ -412,9 +415,11 @@
     /* Present is `position: fixed`, so it escapes the frame's insets and has to
        carry its own: it is the one surface that covers the status bar and both
        edges — without them the ✕ sits under the clock and a verse set in 54px
-       type runs under the camera cutout. Bottom is the `max()` above, not
-       padding. */
-    padding: var(--safeTop) var(--safeRight) 0 var(--safeLeft);
+       type runs under the camera cutout. The bottom is the inset LESS the bar:
+       with the bar on screen the difference is negative, i.e. nothing to pad,
+       because the bar has it; without the bar it is the whole inset. */
+    padding: var(--safeTop) var(--safeRight) max(0px, var(--safeBottom) - var(--bottomNavH, 0px))
+      var(--safeLeft);
   }
   .bar {
     display: flex;

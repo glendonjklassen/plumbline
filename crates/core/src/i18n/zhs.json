@@ -680,7 +680,7 @@
   "settings.suggestedInstalled": "已安装。它们会显示在串珠库的“建议”分类下，您可以逐一保留或拒绝。",
   "settings.suggestedOffer": "一大批建议的经文串珠，供您审核后保留或拒绝。需一次性下载{kb}KB。",
   "settings.sundayService": "周日聚会时间",
-  "settings.sundayServiceDesc": "周日书签会在这个时间到之后1.5小时之间保存您的阅读位置。留空则默认使用周日早上。",
+  "settings.sundayServiceDesc": "周日书签会从这个时间前30分钟到之后1.5小时之间保存您的阅读位置。留空则默认使用周日早上。",
   "settings.sundayServiceUnset": "未设置",
   "settings.switchingTo": "正在切换到{language}…",
   "settings.textFont": "经文字体",

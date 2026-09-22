@@ -504,6 +504,28 @@
     padding-inline-start: var(--safeLeft);
     padding-inline-end: var(--safeRight);
   }
+  /* THE HOME INDICATOR'S SURFACE, where no bar carries it.
+
+     On a phone in portrait the destination bar pads itself by `--safeBottom` and
+     paints `--paneNavBg` under the pill — the same surface the status bar is
+     told about (session.chrome). Everywhere else — the wide layout, which is
+     every landscape phone and an unfolded Fold — that bar is `display: none`,
+     and nothing carried the inset: whatever happened to be LAST in the frame
+     showed under the pill. The canon strip's own colour on the reader, each
+     screen's paper on a destination, the frame's paper under a cream Present.
+     So the colour changed with every screen and every fold, and never agreed
+     with the top (maintainer, 2026-09-21).
+
+     A flex item of the inset's height in the bar's colour, and the body above it
+     shrinks by as much — which also stops the last row of every list from ending
+     under the pill. No border: at 0px (no notch) it is nothing at all. Hidden
+     under 700px, where the bar is the surface. `e2e/safe-area.spec.ts`. */
+  .frame::after {
+    content: "";
+    flex: none;
+    height: var(--safeBottom);
+    background: var(--paneNavBg, #efeae1);
+  }
   /* Measured, never seen. `visibility: hidden`, not `display: none` — a
      display:none box has no size to observe. */
   .rem-probe {
@@ -634,6 +656,10 @@
       /* Clear of the home indicator on a notched phone; the shared variable
          (app.css) so every surface says it the same way. */
       padding-bottom: var(--safeBottom);
+    }
+    /* The bar carries the inset here, so the frame's own strip stands down. */
+    .frame::after {
+      display: none;
     }
     .bottom-nav button {
       flex: 1;

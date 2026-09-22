@@ -1397,54 +1397,11 @@ export class Session {
     }
 
     // Which seating is this? Asked of the engine with the reader's own local date
-    // and hour, then used to prefer that slot's saved position over the plain
-    // last one, so arriving at a Sunday service reopens last Sunday's service
-    // rather than Saturday night's study.
-    //
-    // Fire-and-forget rather than awaited: the panes below must be built now, so
-    // the restore applies when it lands and only if the reader has not already
-    // navigated. A slot never used falls through to the plain last position.
-    const now = new Date();
-    const localDate =
-      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    void this.rpc
-      .static(
-        "sessionSlotAt",
-        localDate,
-        now.getHours() * 60 + now.getMinutes(),
-        // The configured Sunday service start (minutes since midnight), or -1
-        // for "never set", which keeps the before-noon rule in the core.
-        typeof this.config.sundayService === "number" ? this.config.sundayService : -1,
-      )
-      .then((slot: string) => {
-        this.slot = slot;
-        const seat = (this.config.slots as Record<string, any> | undefined)?.[slot];
-        // `#navigatedSinceBoot` guards the race: if the reader has already gone
-        // somewhere in the few ms this took, their tap wins over the restore.
-        //
-        // Reseed, never navigate(): this is boot-time seeding arriving with
-        // better data, not a move the reader made. navigate() also claims the
-        // screen — it always lands in the reader — which would stomp the
-        // destination a launch shortcut (?open=review) chose on this same boot,
-        // and would stamp history for a page nobody turned. The active pane,
-        // because that is the pane the seat was recorded from.
-        if (seat?.book && !this.#navigatedSinceBoot) {
-          const pane = this.panes[this.activePane] ?? this.panes[0];
-          if (pane) {
-            const count = this.chapterCount(seat.book);
-            pane.book = seat.book;
-            pane.chapter = Math.max(1, count > 0 ? Math.min(seat.chapter, count) : seat.chapter);
-            pane.targetVerse = seat.verse && seat.verse > 1 ? seat.verse : null;
-            pane.pendingScroll = !!(seat.verse && seat.verse > 1);
-            pane.scrollY = 0;
-            pane.reached = 0;
-            this.saveConfig();
-          }
-        }
-      })
-      .catch(() => {
-        /* no slot: the plain last position stands */
-      });
+    // and minute, and answered by reopening that seating's saved place, so
+    // arriving at a Sunday service reopens last Sunday's service rather than
+    // Saturday night's study. Asked again on every return to the foreground —
+    // see #reseat, which is also why the answer is not awaited here.
+    void this.#reseat(true);
 
     const saved = loaded.openPanes?.length ? loaded.openPanes : [{ book: "John", chapter: 3 }];
     // Restore no more panes than fit — `addPane` guards the button, but a config
@@ -1625,7 +1582,15 @@ export class Session {
     // fourth mechanism.
     addEventListener("pageshow", () => this.applyChrome());
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") this.applyChrome();
+      if (document.visibilityState !== "visible") return;
+      this.applyChrome();
+      // The same moment is when the SEATING can have changed under a page that
+      // never reloaded: Saturday night's app, brought back in the pew. Boot's
+      // question, asked again — with the restore, because a different seating
+      // on the way back in is exactly "opening the app at church". Only here,
+      // not on pageshow: a bfcache restore raises this event as well, and a
+      // fresh load has just asked in the constructor.
+      void this.#reseat(true);
     });
     // Trailing-debounced: a fold sweeps through dozens of intermediate sizes and
     // only the one it settles at is worth a write.
@@ -1939,6 +1904,11 @@ export class Session {
 
   /** Persist config (debounced) — pane set, zoom, theme, gates, history. */
   saveConfig(): void {
+    // The seating first — write-side only, no restore — so the snapshot 300 ms
+    // from now is filed under the seating it is being made in. The answer is a
+    // few ms away; the debounce is the rest. See #reseat for why this ordering
+    // is what keeps a mid-service resume from restoring last week's passage.
+    void this.#reseat(false);
     if (this.#saveTimer) clearTimeout(this.#saveTimer);
     this.#saveTimer = setTimeout(() => {
       if (this.restoring) return;
@@ -1971,22 +1941,96 @@ export class Session {
   #pushHistory(book: string, chapter: number): void {
     const h: any[] = (this.config.history ??= []);
     const without = h.filter((e) => !(e.book === book && e.chapter === chapter));
-    this.config.history = [{ book, chapter }, ...without].slice(0, HISTORY_CAP);
+    // WHERE it was read, for the History sheet's icon (historySpans.ts): a
+    // named seating only — the everyday one is the absence of a mark. Additive
+    // on the wire, and the key rides the core's config round trip untouched
+    // (config.rs keeps a history entry's extra keys).
+    const seat = this.slot && this.slot !== "other" ? { slot: this.slot } : {};
+    this.config.history = [{ book, chapter, ...seat }, ...without].slice(0, HISTORY_CAP);
   }
 
-  /** The seating this session belongs to, resolved ONCE per launch from the
-   *  reader's own local clock (`core::session_slot`, asked through the engine so
-   *  the two shells cannot drift on when a service is). Null until the answer
-   *  lands, which is a few ms into boot — a save before then simply does not
-   *  mark a slot, and the plain last position still covers it. The slot's
-   *  passage is written by every `#configSnapshot`, so the next Sunday morning
-   *  reopens THIS Sunday morning rather than Saturday night's study. */
+  /** The seating this session is in, resolved from the reader's own local
+   *  clock (`core::session_slot`, asked through the engine so no shell can
+   *  drift on when a service is). Null until boot's first answer lands, a few
+   *  ms in — a save before then simply does not mark a slot, and the plain last
+   *  position still covers it. The slot's passage is written by every
+   *  `#configSnapshot`, so the next Sunday morning reopens THIS Sunday morning
+   *  rather than Saturday night's study.
+   *
+   *  NOT once per launch. It was, and an installed PWA is almost never
+   *  launched — it is brought back — so on Sunday in the pew the app was still
+   *  in Saturday night's seating: nothing restored, and the whole service was
+   *  saved to the everyday slot (maintainer, 2026-09-21: "when I'm at church on
+   *  Sunday morning, it's not working"). [[#reseat]] lists the moments it is
+   *  asked again. */
   slot = $state<string | null>(null);
 
-  /** Whether the reader has moved since boot. The slot restore lands a few ms
-   *  after the panes are built, and it must never yank someone away from a
-   *  passage they chose in the meantime. */
-  #navigatedSinceBoot = false;
+  /** Bumped by every navigation. A seating restore is answered by the engine a
+   *  few ms after it is asked, and it must never yank someone away from a
+   *  passage they chose in the meantime: the asker notes the count, the answer
+   *  compares. A counter rather than a latch, because the question is now asked
+   *  more than once a session. */
+  #navGen = 0;
+
+  /** Ask the core which seating NOW is, in the reader's own local date and
+   *  minute, and adopt the answer as [[slot]].
+   *
+   *  With `restore`, a seating that DIFFERS from the one this session was in
+   *  also reopens its saved place — what boot has always done, and now also
+   *  what a return to the foreground does, so opening the app in the pew finds
+   *  last Sunday's passage whether or not the process survived the week.
+   *  Without it the answer only redirects the WRITES: every save asks first, so
+   *  a service window that opens while the reader is already here moves the
+   *  slot without moving them. That is what keeps a lock-and-unlock mid-sermon
+   *  from restoring last week's passage over this week's — by the time the
+   *  foreground asks, the slot has already moved and "unchanged" restores
+   *  nothing. The two are one method on purpose, because that ordering is the
+   *  whole rule.
+   *
+   *  Fire-and-forget at every call site: the panes are built now, the answer
+   *  applies when it lands and only if the reader has not moved since. A slot
+   *  never used falls through to the position already on screen. */
+  async #reseat(restore: boolean): Promise<void> {
+    const before = this.slot;
+    const gen = this.#navGen;
+    const now = new Date();
+    const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    let slot: string;
+    try {
+      slot = await this.rpc.static(
+        "sessionSlotAt",
+        localDate,
+        now.getHours() * 60 + now.getMinutes(),
+        // The configured Sunday service start (minutes since midnight), or -1
+        // for "never set", which keeps the before-noon rule in the core.
+        typeof this.config.sundayService === "number" ? this.config.sundayService : -1,
+      );
+    } catch {
+      return; // no answer: the seating stands as it was
+    }
+    this.slot = slot;
+    if (!restore || slot === before) return;
+    // The reader has gone somewhere in the few ms this took: their tap wins.
+    if (gen !== this.#navGen) return;
+    const seat = (this.config.slots as Record<string, any> | undefined)?.[slot];
+    if (!seat?.book) return;
+    // Reseed, never navigate(): this is seeding arriving with better data, not a
+    // move the reader made. navigate() also claims the screen — it always lands
+    // in the reader — which would stomp the destination a launch shortcut
+    // (?open=review) chose on this same boot, and would stamp history for a page
+    // nobody turned. The active pane, because that is the pane the seat was
+    // recorded from.
+    const pane = this.panes[this.activePane] ?? this.panes[0];
+    if (!pane) return;
+    const count = this.chapterCount(seat.book);
+    pane.book = seat.book;
+    pane.chapter = Math.max(1, count > 0 ? Math.min(seat.chapter, count) : seat.chapter);
+    pane.targetVerse = seat.verse && seat.verse > 1 ? seat.verse : null;
+    pane.pendingScroll = !!(seat.verse && seat.verse > 1);
+    pane.scrollY = 0;
+    pane.reached = 0;
+    this.saveConfig();
+  }
 
   /** Navigate a pane, recording per-pane back/forward + recents history. */
   navigate(
@@ -1998,9 +2042,9 @@ export class Session {
   ): void {
     const pane = this.panes[paneIdx];
     if (!pane) return;
-    // Any navigation — including the slot restore's own, harmlessly, since it
-    // is one-shot — means the reader is no longer sitting on the booted page.
-    this.#navigatedSinceBoot = true;
+    // Any navigation means the reader is no longer where a seating restore in
+    // flight would put them — see #reseat, which compares this count.
+    this.#navGen++;
     const count = this.chapterCount(book);
     if (count > 0) chapter = Math.min(chapter, count);
     chapter = Math.max(chapter, 1);

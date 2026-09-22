@@ -481,14 +481,18 @@
   .sing-host {
     position: fixed;
     inset: 0;
-    bottom: max(var(--bottomNavH, 0px), var(--safeBottom));
+    /* Present's rule (PresentHost.svelte): stop above the destination bar,
+       which carries the inset; where there is no bar, run to the edge and pad
+       by the inset, so the cream is what sits under the home indicator. */
+    bottom: var(--bottomNavH, 0px);
     z-index: 60;
     background: #fcf9f4;
     color: #211f1a;
     display: flex;
     flex-direction: column;
     font-family: "EB Garamond", Georgia, serif;
-    padding: var(--safeTop) var(--safeRight) 0 var(--safeLeft);
+    padding: var(--safeTop) var(--safeRight) max(0px, var(--safeBottom) - var(--bottomNavH, 0px))
+      var(--safeLeft);
   }
   .sbar {
     display: flex;
