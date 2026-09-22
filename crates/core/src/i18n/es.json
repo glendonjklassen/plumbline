@@ -680,7 +680,7 @@
   "settings.suggestedInstalled": "Instalados. Están bajo Sugeridos en la biblioteca de tejidos, donde puede conservar o rechazar cada uno.",
   "settings.suggestedOffer": "Un conjunto grande de enlaces de versículos propuestos para revisar y conservar o rechazar. Descarga única de {kb} KB.",
   "settings.sundayService": "Hora del culto del domingo",
-  "settings.sundayServiceDesc": "El marcador del domingo guarda su lugar desde esta hora hasta 1,5 horas después. Déjelo vacío para usar el domingo por la mañana.",
+  "settings.sundayServiceDesc": "El marcador del domingo guarda su lugar desde 30 minutos antes de esta hora hasta 1,5 horas después. Déjelo vacío para usar el domingo por la mañana.",
   "settings.sundayServiceUnset": "Sin definir",
   "settings.switchingTo": "Cambiando a {language}…",
   "settings.textFont": "Tipografía de la Escritura",

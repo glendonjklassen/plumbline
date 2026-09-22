@@ -84,20 +84,32 @@ pub fn slot_for(date: &str, hour: u32) -> SessionSlot {
 /// How long a Sunday service window lasts, in minutes.
 pub const SERVICE_WINDOW_MIN: u32 = 90;
 
+/// How long BEFORE the service start the window opens, in minutes: the walk in
+/// from the car and the minutes in the pew before the first hymn. Without it
+/// the app opened at 10:20 for a 10:30 service was ordinary reading — and a
+/// seating being resolved once per launch, it stayed ordinary reading through
+/// the whole service (maintainer, 2026-09-21).
+pub const SERVICE_LEAD_MIN: u32 = 30;
+
 /// The slot a local date and minute-of-day fall in, honouring a configured
 /// Sunday service time. `minute` is 0–1439 local; `sunday_service` is the
 /// service start in minutes since local midnight, or `None` when unset.
 ///
-/// With a service time set, `sunday-morning` means AT CHURCH: from the start
-/// until [`SERVICE_WINDOW_MIN`] after it, wherever in the day that lands (an
-/// afternoon congregation is still the Sunday service). The rest of Sunday keeps
-/// the noon split, and the hours before the service are ordinary reading, so an
-/// early Sunday riser resumes Saturday night's study.
+/// With a service time set, `sunday-morning` means AT CHURCH: from
+/// [`SERVICE_LEAD_MIN`] before the start until [`SERVICE_WINDOW_MIN`] after it,
+/// wherever in the day that lands (an afternoon congregation is still the Sunday
+/// service). The rest of Sunday keeps the noon split, and the hours before the
+/// lead are ordinary reading, so an early Sunday riser resumes Saturday night's
+/// study.
 pub fn slot_for_at(date: &str, minute: u32, sunday_service: Option<u32>) -> SessionSlot {
     let hour = minute / 60;
     match weekday(date) {
         Some(0) => match sunday_service {
-            Some(start) if minute >= start && minute < start + SERVICE_WINDOW_MIN => SessionSlot::SundayMorning,
+            // `minute + LEAD >= start`, never `minute >= start - LEAD`: a service
+            // inside the first half hour of the day would underflow.
+            Some(start) if minute + SERVICE_LEAD_MIN >= start && minute < start + SERVICE_WINDOW_MIN => {
+                SessionSlot::SundayMorning
+            }
             Some(_) if hour >= 12 => SessionSlot::SundayEvening,
             Some(_) => SessionSlot::Other,
             None if hour < 12 => SessionSlot::SundayMorning,
@@ -156,11 +168,14 @@ mod tests {
         let sunday = "2026-08-16";
         // Church at 10:30.
         let at = |m: u32| slot_for_at(sunday, m, Some(10 * 60 + 30));
-        // Before the service: ordinary reading, so an early riser resumes
-        // Saturday night's study.
+        // Before the lead: ordinary reading, so an early riser resumes Saturday
+        // night's study.
         assert_eq!(at(8 * 60), SessionSlot::Other);
-        assert_eq!(at(10 * 60 + 29), SessionSlot::Other);
-        // The window: start, through 1.5 hours.
+        assert_eq!(at(9 * 60 + 59), SessionSlot::Other);
+        // The window: half an hour before the start — arriving is being there —
+        // through 1.5 hours after it.
+        assert_eq!(at(10 * 60), SessionSlot::SundayMorning, "10:00 is the walk in for a 10:30 service");
+        assert_eq!(at(10 * 60 + 29), SessionSlot::SundayMorning);
         assert_eq!(at(10 * 60 + 30), SessionSlot::SundayMorning);
         assert_eq!(at(11 * 60 + 59), SessionSlot::SundayMorning);
         // Past start + 90, noon-side minutes fall to the evening slot as before.
@@ -172,10 +187,19 @@ mod tests {
     fn an_afternoon_service_still_wins_its_window() {
         // A 1pm congregation: the window outranks the noon split.
         let at = |m: u32| slot_for_at("2026-08-16", m, Some(13 * 60));
-        assert_eq!(at(12 * 60 + 30), SessionSlot::SundayEvening);
+        assert_eq!(at(12 * 60 + 29), SessionSlot::SundayEvening);
+        assert_eq!(at(12 * 60 + 30), SessionSlot::SundayMorning, "the lead outranks the noon split too");
         assert_eq!(at(13 * 60), SessionSlot::SundayMorning);
         assert_eq!(at(14 * 60 + 29), SessionSlot::SundayMorning);
         assert_eq!(at(14 * 60 + 30), SessionSlot::SundayEvening);
+    }
+
+    #[test]
+    fn a_lead_that_would_reach_into_saturday_stops_at_midnight() {
+        // A 00:10 service: the lead cannot underflow the day, and Saturday's
+        // last minutes are Saturday's.
+        assert_eq!(slot_for_at("2026-08-16", 0, Some(10)), SessionSlot::SundayMorning);
+        assert_eq!(slot_for_at("2026-08-15", 23 * 60 + 50, Some(10)), SessionSlot::Other, "a Saturday");
     }
 
     #[test]

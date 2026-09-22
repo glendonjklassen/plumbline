@@ -4,8 +4,9 @@
   // canon strip of pill chips, each an ICON naming the bookmark's kind beside
   // WHAT IT HOLDS: a flag per running plan ("Genesis 30–31" — what is left of
   // today), a booklet per running devotional ("Day 4" — today's entry, and
-  // gone once it is read), then one per stored seating — Sunday morning
-  // (`config.slots`, core::session_slot) — reading "Psalms 23:4".
+  // gone once it is read). The stored seatings (`config.slots`,
+  // core::session_slot) were chips here too — "Psalms 23:4" under a sun — and
+  // are all stood down now; see SLOT_ORDER.
   //
   // Icon + passage, no more (maintainer, 2026-08-25, second turn). The chips
   // went icon-only that morning; the reference came back the same day — a row
@@ -23,6 +24,7 @@
   // is a mode exit nobody asked for.
   import { getSession } from "../state/session.svelte";
   import { chapterSpan, firstUnread, remaining, todayPlans } from "./planToday";
+  import { SEATING_ICONS } from "./seatingIcons";
   import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
@@ -58,15 +60,8 @@
     // history — the everyday "last opened" position
     other:
       "M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8z",
-    // wb_sunny — Sunday morning
-    "sunday-morning":
-      "M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-9.95h-2V3.5h2V.55zm7.45 3.91l-1.41-1.41-1.79 1.79 1.41 1.41 1.79-1.79zm-3.21 13.7l1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-1 16.95h2V19.5h-2v2.95zm-7.45-3.91l1.41 1.41 1.79-1.8-1.41-1.41-1.79 1.8z",
-    // nightlight_round — Sunday evening
-    "sunday-evening":
-      "M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z",
-    // group — the midweek meeting
-    "wednesday-evening":
-      "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
+    // The named seatings, shared with the History sheet (seatingIcons.ts).
+    ...SEATING_ICONS,
     // flag — a running reading plan
     plan: "M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z",
     // auto_stories — a running devotional, the booklet it is
@@ -78,19 +73,23 @@
    *  Only seatings the reader has actually been in exist in `config.slots`, so
    *  nothing is invented.
    *
-   *  Three of the four are OFF for now — Sunday evening and Wednesday evening
+   *  ALL FOUR are OFF now. Sunday evening and Wednesday evening went first,
    *  because a row of four was more bookmarks than the strip wanted to carry,
-   *  and LAST OPENED because it was never a bookmark in the first place
-   *  (maintainer, both 2026-08-26): the app already reopens where the reader
-   *  left off, so a chip for it named the place they were already standing and
-   *  changed every time they turned a page. Nothing else changes:
-   *  `core::session_slot` still recognises all three, the engine still stores a
-   *  seating for each, and the three lines below are all it takes to bring any
-   *  of them back with every reader's position intact. Their icons stay in
-   *  [[ICONS]] for the same reason. */
+   *  and LAST OPENED with them because it was never a bookmark in the first
+   *  place (maintainer, both 2026-08-26): the app already reopens where the
+   *  reader left off, so a chip for it named the place they were already
+   *  standing and changed every time they turned a page. Sunday morning
+   *  followed on 2026-09-21 — "there should still be a Sunday morning bookmark
+   *  so I open it at the right place on Sunday, I just don't need to see it as
+   *  a card on the reader screen". The BOOKMARK is the seating itself:
+   *  `core::session_slot` still recognises every one, the engine still stores a
+   *  place for each, `Session.#reseat` still reopens it, and the History sheet
+   *  marks the runs read in a named seating with its icon. The four lines below
+   *  are all it takes to bring any of them back here with every reader's
+   *  position intact; the icons stay in [[ICONS]] for the same reason. */
   const SLOT_ORDER: { token: string; key: string }[] = [
     // { token: "other", key: "bookmarks.lastOpened" },
-    { token: "sunday-morning", key: "bookmarks.sundayMorning" },
+    // { token: "sunday-morning", key: "bookmarks.sundayMorning" },
     // { token: "sunday-evening", key: "bookmarks.sundayEvening" },
     // { token: "wednesday-evening", key: "bookmarks.wednesdayEvening" },
   ];

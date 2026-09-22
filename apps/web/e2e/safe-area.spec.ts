@@ -50,6 +50,27 @@ async function pad(page: Page, selector: string, side: string): Promise<number> 
   );
 }
 
+/** The frame's FOOT: the strip the frame paints under the home indicator where no
+ *  destination bar carries it (Shell.svelte `.frame::after`). A pseudo-element has
+ *  no locator, so it is read by computed style — `display` says whether it exists
+ *  at that width at all, and the background comes back as `#rrggbb` to compare
+ *  with the palette. */
+async function foot(page: Page): Promise<{ display: string; height: string; bg: string }> {
+  return await page.evaluate(() => {
+    const cs = getComputedStyle(document.querySelector(".frame")!, "::after");
+    const [r, g, b] = cs.backgroundColor.match(/\d+/g)!.map(Number);
+    return {
+      display: cs.display,
+      height: cs.height,
+      bg: "#" + [r, g, b].map((n) => n.toString(16).padStart(2, "0")).join(""),
+    };
+  });
+}
+
+/** Landscape phone — which is the WIDE layout (over 700px), the one an unfolded
+ *  Fold is always in: no destination bar. */
+const LANDSCAPE = { width: PHONE.height, height: PHONE.width };
+
 test("the chrome clears the notch, the cutout and the home indicator", async ({ page }) => {
   await boot(page);
 
@@ -117,11 +138,15 @@ test("Present clears the notch on all four sides", async ({ page }) => {
       { message: "Present double-counted the home indicator: it stops short of the bar" },
     )
     .toBe(0);
+  expect(await pad(page, ".present", "bottom"), "the bar carries the inset in portrait").toBe(0);
 
-  // Landscape: no destination bar, so the inset is the only thing holding Present off
-  // the home indicator. Its measured height falling to zero is what makes this leg
-  // sensitive to the `max()`, so that is asserted rather than assumed.
-  await page.setViewportSize({ width: PHONE.height, height: PHONE.width });
+  // Landscape: no destination bar, so Present runs to the edge and carries the inset
+  // itself, as padding — the cream, not the frame behind it, is what sits under the
+  // home indicator. (It used to stop AT the inset and leave the frame showing through
+  // the gap: a dark band under a cream screen on a dark theme.) The bar's measured
+  // height falling to zero is what makes this leg sensitive to the `max()`, so that
+  // is asserted rather than assumed.
+  await page.setViewportSize(LANDSCAPE);
   await expect(page.locator("nav.bottom-nav")).toBeHidden();
   await expect
     .poll(async () =>
@@ -131,8 +156,66 @@ test("Present clears the notch on all four sides", async ({ page }) => {
     )
     .toBe("0px");
   const land = (await page.locator(".present").boundingBox())!;
-  expect(
-    Math.round(land.y + land.height),
-    "Present runs under the home indicator",
-  ).toBeLessThanOrEqual(PHONE.width - INSET.bottom);
+  expect(Math.round(land.y + land.height), "Present runs to the bottom edge").toBe(PHONE.width);
+  expect(await pad(page, ".present", "bottom"), "and pads by the inset").toBe(INSET.bottom);
+});
+
+// Where no bar carries the inset — the wide layout, every landscape phone and an
+// unfolded Fold — the frame paints the bar's surface under the home indicator
+// itself. Before this the colour there was whatever was LAST in the frame: the
+// canon strip on the reader, each screen's paper on a destination. It changed
+// with every screen and every fold and never agreed with the status bar
+// (maintainer, 2026-09-21). Can fail: without the rule the pseudo-element has
+// no `content`, its computed height is "auto" rather than the inset, and the
+// body runs to the bottom edge.
+test("the wide layout paints the destination bar's surface under the home indicator", async ({ page }) => {
+  await page.setViewportSize(LANDSCAPE);
+  await page.goto("/");
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  await expect(page.locator("nav.bottom-nav")).toBeHidden();
+
+  // The control: no inset, nothing to see — at 0px the strip is nothing at all.
+  expect((await foot(page)).height).toBe("0px");
+
+  await notch(page, true);
+  const strip = await foot(page);
+  expect(strip.display, "the strip exists where the bar does not").not.toBe("none");
+  expect(strip.height).toBe(`${INSET.bottom}px`);
+  // The SAME surface the status bar is told about (session.chrome → paneNavBg),
+  // read off the session rather than a literal so a palette change cannot strand it.
+  expect(strip.bg).toBe(
+    await page.evaluate(() => (window as any).__plumbline.palette.paneNavBg.toLowerCase()),
+  );
+  // And the body above it shrinks by as much: nothing of the app ends under the pill.
+  const body = (await page.locator(".frame > .body").boundingBox())!;
+  expect(Math.round(body.y + body.height)).toBeLessThanOrEqual(PHONE.width - INSET.bottom);
+
+  // A destination's screen too — the strip is the frame's, not the reader's.
+  await page.locator(".browse").getByRole("button", { name: "Study" }).click();
+  await expect(page.locator(".frame")).toHaveAttribute("data-screen", "study");
+  expect((await foot(page)).height).toBe(`${INSET.bottom}px`);
+
+  // Portrait: the bar is the surface, so the strip stands down — otherwise the
+  // inset would be counted twice.
+  await page.setViewportSize(PHONE);
+  await expect(page.locator("nav.bottom-nav")).toBeVisible();
+  expect((await foot(page)).display).toBe("none");
+});
+
+// Sing is Present's twin: fixed, cream, over everything — and until now it stopped
+// at the inset the same way.
+test("Sing carries the inset where no bar does", async ({ page }) => {
+  await page.setViewportSize(LANDSCAPE);
+  await page.goto("/");
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  await page.locator(".browse").getByRole("button", { name: "Sing" }).click();
+  await page.locator(".content button.row").first().click();
+  await page.locator("button.sing").click();
+  await expect(page.locator(".sing-host")).toBeVisible();
+
+  await notch(page, true);
+  const sing = (await page.locator(".sing-host").boundingBox())!;
+  expect(Math.round(sing.y + sing.height), "Sing runs to the bottom edge").toBe(PHONE.width);
+  expect(await pad(page, ".sing-host", "bottom")).toBe(INSET.bottom);
+  expect(await pad(page, ".sing-host", "top")).toBe(INSET.top);
 });

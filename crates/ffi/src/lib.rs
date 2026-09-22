@@ -3921,8 +3921,9 @@ pub unsafe extern "C" fn plumbline_session_slot(date: *const c_char, hour: u32) 
 /// service time. `minute` is minutes since local midnight (0–1439);
 /// `sunday_service` is the config's `sundayService` value, or **-1 when the
 /// reader never set one**, which keeps the before-noon rule. With a time set,
-/// `"sunday-morning"` runs from the service start until 1.5 hours after it —
-/// see `core::session_slot::slot_for_at`. Engine-independent, never null.
+/// `"sunday-morning"` runs from half an hour before the service start until 1.5
+/// hours after it — see `core::session_slot::slot_for_at`. Engine-independent,
+/// never null.
 ///
 /// # Safety
 /// `date` is null or valid NUL-terminated UTF-8 for the call.

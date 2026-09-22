@@ -2,15 +2,18 @@ import { expect, test, type Page } from "@playwright/test";
 
 // The bookmarks row (maintainer ask, 2026-08-24; icon-only 2026-08-25, passage
 // restored the same day): the row above the canon strip — grown out of the plan
-// chip — carries a pill chip per stored bookmark: the running plan, then every
-// seating position in `config.slots` that the row asks for — Sunday morning
-// alone now (Last opened stood down 2026-08-26 with the two evenings: the app
-// already reopens where the reader left off, so it was a chip naming the place
-// they were standing). Each face is an ICON naming the kind beside the
-// PASSAGE it holds ("Psalms 23:4"); the kind's NAME rides aria-label/title, and
-// a tap toasts WHICH bookmark it was before navigating. Several chips show at
-// once, so it is plain there are more than one and that the row scrolls when
-// they overflow.
+// chip — carries a pill chip per stored bookmark: the running plans and
+// devotionals. The seating positions in `config.slots` were chips here too and
+// are all stood down now — Last opened and the two evenings on 2026-08-26 (the
+// app already reopens where the reader left off, so it was a chip naming the
+// place they were standing), Sunday morning on 2026-09-21 ("there should still
+// be a Sunday morning bookmark so I open it at the right place on Sunday, I just
+// don't need to see it as a card on the reader screen"). The bookmark is the
+// seating itself (session-slots.spec.ts); the History sheet marks the runs read
+// in it (history.spec.ts). Each remaining face is an ICON naming the kind
+// beside WHAT IT HOLDS; the kind's NAME rides aria-label/title. Several chips
+// show at once, so it is plain there are more than one and that the row scrolls
+// when they overflow.
 
 async function boot(page: Page): Promise<void> {
   await page.setViewportSize({ width: 1100, height: 800 });
@@ -18,48 +21,29 @@ async function boot(page: Page): Promise<void> {
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
-test("a stored seating is a chip naming its passage; a tap says which bookmark and goes there", async ({ page }) => {
-  await boot(page);
-  // Plant a Sunday-morning seating other than where the reader is.
-  await page.evaluate(() => {
-    const s = (window as any).__plumbline;
-    s.config.slots = { ...(s.config.slots ?? {}), "sunday-morning": { book: "Ps", chapter: 23, verse: 4 } };
-  });
-
-  const tile = page.locator('.bm-tile[data-slot="sunday-morning"]');
-  // The face is the icon AND the passage — where the tap goes is the reason
-  // to tap (a morning of icon-only chips said which, not where). The kind's
-  // name stays off the face and on the accessible name.
-  await expect(tile).toHaveAttribute("aria-label", "Sunday morning · Psalms 23:4");
-  await expect(tile.locator("svg")).toHaveCount(1);
-  await expect(tile).toHaveText("Psalms 23:4");
-  expect(await tile.textContent(), "the kind's name belongs to the label and the toast, not the chip").not.toContain(
-    "Sunday",
-  );
-
-  await tile.click();
-  // The toast names the BOOKMARK, plainly — no "going to…" sentence; the
-  // destination shows itself when the pane lands there.
-  await expect(page.locator(".toast")).toHaveText("Sunday morning bookmark");
-  await expect(page.locator(".subtitle")).toHaveText("Psalms 23", { timeout: 30_000 });
-});
-
-test("the last-opened seating is stored but is not a chip", async ({ page }) => {
-  // The stand-down, from the outside: the engine still records where the reader
-  // last was — that is what reopens the app in the right place — and the row
-  // draws nothing for it. FAILS against the bug it describes because putting
-  // `other` back in PlanChip's SLOT_ORDER is precisely what makes this tile
-  // exist; the seating is planted here, so an empty row is the row's choice and
+test("a stored seating is not a chip: the bookmark is the seating itself", async ({ page }) => {
+  // The stand-down, from the outside: the engine still records every seating —
+  // that is what reopens the app in the right place — and the row draws nothing
+  // for any of them. FAILS against the bug it describes because putting a
+  // seating back in PlanChip's SLOT_ORDER is precisely what makes its tile
+  // exist; all four are planted here, so an empty row is the row's choice and
   // not a missing input.
   await boot(page);
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    s.config.slots = { other: { book: "Rom", chapter: 8 }, "sunday-morning": { book: "Ps", chapter: 23 } };
+    s.config.slots = {
+      other: { book: "Rom", chapter: 8 },
+      "sunday-morning": { book: "Ps", chapter: 23, verse: 4 },
+      "sunday-evening": { book: "John", chapter: 17 },
+      "wednesday-evening": { book: "Acts", chapter: 2 },
+    };
+    // A running plan, so the row RENDERS — the absence below is then a rendered
+    // absence in a row that had every seating to draw, not a row that never
+    // existed.
+    await s.author("planStart", "nt-90", new Date().toISOString());
   });
-  // Wait for the row to settle on the seating that IS asked for, so the absence
-  // below is a rendered absence rather than a frame that had not arrived yet.
-  await expect(page.locator('.bm-tile[data-slot="sunday-morning"]')).toBeVisible();
-  await expect(page.locator('.bm-tile[data-slot="other"]')).toHaveCount(0);
+  await expect(page.locator(".plan-chip-row .plan-chip")).toHaveCount(1, { timeout: 10_000 });
+  await expect(page.locator(".bm-tile")).toHaveCount(0);
 });
 
 test("several chips are visible at once, not one page at a time", async ({ page }) => {
@@ -68,21 +52,12 @@ test("several chips are visible at once, not one page at a time", async ({ page 
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    s.config.slots = {
-      other: { book: "Rom", chapter: 8 },
-      "sunday-morning": { book: "Ps", chapter: 23 },
-      "sunday-evening": { book: "John", chapter: 17 },
-      "wednesday-evening": { book: "Acts", chapter: 2 },
-    };
-    // A running plan, so the row holds MORE THAN ONE chip to lay out. Three of
-    // the four seatings are stood down, so bookmarks alone can no longer make a
-    // crowded row — and a mixed row is the truer subject anyway: the plan chip
-    // and the bookmark tiles share the strip and its scroll.
+    // Two running plans, so the row holds MORE THAN ONE chip to lay out. The
+    // seatings are all stood down, so bookmarks can no longer make a crowded
+    // row — and plan chips share the strip and its scroll all the same.
     await s.author("planStart", "nt-90", new Date().toISOString());
+    await s.author("planStart", "bible-365", new Date().toISOString());
   });
-  // Only the seating the row asks for became a tile: the three stood-down ones
-  // are stored by the engine and drawn by nobody (PlanChip's SLOT_ORDER).
-  await expect(page.locator(".bm-tile")).toHaveCount(1);
   const chips = page.locator(".plan-chip-row .plan-chip, .plan-chip-row .bm-tile");
   await expect(chips).toHaveCount(2, { timeout: 10_000 });
   // With a passage on every face the chips need not all fit a 360px row — that
