@@ -1805,16 +1805,16 @@ export class Session {
    *  row moved WHICH tag was written and never when, or from what. That is the
    *  answer; this is only the writer. */
   applyChrome(): void {
-    // The edges first, the colour second: the colour write below is also what
-    // makes Chrome look again at whether the page is drawing under the bars, so
-    // the opt-in has to be on the wire before it (see [[reclaimEdges]]).
-    const reclaimed = this.#reclaimEdges();
+    // The edges first, the colour second: the colour write is also what makes
+    // Chrome look again at whether the page is drawing under the bars, so the
+    // opt-in has to be on the wire before it (see [[reclaimEdges]]). Both are
+    // reported over the frame's own channel, in order, so the synchronous
+    // sequence is the ordering — and there is deliberately NO deferred second
+    // write: a rewrite on a timer is a rewrite without an event behind it,
+    // which is the one thing chrome-reassert.spec.ts's control step forbids
+    // (it failed CI on the v0.74.0 tag for exactly that, 2026-09-23).
+    this.#reclaimEdges();
     this.#writeChrome();
-    // A second colour write once the re-sent opt-in has been processed — the
-    // two travel on separate interfaces, and the bar is only re-derived from the
-    // colour change. Only after a reclaim: the extra write is idempotent, and
-    // a page whose insets were already there needs nothing.
-    if (reclaimed) setTimeout(() => this.#writeChrome(), 250);
   }
 
   #writeChrome(): void {
@@ -1863,22 +1863,19 @@ export class Session {
    *  navigation, and flipping its opt-in would drop it out of edge-to-edge and
    *  back — a visible jump — for nothing. All four read 0 in exactly the state
    *  this exists for (the window not extended under any bar) and on a desktop,
-   *  where the viewport tag means nothing at all. `e2e/chrome-reassert.spec.ts`.
-   *
-   *  Returns whether the opt-in was re-sent. */
-  #reclaimEdges(): boolean {
+   *  where the viewport tag means nothing at all. `e2e/chrome-reassert.spec.ts`. */
+  #reclaimEdges(): void {
     const root = document.documentElement;
     const inset = getComputedStyle(root);
     const px = (name: string): number => parseFloat(inset.getPropertyValue(name)) || 0;
     if (px("--safeTop") > 0 || px("--safeBottom") > 0 || px("--safeLeft") > 0 || px("--safeRight") > 0) {
-      return false;
+      return;
     }
     const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
     const content = meta?.getAttribute("content") ?? "";
-    if (!meta || !content.includes("viewport-fit=cover")) return false;
+    if (!meta || !content.includes("viewport-fit=cover")) return;
     meta.setAttribute("content", content.replace("viewport-fit=cover", "viewport-fit=auto"));
     meta.setAttribute("content", content);
-    return true;
   }
 
   /** Point the DOCUMENT at the chrome face and THIS THREAD's canvas at the
