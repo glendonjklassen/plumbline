@@ -524,7 +524,7 @@ fn plans_and_concept_study_via_abi() {
         assert!(plumbline_engine_plan_stop(e, c("chronological").as_ptr()).is_null());
 
         // Start a schedule; it appears running with a day-1 card. (This toy
-        // corpus is only John 3, so the whole NT scope is one chapter.)
+        // corpus is John 1–3, so the NT scope is three days of a chapter each.)
         assert!(plumbline_engine_plan_start(e, c("nt-90").as_ptr(), now.as_ptr()).is_null());
         let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
         let run = &v["running"][0];
@@ -537,16 +537,57 @@ fn plans_and_concept_study_via_abi() {
         assert_eq!(run["paused"], false);
         assert_eq!(run["started"], "2026-08-08T12:00:00Z");
 
-        // Read the day's one chapter today: the day's worth is done and the wire says
-        // so, while a query dated the next day asks again.
-        let _ = take(plumbline_engine_reading_record_json(e, c("John").as_ptr(), 3, 999, 3600.0, now.as_ptr()));
+        // Day 1 logged by hand as read YESTERDAY (a paper Bible; this toy corpus has
+        // text only in John 3, so its first two chapters can only be logged). The
+        // day is stamped with the date given, which is not today: the chip asks on.
+        let yesterday = c("2026-08-07");
+        assert!(plumbline_engine_reading_mark_read(e, c("John").as_ptr(), 1, yesterday.as_ptr()).is_null());
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"][0]["today"]["day"], 2);
+        assert_eq!(v["running"][0]["doneToday"], false, "yesterday's day is not today's");
+
+        // Day 3 read today, AHEAD of the open day 2 — for another plan that shares
+        // it, or by choice. It is stamped, and it is not today's day's worth: the
+        // chip keeps asking for day 2 (maintainer, 2026-09-23: finishing one plan's
+        // day made the other plan's chip go). Can fail against that bug: dating a
+        // day by its chapters' last reads answered true here.
+        let out: Value = serde_json::from_str(
+            &take(plumbline_engine_reading_record_json(e, c("John").as_ptr(), 3, 999, 3600.0, now.as_ptr())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(out["completed"], true);
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"][0]["today"]["day"], 2, "day 2 is still the one asked for");
+        assert_eq!(v["running"][0]["doneToday"], false, "a day ahead of the frontier is not today's reading");
+
+        // Day 2 logged today closes the plan: a day's worth, dated today — the wire
+        // says so, while a query dated the next day asks again.
+        assert!(plumbline_engine_reading_mark_read(e, c("John").as_ptr(), 2, now.as_ptr()).is_null());
         let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
         assert_eq!(v["running"][0]["doneToday"], true, "a day's worth was read today");
+        assert!(v["running"][0]["today"].is_null(), "and the three-day plan is finished");
         let tomorrow = c("2026-08-09T12:00:00Z");
         let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, tomorrow.as_ptr())).unwrap()).unwrap();
         assert_eq!(v["running"][0]["doneToday"], false, "yesterday's reading does not quiet today");
-        // (The whole one-chapter plan is now finished; `today` is gone but the
-        // pause endpoint below still finds the plan.)
+
+        // Day 3's chapter read AGAIN tomorrow — a Sunday morning, or the other plan
+        // reaching it. The day was finished already; a re-read is not a day's worth
+        // and must not retire the chip. The other half of the 2026-09-23 report, and
+        // the other way the old rule answered true.
+        let out: Value = serde_json::from_str(
+            &take(plumbline_engine_reading_record_json(e, c("John").as_ptr(), 3, 999, 3600.0, tomorrow.as_ptr()))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(out["completed"], true, "the re-read completes as a pass");
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, tomorrow.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"][0]["doneToday"], false, "a re-read of a finished day is not today's reading");
+        // The stamps are the plan's own record, in its file, each on the day it was read.
+        let file = plumbline_core::plan::load_plans(&home).0.into_iter().find(|p| p.id == "nt-90").unwrap();
+        let stamps: Vec<(u32, &str)> = file.done_on.iter().map(|(d, s)| (*d, s.as_str())).collect();
+        assert_eq!(stamps, vec![(1, "2026-08-07"), (2, "2026-08-08"), (3, "2026-08-08")]);
+        // (The plan is finished — `today` is gone — but the pause endpoint below
+        // still finds it.)
 
         // Pause: kept whole, flagged on the wire; resume clears it. A double
         // pause is a no-op, an unknown id is an error.
