@@ -209,9 +209,12 @@ needed.
 
 ## Releases
 
-Tag `v*` → `.github/workflows/release.yml` creates a GitHub Release (the
-changelog) and deploys the PWA to GitHub Pages at
+Tag `v*` → `.github/workflows/release.yml` runs the CI workflow on that commit
+(called as its `ci` job) and, only once every job of it is green, creates a
+GitHub Release (the changelog) and deploys the PWA to GitHub Pages at
 <https://plumblinebible.org/> (custom domain; the old
-glendonjklassen.github.io/plumbline URL 301s there). A manual
-`workflow_dispatch` run is a dry run: it builds everything and publishes
-nothing.
+glendonjklassen.github.io/plumbline URL 301s there). A red job — a Playwright
+flake included — holds the publish until it is re-run green
+(`gh run rerun <run-id> --failed`); the release then resumes on its own. A
+manual `workflow_dispatch` run is a dry run: it builds and tests everything
+and publishes nothing.

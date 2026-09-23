@@ -1858,19 +1858,25 @@ export class Session {
    *  same remedy: at each of those moments, and once at boot, take the opt-in
    *  away and put it back, which is a change Blink has to report.
    *
-   *  Only when EVERY inset reads 0px. A page already drawing edge-to-edge has a
-   *  status-bar inset on any phone and a home-indicator inset with gesture
-   *  navigation, and flipping its opt-in would drop it out of edge-to-edge and
-   *  back — a visible jump — for nothing. All four read 0 in exactly the state
-   *  this exists for (the window not extended under any bar) and on a desktop,
-   *  where the viewport tag means nothing at all. `e2e/chrome-reassert.spec.ts`. */
+   *  Only while the BOTTOM inset reads 0px — and the bottom alone, which the
+   *  first cut of this got wrong (v0.74.0 gated on all four). The screenshot
+   *  that came back the same day showed the page under the status bar, so the
+   *  top inset was present, and a strip of `#fcf9f4` under the home indicator:
+   *  the manifest's `background_color`, the window behind a transparent bar
+   *  that the page had not been extended under. Chrome does the two edges
+   *  through two mechanisms — the cutout controller takes the top on the
+   *  viewport-fit report, the tab's edge-to-edge controller takes the bottom —
+   *  so a launch can land half extended, and a gate on "any inset" sat silent
+   *  in exactly that state. A page already under the home indicator has a
+   *  bottom inset on any phone (gesture bar or button bar), and flipping its
+   *  opt-in would drop it out of edge-to-edge and back for nothing; a bottom of
+   *  0 with a status bar above is the half-extended launch, and on a desktop
+   *  the viewport tag means nothing at all. `e2e/chrome-reassert.spec.ts`. */
   #reclaimEdges(): void {
     const root = document.documentElement;
     const inset = getComputedStyle(root);
     const px = (name: string): number => parseFloat(inset.getPropertyValue(name)) || 0;
-    if (px("--safeTop") > 0 || px("--safeBottom") > 0 || px("--safeLeft") > 0 || px("--safeRight") > 0) {
-      return;
-    }
+    if (px("--safeBottom") > 0) return;
     const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
     const content = meta?.getAttribute("content") ?? "";
     if (!meta || !content.includes("viewport-fit=cover")) return;
