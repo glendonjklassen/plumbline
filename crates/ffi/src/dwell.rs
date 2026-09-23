@@ -80,7 +80,15 @@ pub unsafe extern "C" fn plumbline_engine_reading_tick_json(
             report.seconds,
             now,
         ) {
-            Ok(recorded) => out_json(&wire::WireReadingRecorded { recorded }),
+            Ok(recorded) => {
+                // A first full pass may have closed a plan-day: stamp it now, on the
+                // reading's own date, so the chip's retirement is a record and not a
+                // re-derivation (plan::done_today).
+                if recorded.first_pass {
+                    e.note_first_read(&recorded.book, recorded.chapter, &reading::day_of(now));
+                }
+                out_json(&wire::WireReadingRecorded { recorded })
+            }
             Err(_) => ptr::null_mut(),
         }
     })

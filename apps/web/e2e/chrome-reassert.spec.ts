@@ -196,3 +196,82 @@ test("a theme changed behind Sing is on the bar when Sing closes", async ({ page
   await settled(page);
   await chromeFollows(page, "header", "light");
 });
+
+// E — the home indicator's bar. Chrome draws Android's navigation bar transparent
+// only while the window is edge-to-edge, which is what index.html's
+// `viewport-fit=cover` asks for; Blink reports that ask once, on change, and a
+// cold launch can lose it — white bar under a Nord page until the app is switched
+// away from and back (maintainer, 2026-09-23). `Session.#reclaimEdges` re-sends
+// the opt-in at every re-assert moment by flipping the value away and back, and
+// ONLY while every safe-area inset reads 0px: a page already under the bars has
+// insets, and flipping its opt-in would drop it out of edge-to-edge for a frame.
+//
+// CAN FAIL: nothing else in apps/web/src writes the viewport tag after load —
+// before the fix the observer below records no mutation at all and the first
+// assertion fails; and a version that skipped the inset gate would mutate under
+// the notch in the second half and fail there.
+test("the edge-to-edge opt-in is re-sent when no inset is present, and left alone when one is", async ({
+  page,
+}) => {
+  await bootDark(page);
+  await chromeIsTheme(page);
+
+  // Record every write to the viewport tag from here on by the value it
+  // REPLACED — the records arrive batched, after both writes, so the live
+  // attribute would read the same final value twice. The value it is left at
+  // is checked separately: the flip must END on `cover` or the notch is lost
+  // for real.
+  const arm = () =>
+    page.evaluate(() => {
+      const meta = document.querySelector('meta[name="viewport"]')!;
+      const w = window as any;
+      w.__viewportWrites = [] as (string | null)[];
+      w.__viewportObserver?.disconnect();
+      w.__viewportObserver = new MutationObserver((records) => {
+        for (const r of records) if (r.attributeName === "content") w.__viewportWrites.push(r.oldValue);
+      });
+      w.__viewportObserver.observe(meta, { attributes: true, attributeOldValue: true });
+    });
+  const writes = () => page.evaluate(() => (window as any).__viewportWrites as (string | null)[]);
+  const viewport = () =>
+    page.evaluate(() => document.querySelector('meta[name="viewport"]')!.getAttribute("content"));
+  const COVER = "width=device-width, initial-scale=1.0, viewport-fit=cover";
+  const AUTO = "width=device-width, initial-scale=1.0, viewport-fit=auto";
+
+  // No inset (a headless desktop, and exactly the lost-opt-in state on a phone):
+  // a return to the foreground re-sends the ask — away, then back.
+  await arm();
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect.poll(writes, { message: "the opt-in is flipped away and back" }).toEqual([COVER, AUTO]);
+  expect(await viewport(), "and ends where index.html put it").toBe(COVER);
+  // And the colour half of the same moment still runs, in the same call.
+  await expect.poll(() => chromeState(page)).toEqual(
+    await page.evaluate(() => {
+      const s = (window as any).__plumbline;
+      return {
+        tags: [(s.chrome.color as string).toLowerCase(), (s.chrome.color as string).toLowerCase()],
+        scheme: s.chrome.dark ? "dark" : "light",
+      };
+    }),
+  );
+
+  // Under a notch and a home indicator (safe-area.spec.ts's way of having one),
+  // the page IS edge-to-edge and the tag is not to be touched.
+  await page.evaluate(() => {
+    const r = document.documentElement.style;
+    r.setProperty("--safeTop", "44px");
+    r.setProperty("--safeBottom", "34px");
+  });
+  await arm();
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await page.evaluate(() => dispatchEvent(new Event("pageshow")));
+  // The theme-colour re-assert is synchronous in the same handler, so once it has
+  // landed the viewport half has had its chance.
+  await expect.poll(() => chromeState(page)).toBeTruthy();
+  expect(await writes(), "an inset means the page is already under the bars").toEqual([]);
+  await page.evaluate(() => {
+    const r = document.documentElement.style;
+    r.removeProperty("--safeTop");
+    r.removeProperty("--safeBottom");
+  });
+});

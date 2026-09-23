@@ -798,6 +798,12 @@ pub struct Recorded {
     /// True when this call carried the pass over [`COMPLETE_AT`] *with* the
     /// chapter's last verse reached.
     pub completed: bool,
+    /// True when `completed` is the chapter's FIRST full pass — it had no
+    /// `last_read` before this call. Only a first pass can close a plan-day
+    /// (`plan::note_first_read`); a re-read changes no day's standing. Not on
+    /// the wire: the shell reacts to `completed`, the plans hook to this.
+    #[serde(skip)]
+    pub first_pass: bool,
     #[serde(rename = "lastRead", skip_serializing_if = "Option::is_none")]
     pub last_read: Option<String>,
 }
@@ -847,6 +853,7 @@ pub fn record(
     // TWO gates: enough time AND the bottom of the chapter. The 85% snap alone
     // credits a full read to someone who stopped short.
     let completed = pct >= COMPLETE_AT && total > 0 && reached_end(corpus, book, chapter, rec.reached);
+    let first_pass = completed && rec.last_read.is_none();
     if completed {
         rec.last_read = Some(day_of(now));
         rec.touched = Some(day_of(now));
@@ -858,6 +865,7 @@ pub fn record(
         chapter,
         pct: if completed { 1.0 } else { pct },
         completed,
+        first_pass,
         last_read: rec.last_read.clone(),
     };
     write_book(&home, book, &list)?;
@@ -866,26 +874,34 @@ pub fn record(
 
 /// Log a chapter as read on `date` by hand — for reading done in a paper Bible.
 /// Full credit. `date` may be `YYYY-MM-DD` or RFC3339; only its day is kept.
-pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -> Result<(), Error> {
+/// Answers whether this was the chapter's first full pass (see
+/// [`Recorded::first_pass`]).
+pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -> Result<bool, Error> {
     let mut list = load_book(&home, book)?;
     let day = day_of(date);
-    match list.iter_mut().find(|r| r.chapter == chapter) {
+    let first_pass = match list.iter_mut().find(|r| r.chapter == chapter) {
         Some(r) => {
+            let first = r.last_read.is_none();
             r.last_read = Some(day.clone());
             r.touched = Some(day);
             r.reached = 0;
             r.dwell = 0.0;
+            first
         }
-        None => list.push(ChapterReading {
-            chapter,
-            reached: 0,
-            dwell: 0.0,
-            last_read: Some(day.clone()),
-            touched: Some(day),
-            extra: Map::new(),
-        }),
-    }
-    write_book(&home, book, &list)
+        None => {
+            list.push(ChapterReading {
+                chapter,
+                reached: 0,
+                dwell: 0.0,
+                last_read: Some(day.clone()),
+                touched: Some(day),
+                extra: Map::new(),
+            });
+            true
+        }
+    };
+    write_book(&home, book, &list)?;
+    Ok(first_pass)
 }
 
 /// Drop a chapter's reading record entirely — the way back out of a date set by

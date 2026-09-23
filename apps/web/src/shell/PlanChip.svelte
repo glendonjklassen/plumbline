@@ -43,15 +43,24 @@
     const q = s.q("plans", "");
     if (q == null) return held;
     // The chip RETIRES for the rest of the local day once a day's worth is read
-    // (`doneToday`, computed in the core against the reading store's dates), and
-    // comes back at the next local midnight with the next portion — same rule
-    // as the devotional chip below. History, because this has flipped twice:
-    // it retired (2026-08-12), then kept showing the next portion so a reader
-    // could work ahead (UAT, 2026-08-18), and now retires again (maintainer,
-    // 2026-09-07: "when you are done the reading for the day, it should clear
-    // that badge rather than just start the next day"). Working ahead is still
-    // open from the Study hub, which keeps showing the next portion — only the
-    // bookmark row stops asking.
+    // (`doneToday`, computed in the core off the plan-day's own completion
+    // stamp), and comes back at the next local midnight with the next portion —
+    // same rule as the devotional chip below. History, because this has flipped
+    // twice: it retired (2026-08-12), then kept showing the next portion so a
+    // reader could work ahead (UAT, 2026-08-18), and now retires again
+    // (maintainer, 2026-09-07: "when you are done the reading for the day, it
+    // should clear that badge rather than just start the next day"). Working
+    // ahead is still open from the Study hub, which keeps showing the next
+    // portion — only the bookmark row stops asking.
+    //
+    // A STAMP, not the reading store's dates (2026-09-23): dated by its chapters'
+    // last reads, a plan-day was "done today" whenever one of its chapters was
+    // read today for ANY reason — so with two plans running, finishing one
+    // plan's day retired the other's chip too, wherever the shared chapter fell
+    // in it. Now the core stamps a day the moment its last unread chapter gets
+    // its first full pass, and only a stamped day the reader has actually
+    // reached counts: a re-read closes nothing, and a day read ahead does not
+    // stand in for today's.
     return (held = todayPlans(q));
   });
 

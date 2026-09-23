@@ -46,8 +46,10 @@ struct WireRunning {
     /// Concept study only: the preset tag a tap files under.
     #[serde(skip_serializing_if = "Option::is_none")]
     tag: Option<String>,
-    /// Schedule only: a full plan-day was finished today (`plan::done_today`),
-    /// which retires the nav-strip chip for the rest of the calendar day.
+    /// Schedule only: a plan-day behind the frontier was finished today
+    /// (`plan::done_today`, off the day's own stamp), which retires the
+    /// nav-strip chip for the rest of the calendar day. A chapter re-read today,
+    /// or a day read ahead, does not set it.
     #[serde(skip_serializing_if = "Option::is_none")]
     done_today: Option<bool>,
     /// Schedule only: today's card (null once the plan is finished).
@@ -150,7 +152,7 @@ fn running_state(
             let days_total = sched.len() as u32;
             let days_done = today.as_ref().map_or(days_total, |t| t.days_done);
             w.schedule_progress = Some([days_done, days_total]);
-            w.done_today = Some(plan::done_today(&sched, |b, c| last_read_day(store, b, c), today_day));
+            w.done_today = Some(plan::done_today(plan, today.as_ref().map(|t| t.day), today_day));
             w.today = today.map(|t| WireToday {
                 day: t.day,
                 chapters: t
@@ -185,6 +187,33 @@ fn running_state(
 /// Total chapters in the corpus — the concept study's scope denominator (whole canon).
 fn canon_chapter_total(words: &ChapterWords) -> usize {
     canon::book_ids().map(|b| words.chapters(b) as usize).sum()
+}
+
+impl PlumblineEngine {
+    /// A chapter's FIRST full pass landed on `date` (`YYYY-MM-DD`): close the
+    /// plan-day it completes, if any, in every schedule plan — the stamp
+    /// `plan::done_today` reads. Every reading write that can complete a chapter
+    /// calls this (the tick, `reading_record_json`, `reading_mark_read`), and
+    /// only for a first pass: a re-read closes nothing.
+    ///
+    /// Best effort, after a reading write that already succeeded: a plan file
+    /// that cannot be written leaves the chip asking — the older behaviour, not
+    /// a lost read. Paused plans are stamped too; they hold their days.
+    pub(crate) fn note_first_read(&self, book: &str, chapter: u16, date: &str) {
+        let Some(home) = self.home.as_ref() else { return };
+        let words = self.reading_words();
+        let store = reading::load(home).0;
+        for mut p in plan::load_plans(home).0 {
+            if !matches!(p.kind, plan::Kind::Schedule) {
+                continue;
+            }
+            let sched = schedule_of(&p, words, Some(home));
+            let is_read = |b: &str, c: u16| chapter_read(&store, b, c);
+            if plan::note_first_read(&mut p, &sched, book, chapter, is_read, date) {
+                let _ = plan::write_plan(home, &p);
+            }
+        }
+    }
 }
 
 /// Every running plan with derived state, plus the builtin catalogue for the
@@ -274,6 +303,7 @@ pub unsafe extern "C" fn plumbline_engine_plan_start(
             started: now.to_string(),
             lang: lang_stamp(),
             done: Vec::new(),
+            done_on: Default::default(),
             tag: None,
             swept: Default::default(),
             paused: false,
@@ -328,6 +358,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_study_start(
             started: now.to_string(),
             lang: lang_stamp(),
             done: Vec::new(),
+            done_on: Default::default(),
             tag: Some(tag.trim().to_string()),
             swept: Default::default(),
             paused: false,

@@ -1579,7 +1579,9 @@ export class Session {
     // claim in existence.
     //
     // A list on purpose: a fourth moment gets added here rather than becoming a
-    // fourth mechanism.
+    // fourth mechanism. `applyChrome` carries the page's edge-to-edge opt-in
+    // too ([[reclaimEdges]]) — the home indicator's bar is lost the same way and
+    // at the same moments as the status bar's colour.
     addEventListener("pageshow", () => this.applyChrome());
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
@@ -1803,6 +1805,19 @@ export class Session {
    *  row moved WHICH tag was written and never when, or from what. That is the
    *  answer; this is only the writer. */
   applyChrome(): void {
+    // The edges first, the colour second: the colour write below is also what
+    // makes Chrome look again at whether the page is drawing under the bars, so
+    // the opt-in has to be on the wire before it (see [[reclaimEdges]]).
+    const reclaimed = this.#reclaimEdges();
+    this.#writeChrome();
+    // A second colour write once the re-sent opt-in has been processed — the
+    // two travel on separate interfaces, and the bar is only re-derived from the
+    // colour change. Only after a reclaim: the extra write is idempotent, and
+    // a page whose insets were already there needs nothing.
+    if (reclaimed) setTimeout(() => this.#writeChrome(), 250);
+  }
+
+  #writeChrome(): void {
     // ONE pair, written together. Which colour and which polarity is
     // [[chrome]]'s question, not this function's — this only puts the answer in
     // the DOM, and always both halves of it.
@@ -1817,6 +1832,53 @@ export class Session {
       m.removeAttribute("content");
       m.setAttribute("content", color);
     }
+  }
+
+  /** THE HOME INDICATOR'S BAR IS WHITE, sometimes (maintainer, 2026-09-23: Nord,
+   *  portrait, "intermittent depending on when I open the app vs switch to it").
+   *
+   *  White is no colour of ours, and the page cannot have painted it: in
+   *  portrait the destination bar carries the inset in `--paneNavBg`, and the
+   *  palette is on the root before the shell mounts. It is Android's navigation
+   *  bar, drawn OPAQUE by Chrome in the platform default — white on a light-mode
+   *  phone — instead of transparent with the page showing through. Chrome's
+   *  `BaseCustomTabActivity.updateNavigationBarColor` has exactly two states: while
+   *  the window draws edge-to-edge the bar is transparent and follows the page;
+   *  when it does not, the bar takes the manifest's baked `theme_color` and never
+   *  the live one — and this manifest bakes none (manifest.spec.ts, 2026-08-28),
+   *  so "we leave the navigation bar to the platform default".
+   *
+   *  Edge-to-edge is what `viewport-fit=cover` in index.html asks for, and the
+   *  intermittency is the ask going unheard: Blink reports the value to the
+   *  browser ONCE, when it changes (`ViewportData::UpdateViewportDescription`),
+   *  and a cold launch can have the report land before Chrome's tab is listening.
+   *  Nothing in our DOM moved, so nothing re-sends it — until a switch back to the
+   *  app re-creates the state, which is why switching to it "fixes" it. The same
+   *  shape as the theme-color tags (constructor, the re-assert list), and the
+   *  same remedy: at each of those moments, and once at boot, take the opt-in
+   *  away and put it back, which is a change Blink has to report.
+   *
+   *  Only when EVERY inset reads 0px. A page already drawing edge-to-edge has a
+   *  status-bar inset on any phone and a home-indicator inset with gesture
+   *  navigation, and flipping its opt-in would drop it out of edge-to-edge and
+   *  back — a visible jump — for nothing. All four read 0 in exactly the state
+   *  this exists for (the window not extended under any bar) and on a desktop,
+   *  where the viewport tag means nothing at all. `e2e/chrome-reassert.spec.ts`.
+   *
+   *  Returns whether the opt-in was re-sent. */
+  #reclaimEdges(): boolean {
+    const root = document.documentElement;
+    const inset = getComputedStyle(root);
+    const px = (name: string): number => parseFloat(inset.getPropertyValue(name)) || 0;
+    if (px("--safeTop") > 0 || px("--safeBottom") > 0 || px("--safeLeft") > 0 || px("--safeRight") > 0) {
+      return false;
+    }
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    const content = meta?.getAttribute("content") ?? "";
+    if (!meta || !content.includes("viewport-fit=cover")) return false;
+    meta.setAttribute("content", content.replace("viewport-fit=cover", "viewport-fit=auto"));
+    meta.setAttribute("content", content);
+    return true;
   }
 
   /** Point the DOCUMENT at the chrome face and THIS THREAD's canvas at the

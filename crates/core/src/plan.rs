@@ -93,6 +93,14 @@ pub struct Plan {
     pub lang: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub done: Vec<u32>,
+    /// The local date (`YYYY-MM-DD`) each day in `done` was finished on — stamped
+    /// by the reading write that closed the day ([`note_first_read`]), and what
+    /// [`done_today`] reads. Additive: a plan file from before the stamp carries
+    /// `done` days with no date, and those simply never read as finished today.
+    /// Days complete only by reading logged before the plan started are never
+    /// stamped either — nobody read them today.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub done_on: BTreeMap<u32, String>,
     /// Concept study only: the preset tag a tapped verse is filed under.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
@@ -315,47 +323,68 @@ pub fn next_day(plan: &Plan, sched: &[Vec<(String, u16)>], is_read: impl Fn(&str
     next.map(|day| Today { day, chapters: sched[day as usize - 1].clone(), days_done, days_total: total })
 }
 
-/// Whether a full plan-day was finished ON `today` (`YYYY-MM-DD`, the reading
-/// store's date grain) — the signal that retires the nav-strip chip for the rest of
-/// the calendar day.
+/// Whether a plan-day was finished ON `today` (`YYYY-MM-DD`, the reading store's
+/// date grain) — the signal that retires the nav-strip chip for the rest of the
+/// calendar day. Pacing stays sequence-anchored; this is only about not asking
+/// for more the day a day's worth was given.
 ///
-/// A day counts when every chapter it names reads back complete and the LATEST of
-/// their read dates is today, so finishing yesterday's leftovers retires the chip
-/// today. Pacing stays sequence-anchored; this is only about not asking for more
-/// the day a day's worth was given.
+/// Reads the plan's own `done_on` stamps, written by [`note_first_read`] at the
+/// moment a day's last unread chapter got its first full pass — NOT the reading
+/// store's dates. Dating a day by its chapters' last reads was wrong twice over
+/// (maintainer, 2026-09-23, two plans running: finishing one plan's day made the
+/// other plan's chip go too): a chapter re-read today — for the other plan, or
+/// on a Sunday morning — re-dated a day this plan had finished last week, and a
+/// day read AHEAD for the other plan counted as this plan's reading for today.
 ///
-/// `last_read_day` is the reading store's date for one chapter's last full pass —
-/// the same closure seam as [`next_day`]'s `is_read`. Days honoured only by the
-/// `done` cache have no dates and never count as today.
-pub fn done_today(
-    sched: &[Vec<(String, u16)>],
-    last_read_day: impl Fn(&str, u16) -> Option<String>,
-    today: &str,
-) -> bool {
-    sched.iter().any(|chs| {
-        let mut latest: Option<String> = None;
-        for (b, c) in chs {
-            match last_read_day(b, *c) {
-                Some(d) => {
-                    if latest.as_deref().is_none_or(|l| d.as_str() > l) {
-                        latest = Some(d);
-                    }
-                }
-                None => return false, // an unread chapter: the day is still open
-            }
-        }
-        latest.is_some_and(|d| d == today)
-    })
+/// So a stamp counts only BEHIND the frontier — `frontier` is [`next_day`]'s
+/// day, `None` once the plan is complete. A day stamped today that the reader
+/// has not reached in sequence is working ahead, and the chip keeps asking for
+/// today's own. Days honoured only by the `done` cache have no stamp and never
+/// count.
+pub fn done_today(plan: &Plan, frontier: Option<u32>, today: &str) -> bool {
+    plan.done_on.iter().any(|(day, date)| frontier.is_none_or(|f| *day < f) && date == today)
 }
 
-/// Record a day as done (1-based; sorted, deduped). Returns whether it was new.
-/// The caller persists — this is the cache [`next_day`] consults so a day never
-/// un-completes when the reading record under it is later cleared.
-pub fn mark_done(plan: &mut Plan, day: u32) -> bool {
+/// A chapter's FIRST full pass just landed on `date` (`YYYY-MM-DD`): stamp every
+/// day of `sched` that names it and now reads back complete. Returns whether the
+/// plan changed, so the caller knows to persist it.
+///
+/// First pass only, and the CALLER gates it (`reading::Recorded::first_pass`,
+/// `reading::mark_read`'s answer). A chapter that was already read cannot close
+/// a day — every day naming it was either complete already or still waits on
+/// another chapter — so a re-read never stamps, whatever plan it was read for.
+/// A day already in `done` is left alone on the same reasoning.
+pub fn note_first_read(
+    plan: &mut Plan,
+    sched: &[Vec<(String, u16)>],
+    book: &str,
+    chapter: u16,
+    is_read: impl Fn(&str, u16) -> bool,
+    date: &str,
+) -> bool {
+    let mut changed = false;
+    for (i, chs) in sched.iter().enumerate() {
+        let day = i as u32 + 1;
+        if plan.done.contains(&day) || !chs.iter().any(|(b, c)| b == book && *c == chapter) {
+            continue;
+        }
+        if chs.iter().all(|(b, c)| is_read(b, *c)) {
+            changed |= mark_done(plan, day, date);
+        }
+    }
+    changed
+}
+
+/// Record a day as done on `date` (1-based; `done` sorted and deduped). Returns
+/// whether it was new. The caller persists — `done` is the cache [`next_day`]
+/// consults so a day never un-completes when the reading record under it is
+/// later cleared, and `done_on` is what [`done_today`] reads.
+pub fn mark_done(plan: &mut Plan, day: u32, date: &str) -> bool {
     match plan.done.binary_search(&day) {
         Ok(_) => false,
         Err(at) => {
             plan.done.insert(at, day);
+            plan.done_on.insert(day, date.to_string());
             true
         }
     }
@@ -493,6 +522,7 @@ mod tests {
             started: "2026-08-08T12:00:00Z".into(),
             lang: Some("en".into()),
             done: Vec::new(),
+            done_on: BTreeMap::new(),
             tag: None,
             swept: BTreeMap::new(),
             paused: false,
@@ -567,24 +597,65 @@ mod tests {
         // Only the shape matters: day 1 must hold two chapters for the leftover case.
         let sched = schedule(&scope_chapters(&Scope::Canon, &w), &w, 2);
         assert_eq!(sched[0].len(), 2, "day 1 must span two chapters for the leftover case");
-        let dates = |d1: Option<&'static str>, d2: Option<&'static str>| {
-            move |b: &str, ch: u16| match (b, ch) {
-                ("Gen", 1) => d1.map(str::to_string),
-                ("Gen", 2) => d2.map(str::to_string),
-                _ => None,
-            }
-        };
+        let mut p = plan("bible-2", Some(CLASS_WHOLE_BIBLE));
+        let read =
+            |gen1: bool, gen2: bool| move |b: &str, ch: u16| b == "Gen" && ((ch == 1 && gen1) || (ch == 2 && gen2));
 
         // Nothing finished: the chip stays.
-        assert!(!done_today(&sched, dates(None, None), "2026-08-12"));
-        // Half of day 1 read today: the day is still open, the chip stays.
-        assert!(!done_today(&sched, dates(Some("2026-08-12"), None), "2026-08-12"));
-        // Yesterday's leftovers finished today: a day's worth — the chip retires…
-        assert!(done_today(&sched, dates(Some("2026-08-11"), Some("2026-08-12")), "2026-08-12"));
+        assert!(!done_today(&p, Some(1), "2026-08-12"));
+        // Half of day 1 read yesterday: the day is still open, nothing is stamped.
+        assert!(!note_first_read(&mut p, &sched, "Gen", 1, read(true, false), "2026-08-11"));
+        assert!(p.done_on.is_empty());
+        assert!(!done_today(&p, Some(1), "2026-08-11"));
+        // Yesterday's leftovers finished today: a day's worth, dated today — the
+        // chip retires…
+        assert!(note_first_read(&mut p, &sched, "Gen", 2, read(true, true), "2026-08-12"));
+        assert_eq!(p.done_on[&1], "2026-08-12");
+        assert_eq!(p.done, vec![1], "the cache is kept in step");
+        assert!(done_today(&p, Some(2), "2026-08-12"));
         // …but only for the rest of that calendar day.
-        assert!(!done_today(&sched, dates(Some("2026-08-11"), Some("2026-08-12")), "2026-08-13"));
-        // A day finished entirely in the past asks again today.
-        assert!(!done_today(&sched, dates(Some("2026-08-10"), Some("2026-08-11")), "2026-08-12"));
+        assert!(!done_today(&p, Some(2), "2026-08-13"));
+    }
+
+    /// The two-plan report (maintainer, 2026-09-23): finishing one plan's day for
+    /// the day made the OTHER plan's chip go. Under the old rule a day was "done
+    /// today" when its chapters' last-read dates said so — and a chapter read for
+    /// plan A re-dated whatever day of plan B named it, ahead of B's frontier or
+    /// long behind it. This can fail against that bug: the old rule answered true
+    /// at both of the `!done_today` lines below.
+    #[test]
+    fn a_chapter_read_for_another_plan_does_not_retire_this_ones_chip() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        let sched = schedule(&scope_chapters(&Scope::Canon, &w), &w, 3);
+        assert_eq!(sched.iter().map(Vec::len).collect::<Vec<_>>(), vec![1, 1, 1], "one chapter a day");
+        let mut p = plan("bible-3", Some(CLASS_WHOLE_BIBLE));
+        let today = "2026-09-23";
+
+        // Day 3's chapter, first read today for a plan that happens to share it.
+        // The day is stamped — it IS finished — but this plan is still asking for
+        // day 1, and working ahead is not today's reading.
+        let gen3 = |b: &str, ch: u16| b == "Gen" && ch == 3;
+        assert!(note_first_read(&mut p, &sched, "Gen", 3, gen3, today));
+        assert_eq!(p.done_on[&3], today);
+        assert!(!done_today(&p, Some(1), today), "a day ahead of the frontier is not today's");
+
+        // Day 1 read today: behind the frontier now — the chip retires.
+        let gen1_3 = |b: &str, ch: u16| b == "Gen" && (ch == 1 || ch == 3);
+        assert!(note_first_read(&mut p, &sched, "Gen", 1, gen1_3, today));
+        assert!(done_today(&p, Some(2), today));
+
+        // Tomorrow, day 1's chapter is read again — a Sunday morning, or the other
+        // plan reaching it. The caller never calls this for a re-read (first pass
+        // only), and even called, a done day is not re-stamped: the chip asks.
+        assert!(!note_first_read(&mut p, &sched, "Gen", 1, gen1_3, "2026-09-24"));
+        assert_eq!(p.done_on[&1], today);
+        assert!(!done_today(&p, Some(2), "2026-09-24"), "yesterday's day, re-read today, is not today's");
+
+        // The last day closes the plan: with no frontier, every stamp is behind it.
+        let all = |b: &str, _: u16| b == "Gen";
+        assert!(note_first_read(&mut p, &sched, "Gen", 2, all, "2026-09-25"));
+        assert!(done_today(&p, None, "2026-09-25"));
     }
 
     #[test]
@@ -593,8 +664,9 @@ mod tests {
         let w = ChapterWords::build(&c);
         let sched = schedule(&scope_chapters(&Scope::Canon, &w), &w, 3);
         let mut p = plan("bible-3", Some(CLASS_WHOLE_BIBLE));
-        assert!(mark_done(&mut p, 1));
-        assert!(!mark_done(&mut p, 1), "recording twice is a no-op");
+        assert!(mark_done(&mut p, 1, "2026-08-12"));
+        assert!(!mark_done(&mut p, 1, "2026-08-13"), "recording twice is a no-op");
+        assert_eq!(p.done_on[&1], "2026-08-12", "and keeps the first date");
         // The tracker now denies everything (record cleared) — day 1 stays done.
         let t = next_day(&p, &sched, |_, _| false).unwrap();
         assert_eq!((t.day, t.days_done), (2, 1));
@@ -617,7 +689,7 @@ mod tests {
     fn the_store_round_trips_and_reports_damage_without_destroying_it() {
         let home = scratch("store");
         let mut p = plan("bible-365", Some(CLASS_WHOLE_BIBLE));
-        mark_done(&mut p, 4);
+        mark_done(&mut p, 4, "2026-08-12");
         write_plan(&home, &p).unwrap();
 
         // A second, classless concept study beside it.

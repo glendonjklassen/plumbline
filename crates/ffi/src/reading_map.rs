@@ -120,7 +120,13 @@ pub unsafe extern "C" fn plumbline_engine_reading_record_json(
         let words = e.reading_words();
         let (chapter, reached) = (chapter as u16, reached.min(u16::MAX as u32) as u16);
         match reading::record(&home, &e.corpus, words, book, chapter, reached, seconds, now) {
-            Ok(recorded) => out_json(&wire::WireReadingRecorded { recorded }),
+            Ok(recorded) => {
+                // As in the tick: a first full pass may close a plan-day (plan::done_today).
+                if recorded.first_pass {
+                    e.note_first_read(&recorded.book, recorded.chapter, &reading::day_of(now));
+                }
+                out_json(&wire::WireReadingRecorded { recorded })
+            }
             Err(_) => ptr::null_mut(),
         }
     })
@@ -153,7 +159,14 @@ pub unsafe extern "C" fn plumbline_engine_reading_mark_read(
             return out_string(format!("unknown book: {book}"));
         }
         match reading::mark_read(&home, book, chapter as u16, date) {
-            Ok(()) => ptr::null_mut(),
+            Ok(first_pass) => {
+                // A paper-Bible chapter closes a plan-day like any other first pass —
+                // dated the day the reader gave, which is the day it was read.
+                if first_pass {
+                    engine.note_first_read(book, chapter as u16, &reading::day_of(date));
+                }
+                ptr::null_mut()
+            }
             Err(e) => out_string(e.to_string()),
         }
     })

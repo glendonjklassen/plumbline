@@ -18,11 +18,14 @@ export interface TodayPlan {
   name: string;
   day: number;
   chapters: TodayChapter[];
-  /** A full plan-day was finished today (even yesterday's leftovers). The
-   *  nav-strip chip retires on it for the rest of the day (2026-09-07, restoring
-   *  the 2026-08-12 rule after the 2026-08-18 work-ahead interlude); the Study
-   *  hub's band says so in words while its row keeps showing the NEXT portion,
-   *  so working ahead stays possible from there. */
+  /** A plan-day THIS plan had reached was finished today (even yesterday's
+   *  leftovers) — the core's own stamp on the day, not a re-derivation from the
+   *  reading store, so a chapter re-read today or a day read ahead for another
+   *  plan does not set it (2026-09-23). The nav-strip chip retires on it for the
+   *  rest of the day (2026-09-07, restoring the 2026-08-12 rule after the
+   *  2026-08-18 work-ahead interlude); the Study hub's band says so in words
+   *  while its row keeps showing the NEXT portion, so working ahead stays
+   *  possible from there. */
   doneToday: boolean;
 }
 
