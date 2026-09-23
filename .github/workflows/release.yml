@@ -1,6 +1,7 @@
 name: Release
 
-# Tag a version (v0.2.0) and this creates a GitHub Release (the changelog) and
+# Tag a version (v0.2.0) and this runs the CI workflow on that commit, and only
+# once every job of it is green creates a GitHub Release (the changelog) and
 # deploys the PWA (apps/web) to GitHub Pages.
 #
 # The version a reader SEES is derived once, in the `version` job below. The tag
@@ -66,11 +67,20 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "code=$(( ${maj:-0} * 10000 + ${min:-0} * 100 + ${pat:-0} ))" >> "$GITHUB_OUTPUT"
 
-  # Create the GitHub Release up front, independently of the deploy (the lesson
-  # of v0.3.0, where one platform's break blocked every other artifact).
+  # THE GATE. ci.yml as a called workflow: every job it has, on this commit,
+  # inside this run — so "the release is green" and "CI is green" are one fact.
+  # Until 2026-09-23 the two workflows fired on the tag side by side, and
+  # v0.74.0 went to plumblinebible.org with a red `web` job beside it. A flake
+  # here holds the publish; re-run the failed job and the release resumes.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  # The GitHub Release, only once the suite is green — the changelog should never
+  # describe a build that did not ship. (v0.3.0's lesson, one platform's break
+  # blocking every other artifact, no longer applies: the PWA is the one artifact.)
   create-release:
     runs-on: ubuntu-latest
-    needs: version
+    needs: [version, ci]
     steps:
       # Guarded on the step, not the job: a skipped job skips everything that
       # needs it, and a dry run is supposed to keep building.
@@ -84,12 +94,12 @@ jobs:
                  --title "Plumbline ${{ github.ref_name }}" --generate-notes
 
   # Deploy the PWA to GitHub Pages — the install path (hosting decided
-  # 2026-07-25). Same pipeline CI verifies: data pack → wasm engine → Vite
-  # bundle; the bundle is base "./" so the /plumbline/ subpath needs no
-  # rebuild.
+  # 2026-07-25). Same pipeline the `ci` job above has just verified on this
+  # commit: data pack → wasm engine → Vite bundle; the bundle is base "./" so
+  # the /plumbline/ subpath needs no rebuild.
   pages:
     runs-on: ubuntu-latest
-    needs: version
+    needs: [version, ci]
     permissions:
       contents: read
       pages: write

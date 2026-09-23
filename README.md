@@ -55,14 +55,15 @@ theme](assets/readme/themeable.png)
 
 ### Study
 
-- Tap any word for its dictionary entry, every rendering of the underlying
-  word, and a concordance of where it appears
+- Tap any word for its Strong's entry with its transliteration, every
+  rendering of the underlying word, the family of words it belongs to, and a
+  concordance of where it appears
 - The same root traced across the Old and New Testaments
 - The 1769 translators' own margin notes
 - Cross-references from the Treasury of Scripture Knowledge
 - Search that handles partial matches, phrases, and original-language words
-- Optional statistical layers — where a word concentrates, which words keep
-  company — all computed on your device, all off by default
+- Statistical layers — where a word concentrates, which words keep company —
+  all computed on your device, on by default; Settings turns them off
 
 ### Your own work
 
@@ -83,6 +84,10 @@ theme](assets/readme/themeable.png)
 - A reading map: coverage across the canon, an activity heatmap, and a history
   log; chapters you have not visited lately glow
 - Mark a chapter or book read by hand, on a date you pick
+- Reading plans — the whole Bible in a year, 180 or 90 days, the New
+  Testament in 90, a chronological order, Psalms and Proverbs in 30 — and
+  devotional walks, with today's portion one tap away above the canon strip
+  and a finish date projected from your own pace
 - Hymnal: public-domain hymns with chords the engine transposes, per-language
   texts, and a sing mode that scrolls continuously
 
@@ -101,16 +106,8 @@ theme](assets/readme/themeable.png)
 
 ## Getting started
 
-First launch asks who's opening the Book — **new in the faith** (a welcome
-with next steps, landing in John), **curious about the Bible** (for someone
-still deciding what they believe), **sharing the gospel** (straight into the
-Romans Road presentation), or **established believer** (set up study and
-memorization, and choose how much study detail sits beside the text). All of
-it is switchable any time in **Settings**; the text and your own notes, tags,
-and threads are always on. Whichever welcome you were given stays one tap
-away afterwards, under **Welcome** in the top bar.
-
-Then:
+The reader is the first screen: the text is there as soon as the app opens,
+and a shared link opens straight at the passage it names. From there:
 
 1. **Read.** Tap the passage button (`John 3 ▾`) for the book → chapter →
    verse navigator, swipe (or `←`/`→`) to step chapters.
@@ -121,8 +118,11 @@ Then:
 4. **Tag as you go, weave later.** Tag passages by topic over weeks; open the
    tag and hit **⇔ make weave** to chain them through the canon. Point two
    panes at linked passages and the connectors draw themselves.
-5. **≡ menu** holds the rest: Memorize, Explore, History, Present, the guide,
-   and Settings — including **backup to a zip** that restores on any device.
+5. The bottom bar goes to **Read**, **Study** (your notes, tags, threads and
+   weaves, memorization, reading plans and the reading map), **Preach**
+   (Present and its materials), **Share**, and **Sing** (the hymnal). The
+   **≡ menu** holds History, the guide, and Settings — including **backup to
+   a zip** that restores on any device.
 
 ## Share the Bible — and your church — with one code
 

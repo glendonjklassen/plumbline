@@ -1,25 +1,26 @@
 name: CI
 
-# When a version is cut, and on every PR to `main`.
+# On every PR to `main`, and INSIDE every release: release.yml calls this
+# workflow as its first job and publishes nothing until every job here is
+# green (2026-09-23 — v0.74.0 deployed with a red `web` beside it, because the
+# two workflows used to fire on the tag independently). A flake holds the
+# release until its job is re-run green: `gh run rerun <run-id> --failed`.
 #
 # NOT on branch pushes: cutting a release pushes the feature branch and `main`
 # at one commit, and the concurrency group is keyed by ref, so two refs at one
 # commit are two groups and neither cancels the other — the whole suite ran
-# twice over identical code. A tag fires no `pull_request` and there is no
-# branch-push trigger, so each PR and each release runs once.
-#
-# This workflow does NOT gate the Release one: both fire on the tag and run
-# alongside each other, so a red CI does not stop a deploy. The PR gate is what
-# catches a regression before it lands.
+# twice over identical code. And not on the tag itself any more: the release
+# run carries this suite, and a second copy alongside it would be the same
+# duplication under another name.
 on:
-  push:
-    tags: ["v*"]
+  workflow_call:
   pull_request:
     branches: ["main"]
   workflow_dispatch:
 
-# One run per ref. A re-pushed tag would otherwise pile up, and a new push to a
-# PR branch supersedes the in-flight run for that PR rather than racing it.
+# One run per ref: a new push to a PR branch supersedes the in-flight run for
+# that PR rather than racing it. Called from a release, `github.workflow` is the
+# CALLER's name and the ref is the tag, so a release's copy is its own group.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

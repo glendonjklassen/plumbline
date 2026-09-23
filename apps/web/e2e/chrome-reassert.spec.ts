@@ -203,14 +203,18 @@ test("a theme changed behind Sing is on the bar when Sing closes", async ({ page
 // cold launch can lose it — white bar under a Nord page until the app is switched
 // away from and back (maintainer, 2026-09-23). `Session.#reclaimEdges` re-sends
 // the opt-in at every re-assert moment by flipping the value away and back, and
-// ONLY while every safe-area inset reads 0px: a page already under the bars has
-// insets, and flipping its opt-in would drop it out of edge-to-edge for a frame.
+// ONLY while the bottom inset reads 0px: a page already under the home indicator
+// has one, and flipping its opt-in would drop it out of edge-to-edge for a frame.
+// The bottom ALONE: v0.74.0 gated on all four insets, and the launch it was for
+// turned out to be half extended — under the status bar, not under the home
+// indicator (the maintainer's screenshot, 2026-09-23) — so the gate never opened.
 //
 // CAN FAIL: nothing else in apps/web/src writes the viewport tag after load —
 // before the fix the observer below records no mutation at all and the first
-// assertion fails; and a version that skipped the inset gate would mutate under
-// the notch in the second half and fail there.
-test("the edge-to-edge opt-in is re-sent when no inset is present, and left alone when one is", async ({
+// assertion fails; a version that skipped the inset gate would mutate under the
+// full set of insets and fail the second half; and the v0.74.0 gate fails the
+// third, where a status-bar inset is present and the bottom is not.
+test("the edge-to-edge opt-in is re-sent while the home indicator has no inset, and left alone when it has one", async ({
   page,
 }) => {
   await bootDark(page);
@@ -268,10 +272,18 @@ test("the edge-to-edge opt-in is re-sent when no inset is present, and left alon
   // The theme-colour re-assert is synchronous in the same handler, so once it has
   // landed the viewport half has had its chance.
   await expect.poll(() => chromeState(page)).toBeTruthy();
-  expect(await writes(), "an inset means the page is already under the bars").toEqual([]);
-  await page.evaluate(() => {
-    const r = document.documentElement.style;
-    r.removeProperty("--safeTop");
-    r.removeProperty("--safeBottom");
-  });
+  expect(await writes(), "a home-indicator inset means the page is already under it").toEqual([]);
+
+  // Half extended — the launch in the screenshot: under the status bar, with
+  // nothing under the home indicator. This is the state the whole thing exists
+  // for, and the one a gate on every inset missed.
+  await page.evaluate(() => document.documentElement.style.removeProperty("--safeBottom"));
+  await arm();
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect.poll(writes, { message: "a status-bar inset alone does not stand the re-send down" }).toEqual([
+    COVER,
+    AUTO,
+  ]);
+  expect(await viewport()).toBe(COVER);
+  await page.evaluate(() => document.documentElement.style.removeProperty("--safeTop"));
 });
