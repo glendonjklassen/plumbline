@@ -87,3 +87,47 @@ test("a tag is renamed from its own card in the study panel, and the card follow
   await expect(panel).toContainText("Titus 3:5");
   await expect(panel).not.toContainText("zeal");
 });
+
+const confirm = (page: Page) => page.locator('[data-surface="confirm"]');
+const membersOf = async (page: Page, tag: string): Promise<string[]> => {
+  const tags = ((await page.evaluate(() => (window as any).__plumbline.rpc.call("tags"))) as any).tags;
+  return (tags.find((t: any) => t.name === tag)?.members ?? []).map((m: any) => m.verse);
+};
+
+// MUTATION this would catch: drop the `carried` toggle in TagPicker so a tap on
+// a carried tag ADDS again — the sheet closes on the add and the confirmation
+// below never appears; or confirm-then-remove regardless of the answer — the
+// Cancel half fails. Both halves asserted, as destructive.spec.ts does.
+// Reasoned, not run.
+test("a verse is taken out of a tag from the picker sheet, after asking", async ({ page }) => {
+  await boot(page);
+  await makeTag(page, "kingdom", "John 3:16");
+  await makeTag(page, "mercy", "Titus 3:5");
+
+  await page.evaluate(() => ((window as any).__plumbline.tagPickFor = "John 3:16"));
+  const kingdom = sheet(page).locator("button.tag", { hasText: "kingdom" });
+  const mercy = sheet(page).locator("button.tag", { hasText: "mercy" });
+  // The sheet says which tags THIS verse already carries.
+  await expect(kingdom).toHaveAttribute("aria-pressed", "true");
+  await expect(mercy).toHaveAttribute("aria-pressed", "false");
+
+  await kingdom.click();
+  await expect(confirm(page)).toBeVisible();
+  await expect(confirm(page)).toContainText("kingdom");
+  // Named the way a reader says it, not as the wire key.
+  await expect(confirm(page)).toContainText("John 3:16");
+  await confirm(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm(page)).toBeHidden();
+  expect(await membersOf(page, "kingdom"), "Cancel must not remove").toContain("John 3:16");
+  await expect(sheet(page), "the sheet stays open either way").toBeVisible();
+
+  // Now mean it.
+  await kingdom.click();
+  await confirm(page).getByRole("button", { name: "Remove" }).click();
+  await expect.poll(() => membersOf(page, "kingdom"), { timeout: 15_000 }).not.toContain("John 3:16");
+  // The tag itself survives — only the verse left it — and the sheet, still
+  // open, shows it unchecked, so the next tap would add the verse back.
+  expect(await tagNames(page)).toContain("kingdom");
+  await expect(sheet(page)).toBeVisible();
+  await expect(kingdom).toHaveAttribute("aria-pressed", "false");
+});

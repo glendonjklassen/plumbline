@@ -6,7 +6,7 @@
 import { nowStamp } from "../engine/StudyEngine";
 import type { Session } from "../state/session.svelte";
 import { t } from "../lib/i18n.svelte";
-import { renameTag } from "./tagActions";
+import { removeVerseFromTag, renameTag } from "./tagActions";
 
 /** The text language the OPEN study belongs to, so a link out of it stays in
  *  the same Bible. Undefined for every panel that is not language-bearing. */
@@ -109,19 +109,12 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       s.threadPickFor = link.refKey;
       break;
     case "untag": {
-      // The wire carries the tag ordinal; authoring wants the name.
+      // The wire carries the tag ordinal; authoring wants the name. The ask and
+      // the write are the picker sheet's (`study/tagActions`), so the two doors
+      // out of a tag say the same thing.
       const tag = (await s.fetchQ("tags"))?.tags?.[link.tag];
       if (!tag) break;
-      if (
-        !(await s.askConfirm(
-          t("tag.removeAsk", { passage: link.refKey, tag: tag.name }),
-          t("tag.removeBody"),
-          t("tag.removeVerb"),
-        ))
-      ) {
-        break;
-      }
-      report(s, s.author("tagRemove", tag.name, "verse", link.refKey));
+      await removeVerseFromTag(s, tag.name, link.refKey);
       break;
     }
     case "makeWeave":
