@@ -597,6 +597,12 @@ pub enum PanelLink {
     DeleteWeave {
         index: usize,
     },
+    /// `renametag:I` — prompt for a new name, then rename tag I. The library
+    /// ordinal, like `deletetag:`; the shell looks the name up and keeps the
+    /// tag's identity through `tag_rename`.
+    RenameTag {
+        index: usize,
+    },
     /// `editthreadnotes:I` / `editweavenotes:I` — prompt, then set notes.
     EditThreadNotes {
         index: usize,
@@ -718,6 +724,7 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
         "reject" => PanelLink::Reject { index: rest.parse().ok()? },
         "deletethread" => PanelLink::DeleteThread { index: rest.parse().ok()? },
         "deletetag" => PanelLink::DeleteTag { index: rest.parse().ok()? },
+        "renametag" => PanelLink::RenameTag { index: rest.parse().ok()? },
         "deleteweave" => PanelLink::DeleteWeave { index: rest.parse().ok()? },
         "editthreadnotes" => PanelLink::EditThreadNotes { index: rest.parse().ok()? },
         "editthreadopening" => PanelLink::EditThreadOpening { index: rest.parse().ok()? },
@@ -1749,9 +1756,13 @@ pub fn tag_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
     let mut out = vec![
         Block::para(vec![Run::new(&t.name, sz::TITLE, Color::Ink).bold()]),
         // Same shape as a thread's header line: the count, then the quiet
-        // destructive action (the shell confirms before it authors).
+        // housekeeping — rename first (a reader looked for it HERE and found
+        // only the library screen, 2026-10-11), then the destructive action
+        // (the shell confirms before it authors).
         Block::para(vec![
             Run::new(sp("panel.members", t.members.len()), sz::SMALL, Color::Faded),
+            Run::new("   ", sz::SMALL, Color::Ink),
+            Run::new(s("panel.renameTag"), sz::CAPTION, Color::Faded).link(format!("renametag:{index}")),
             Run::new("   ", sz::SMALL, Color::Ink),
             Run::new(s("panel.deleteTag"), sz::CAPTION, Color::Faded).link(format!("deletetag:{index}")),
         ]),

@@ -222,6 +222,8 @@ fn parse_link_round_trips_the_producer_uris() {
     assert_eq!(parse_link("reject:3"), Some(PanelLink::Reject { index: 3 }));
     assert_eq!(parse_link("deletethread:2"), Some(PanelLink::DeleteThread { index: 2 }));
     assert_eq!(parse_link("deletetag:0"), Some(PanelLink::DeleteTag { index: 0 }));
+    assert_eq!(parse_link("renametag:0"), Some(PanelLink::RenameTag { index: 0 }));
+    assert_eq!(parse_link("renametag:x"), None);
     assert_eq!(parse_link("deleteweave:4"), Some(PanelLink::DeleteWeave { index: 4 }));
     assert_eq!(parse_link("deleteweave:x"), None);
     assert_eq!(parse_link("editthreadnotes:2"), Some(PanelLink::EditThreadNotes { index: 2 }));
@@ -755,6 +757,9 @@ fn tags_list_and_detail_verse_and_code_members() {
     let u = uris(&d);
     assert!(u.contains(&"go:Matt:6:33".to_string()));
     assert!(u.contains(&"occ:G932".to_string()));
+    // The card's housekeeping line: rename beside delete, both by library ordinal.
+    assert!(u.contains(&"renametag:0".to_string()), "{u:?}");
+    assert!(u.contains(&"deletetag:0".to_string()), "{u:?}");
     assert!(d.iter().any(|b| text_of(b).contains("seek first")));
 }
 

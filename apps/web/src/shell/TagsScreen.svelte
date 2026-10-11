@@ -15,6 +15,7 @@
   import { getSession } from "../state/session.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
   import { plural, t } from "../lib/i18n.svelte";
+  import { renameTag } from "../study/tagActions";
 
   const s = getSession();
 
@@ -48,15 +49,12 @@
     s.screen = "explore";
   };
 
-  /** Rename keeps the tag's IDENTITY — the core carries the id across, so the
-   *  tag on the other side is the same tag and not a new one wearing the name. */
+  /** Pick which tag, then the shared rename flow (`study/tagActions`) — the
+   *  same prompt the tag card and the picker raise, with the tag already known. */
   async function rename(): Promise<void> {
     const from = await s.askPick(t("tags.renameWhich"), tags);
     if (!from) return;
-    const to = await s.askText(t("tags.renameTo", { name: from }), from);
-    if (to === null || to.trim() === "" || to.trim() === from) return;
-    const err = await s.author("tagRename", from, to.trim());
-    s.showToast(err ?? t("tags.renamed", { from, to: to.trim() }));
+    await renameTag(s, from);
   }
 
   /** Merge DELETES the source tag, so it asks first and names both sides in the

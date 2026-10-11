@@ -670,7 +670,7 @@ mod tests {
         // German writes the same minute on a 24-hour clock.
         assert_eq!(
             title_in(crate::i18n::Lang::De, &church("Grace", Some(600), "")),
-            "Grace: Trifft sich sonntags um 10:00"
+            "Grace: Gottesdienst sonntags um 10:00"
         );
     }
 }

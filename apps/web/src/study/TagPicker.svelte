@@ -7,6 +7,7 @@
   import { nowStamp } from "../engine/StudyEngine";
   import { refDisplay } from "../reader/refname";
   import { t } from "../lib/i18n.svelte";
+  import { removeVerseFromTag, renameTag } from "./tagActions";
 
   const s = getSession();
 
@@ -41,6 +42,19 @@
     return out;
   });
 
+  /** The tags this verse already carries — the rows the sheet shows checked,
+   *  and whose tap REMOVES rather than adds. Read off the same tags query the
+   *  list is built from, so a write re-derives both at once. */
+  const carried = $derived.by((): Set<string> => {
+    const ref = s.tagPickFor;
+    const out = new Set<string>();
+    if (!ref) return out;
+    for (const tg of tags) {
+      if ((tg.members ?? []).some((m: any) => m.kind === "verse" && m.verse === ref)) out.add(tg.name);
+    }
+    return out;
+  });
+
   let newName = $state("");
 
   function close(): void {
@@ -56,6 +70,15 @@
       s.showToast(err ?? t("tag.tagged", { passage: said, tag: name })),
     );
     close();
+  }
+
+  /** Tapping a tag the verse already carries takes the verse OUT of it. The
+   *  sheet stays open: a reader tidying one verse's tags may have more than one
+   *  to tidy, and the list re-renders with the check gone. (Adding still
+   *  closes the sheet, as it always has — that tap is a destination.) */
+  async function untag(name: string): Promise<void> {
+    const ref = s.tagPickFor!;
+    await removeVerseFromTag(s, name, ref);
   }
 
   async function remove(name: string): Promise<void> {
@@ -93,10 +116,17 @@
         {/if}
         {#each g.tags as tg (tg.name)}
           <div class="row">
-            <button class="tag" onclick={() => pick(tg.name)}>
+            <button
+              class="tag"
+              class:on={carried.has(tg.name)}
+              aria-pressed={carried.has(tg.name)}
+              onclick={() => (carried.has(tg.name) ? void untag(tg.name) : pick(tg.name))}
+            >
+              <span class="check" aria-hidden="true">{carried.has(tg.name) ? "✓" : ""}</span>
               {tg.name}
               <span class="count">{tg.members?.length ?? 0}</span>
             </button>
+            <button class="edit" title={t("tag.rename")} aria-label={t("tag.rename")} onclick={() => void renameTag(s, tg.name)}>✎</button>
             <button class="del" title={t("tag.delete")} onclick={() => void remove(tg.name)}>✕</button>
           </div>
         {/each}
@@ -185,11 +215,24 @@
   .tag:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
-  .del {
+  .tag.on {
+    color: var(--gold, #9e7d38);
+    font-weight: 600;
+  }
+  .check {
+    display: inline-block;
+    width: 1.1em;
+    text-align: center;
+  }
+  .del,
+  .edit {
     padding: 6px 10px;
     color: var(--faded, #8a8276);
     border-radius: 6px;
     font-size: calc(13px * var(--uiScale, 1));
+  }
+  .edit:hover {
+    color: var(--gold, #9e7d38);
   }
   .del:hover {
     color: var(--tierResearch, #b04a3a);
