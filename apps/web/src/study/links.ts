@@ -6,6 +6,7 @@
 import { nowStamp } from "../engine/StudyEngine";
 import type { Session } from "../state/session.svelte";
 import { t } from "../lib/i18n.svelte";
+import { renameTag } from "./tagActions";
 
 /** The text language the OPEN study belongs to, so a link out of it stays in
  *  the same Bible. Undefined for every panel that is not language-bearing. */
@@ -179,6 +180,21 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       const err = await s.author("tagDelete", tag.name);
       s.showToast(err ?? t("tag.deleted", { tag: tag.name }));
       if (!err && s.panel?.kind === "tag") s.panel = { kind: "tags" };
+      break;
+    }
+    // Rename from the tag's own card. Not destructive, so no confirmation — the
+    // prompt IS the question. The card stays up but is RE-AIMED: the library
+    // sorts by name, so the renamed tag can land at a new ordinal, and a card
+    // left pointing at the old index would show whatever slid into it.
+    case "renameTag": {
+      const tag = (await s.fetchQ("tags"))?.tags?.[link.index];
+      if (!tag) break;
+      const renamed = await renameTag(s, tag.name);
+      if (renamed && s.panel?.kind === "tag") {
+        const after = ((await s.fetchQ("tags"))?.tags ?? []) as { name: string }[];
+        const index = after.findIndex((x) => x.name === renamed);
+        s.panel = index >= 0 ? { kind: "tag", index } : { kind: "tags" };
+      }
       break;
     }
     case "deleteWeave": {

@@ -61,15 +61,19 @@
 {/if}
 
 <style>
+  /* A prompt is a question asked ON TOP of whatever asked it, so it stacks at
+     the confirm dialog's level (50/51), above the picker sheets (44/45): the tag
+     picker raises this prompt for a rename, and at 41 the sheet sat over the
+     prompt's own OK button and swallowed the tap. */
   .backdrop {
     position: fixed;
     inset: 0;
     background: rgba(20, 16, 8, 0.35);
-    z-index: 40;
+    z-index: 50;
   }
   .dialog {
     position: fixed;
-    z-index: 41;
+    z-index: 51;
     top: 24vh;
     left: 50%;
     transform: translateX(-50%);

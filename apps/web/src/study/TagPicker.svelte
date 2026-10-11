@@ -7,6 +7,7 @@
   import { nowStamp } from "../engine/StudyEngine";
   import { refDisplay } from "../reader/refname";
   import { t } from "../lib/i18n.svelte";
+  import { renameTag } from "./tagActions";
 
   const s = getSession();
 
@@ -97,6 +98,7 @@
               {tg.name}
               <span class="count">{tg.members?.length ?? 0}</span>
             </button>
+            <button class="edit" title={t("tag.rename")} aria-label={t("tag.rename")} onclick={() => void renameTag(s, tg.name)}>✎</button>
             <button class="del" title={t("tag.delete")} onclick={() => void remove(tg.name)}>✕</button>
           </div>
         {/each}
@@ -185,11 +187,15 @@
   .tag:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
-  .del {
+  .del,
+  .edit {
     padding: 6px 10px;
     color: var(--faded, #8a8276);
     border-radius: 6px;
     font-size: calc(13px * var(--uiScale, 1));
+  }
+  .edit:hover {
+    color: var(--gold, #9e7d38);
   }
   .del:hover {
     color: var(--tierResearch, #b04a3a);
