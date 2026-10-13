@@ -1209,11 +1209,12 @@ pub struct WireConfigState {
     /// which is not the same as an empty position.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub slots: std::collections::BTreeMap<String, WirePaneRef>,
-    /// Lifetime reads through the Bible, or -1 for "never said" — not the same
-    /// as answering "none". See `core::config::Config::bible_reads`.
+    /// Times through the Bible before the reading map's own count, or -1 for
+    /// "never said" — not the same as answering "none". See
+    /// `core::config::Config::bible_reads`.
     #[serde(default = "minus_one")]
     pub bible_reads: i64,
-    /// Whether the current full-canon state has already been counted.
+    /// Retired; see `core::config::Config::bible_reads_credited`.
     #[serde(default)]
     pub bible_reads_credited: bool,
     /// Verse-per-line reading mode.
@@ -1632,6 +1633,9 @@ pub struct WireReadingBooks {
     /// a chapter has been read through, and once every chapter has).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub forecast: Option<reading::Forecast>,
+    /// Times through the Bible and each part of it, counted from the map alone —
+    /// a shell adds the reader's hand count (`bibleReads`) to every row (additive).
+    pub sections: Vec<reading::SectionReads>,
 }
 
 /// One book's chapters, for the chapter grid.
