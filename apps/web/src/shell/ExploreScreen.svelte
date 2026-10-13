@@ -64,20 +64,22 @@
   const dueCount = $derived(((dueQ?.refs ?? []) as string[]).length);
   const suggestedCount = $derived(((suggestedQ?.suggested ?? []) as any[]).length);
 
+  // Times through the Bible and each part of it, counted by the engine from
+  // per-chapter reads: a part has been read as many times as its least-read
+  // chapter. The parts are only bundles of books — nothing is stored per part.
+  const sections = $derived(((booksQ?.sections ?? []) as any[]) ?? []);
+  const bible = $derived(sections.find((x) => x.id === "bible"));
+
   // The reading map as one number and one bar. CHAPTERS, not a word-weighted
-  // percentage: "412 of 1,189" is a thing a reader can hold, and the map's own
-  // `read` count is exactly chapters that have had a full pass. Painted in the
-  // map's `readDone` hue, so it follows whichever theme is on.
+  // percentage: "412 of 1,189" is a thing a reader can hold. It is the time
+  // through under way — chapters read more often than the least-read one — so
+  // it empties again after each finish instead of sitting full for good. Painted
+  // in the map's `readDone` hue, so it follows whichever theme is on.
   const coverage = $derived.by(() => {
-    const books = (booksQ?.books ?? []) as any[];
-    if (!books.length) return null;
-    let read = 0;
-    let total = 0;
-    for (const b of books) {
-      read += Number(b.read ?? 0);
-      total += Number(b.chapters ?? 0);
-    }
-    return total > 0 ? { read, total, frac: read / total } : null;
+    if (!bible || !bible.chapters) return null;
+    const read = Number(bible.ahead ?? 0);
+    const total = Number(bible.chapters);
+    return { read, total, frac: read / total };
   });
 
   const nf = $derived(new Intl.NumberFormat(lang()));
@@ -97,40 +99,43 @@
   }
 
   // The lifetime counter: how many times this reader has been through the whole
-  // Bible. Seeded ONCE by hand and earned after that — the only thing that moves
-  // it is finishing the canon. -1 is "never said", deliberately not 0: a reader
-  // who answers "none" has told us something and must not be asked again.
-  const reads = $derived(Number(s.config.bibleReads ?? -1));
-  const readsSet = $derived(reads >= 0);
-
-  /** Crediting a finished canon, exactly once. `bibleReadsCredited` marks the
-   *  CURRENT complete state as counted, and is cleared if the map ever drops
-   *  below full — so the number moves on finishing, not on every visit to this
-   *  screen afterwards. */
-  $effect(() => {
-    if (!showReal || !readsSet || !coverage) return;
-    const complete = coverage.read >= coverage.total && coverage.total > 0;
-    const credited = s.config.bibleReadsCredited === true;
-    if (complete && !credited) {
-      s.config.bibleReads = reads + 1;
-      s.config.bibleReadsCredited = true;
-      s.saveConfig();
-    } else if (!complete && credited) {
-      s.config.bibleReadsCredited = false;
-      s.saveConfig();
-    }
-  });
+  // Bible. `bibleReads` is what they had read BEFORE the map's own count, asked
+  // once and added to every part alike; everything after is the map's. -1 is
+  // "never said", deliberately not 0: a reader who answers "none" has told us
+  // something and must not be asked again.
+  const base = $derived(Number(s.config.bibleReads ?? -1));
+  const readsSet = $derived(base >= 0);
+  const reads = $derived(Math.max(0, base) + Number(bible?.reads ?? 0));
 
   async function setReads(): Promise<void> {
     // Asked once; no edit path afterwards, on purpose.
     if (readsSet) return;
     const n = await s.askNumber(t("explore.readsAsk"));
     if (n === null) return;
-    s.config.bibleReads = n;
-    // The canon's current state is what this answer was given against, so a
-    // reader already finished is not credited with the read they just reported.
-    s.config.bibleReadsCredited = !!coverage && coverage.total > 0 && coverage.read >= coverage.total;
+    // The answer is the whole count today, so whatever the map has already
+    // counted is part of it, not added on top.
+    s.config.bibleReads = Math.max(0, n - Number(bible?.reads ?? 0));
     s.saveConfig();
+  }
+
+  // The parts, folded under the counter: a tap opens them. Remembered on this
+  // device only — a per-viewer convenience, so a failure to store is harmless.
+  const OPEN_KEY = "plumbline:sectionsOpen";
+  let sectionsOpen = $state(readOpen());
+  function readOpen(): boolean {
+    try {
+      return localStorage.getItem(OPEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+  function toggleSections(): void {
+    sectionsOpen = !sectionsOpen;
+    try {
+      localStorage.setItem(OPEN_KEY, sectionsOpen ? "1" : "0");
+    } catch {
+      // Private window or blocked storage: it simply starts closed next time.
+    }
   }
 
   function openPlans(): void {
@@ -245,13 +250,31 @@
           {/if}
 
           <!-- The lifetime counter, beside the coverage bar: one says how far
-               through this pass you are, the other how many passes there have
-               been. Unset it is an invitation; set it is a statement, not a
-               control. The bar itself opens the navigator, where the map lives. -->
+               through this time you are, the other how many times there have
+               been. Unset it is an invitation; set, a tap folds out the same
+               count for each part of the Bible. The bar itself opens the
+               navigator, where the map lives. -->
           {#if readsSet}
-            <div class="reads"><span class="reads-n">{nf.format(reads)}</span>
+            <button class="reads" aria-expanded={sectionsOpen} onclick={toggleSections}>
+              <span class="reads-n">{nf.format(reads)}</span>
               <span class="reads-label">{plural("explore.readsTimes.one", "explore.readsTimes.other", reads)}</span>
-            </div>
+              <svg class="reads-fold" class:open={sectionsOpen} viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            {#if sectionsOpen}
+              <ul class="sections" aria-label={t("explore.sectionsTitle")}>
+                {#each sections.filter((x) => x.id !== "bible" && x.chapters > 0) as sec (sec.id)}
+                  <li class="section" class:child={sec.depth > 0}>
+                    <span class="section-name">{sec.name}</span>
+                    <span class="section-n">{nf.format(base + Number(sec.reads))}</span>
+                    <span class="section-next">
+                      {t("explore.sectionNext", { ahead: nf.format(sec.ahead), total: nf.format(sec.chapters) })}
+                    </span>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
           {:else}
             <button class="reads unset" onclick={setReads}>
               <span class="reads-label">{t("explore.readsSet")}</span>
@@ -416,8 +439,9 @@
   .coverage:hover {
     border-color: var(--gold, #9e7d38);
   }
-  /* A quiet statement, not a control: once set, a tap does nothing. */
+  /* The count, and the fold for each part's count under it. */
   .reads {
+    width: 100%;
     display: flex;
     align-items: baseline;
     gap: 8px;
@@ -436,16 +460,70 @@
     font-size: calc(14.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
-  /* A tap target: 44px is the floor the rest of the chrome keeps
-     (e2e/touch-targets.spec.ts). Restated because the `min-height: auto` above
-     removes the card floor this would otherwise inherit. */
-  .reads.unset {
+  /* Both forms are tap targets now: 44px is the floor the rest of the chrome
+     keeps (e2e/touch-targets.spec.ts), restated because the band's other cards
+     set `min-height: auto`. */
+  .reads {
     min-height: 44px;
-    align-items: center;
-    width: 100%;
   }
-  .reads.unset:hover {
+  .reads.unset {
+    align-items: center;
+  }
+  .reads:hover {
     border-color: var(--gold, #9e7d38);
+  }
+  .reads-fold {
+    margin-inline-start: auto;
+    align-self: center;
+    flex: none;
+    width: calc(18px * var(--uiScale, 1));
+    height: calc(18px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+    transition: transform 0.15s ease-out;
+  }
+  .reads-fold.open {
+    transform: rotate(180deg);
+  }
+  /* Each part as a row: name, count, and the way into the next time through.
+     Testaments at the margin, their parts set in under them. */
+  .sections {
+    list-style: none;
+    margin: -4px 0 0;
+    padding: 6px 14px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 10px;
+    background: var(--paper, #fcf9f4);
+  }
+  .section {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 10px;
+    padding: 7px 0;
+  }
+  .section + .section {
+    border-top: 1px solid color-mix(in srgb, var(--rule, #d8cba8) 55%, transparent);
+  }
+  .section.child {
+    padding-inline-start: 16px;
+  }
+  .section-name {
+    font-size: calc(15px * var(--uiScale, 1));
+    font-weight: 600;
+    color: var(--ink, #211f1a);
+  }
+  .section.child .section-name {
+    font-weight: 500;
+  }
+  .section-n {
+    font-size: calc(16px * var(--uiScale, 1));
+    font-weight: 600;
+    color: var(--gold, #9e7d38);
+    font-variant-numeric: tabular-nums;
+  }
+  .section-next {
+    grid-column: 1 / -1;
+    font-size: calc(12.5px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
   }
   .cov-text {
     font-size: calc(14.5px * var(--uiScale, 1));

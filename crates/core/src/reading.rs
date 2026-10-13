@@ -147,6 +147,13 @@ pub struct ChapterReading {
     /// lets recency silence the glow on its own, without a completed pass.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub touched: Option<String>,
+    /// Completed passes, counted. Additive: a record from before the count
+    /// existed has none, and its `last_read` stands for one — see
+    /// [`ChapterReading::times_read`], the only way to read this. Written only
+    /// past one, since a date already says one: a chapter read once keeps the
+    /// file it always had.
+    #[serde(skip_serializing_if = "says_no_more_than_the_date", default)]
+    pub reads: u32,
     /// Every key on this record this build has never heard of, carried back out
     /// again on save. The on-disk formats evolve **additively** (CLAUDE.md
     /// §Data formats), and every write path here rewrites the book's whole chapter
@@ -155,6 +162,18 @@ pub struct ChapterReading {
     /// flattened map writes no key, so today's files round-trip byte for byte.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+fn says_no_more_than_the_date(n: &u32) -> bool {
+    *n <= 1
+}
+
+impl ChapterReading {
+    /// How many times this chapter has been read through. A dated record with no
+    /// count is a pass from before counting began, so it is one, never zero.
+    pub fn times_read(&self) -> u32 {
+        self.reads.max(u32::from(self.last_read.is_some()))
+    }
 }
 
 /// A book's file: `home/reading/<book>.json`.
@@ -452,6 +471,8 @@ pub struct Heat {
 pub struct ChapterHeat {
     pub chapter: u16,
     pub words: u32,
+    /// Times read through ([`ChapterReading::times_read`]).
+    pub reads: u32,
     #[serde(flatten)]
     pub heat: Heat,
 }
@@ -468,6 +489,9 @@ pub struct BookHeat {
     pub words: u32,
     /// Chapters that have had a full read.
     pub read: u16,
+    /// Times the whole book has been read through: the fewest reads of any of its
+    /// chapters. See [`sections`].
+    pub reads: u32,
     #[serde(flatten)]
     pub heat: Heat,
 }
@@ -536,7 +560,8 @@ pub fn book_chapters(corpus: &Corpus, words: &ChapterWords, store: &Store, book:
         .map(|c| {
             let r = recs.and_then(|v| v.iter().find(|r| r.chapter == c));
             let w = words.words(book, c);
-            ChapterHeat { chapter: c, words: w, heat: heat_of(corpus, book, r, w, now) }
+            let reads = r.map_or(0, ChapterReading::times_read);
+            ChapterHeat { chapter: c, words: w, reads, heat: heat_of(corpus, book, r, w, now) }
         })
         .collect()
 }
@@ -563,6 +588,7 @@ pub fn books(corpus: &Corpus, words: &ChapterWords, store: &Store, now: &str) ->
             // a wordless chapter must not hold a finished book at "partial".
             let real: Vec<&ChapterHeat> = chapters.iter().filter(|c| c.words > 0).collect();
             let read = real.iter().filter(|c| c.heat.standing == Standing::Read).count() as u16;
+            let reads = real.iter().map(|c| c.reads).min().unwrap_or(0);
             let days = chapters.iter().filter_map(|c| c.heat.days).min();
             let last_read = chapters
                 .iter()
@@ -579,7 +605,100 @@ pub fn books(corpus: &Corpus, words: &ChapterWords, store: &Store, now: &str) ->
                 chapters: chapters.len() as u16,
                 words: total,
                 read,
+                reads,
                 heat: Heat { pct, standing, glow, days, last_read },
+            }
+        })
+        .collect()
+}
+
+// ── times through ────────────────────────────────────────────────────────────
+
+/// One [`SECTIONS`] row: `(id, depth, book index ranges)`.
+pub type Section = (&'static str, u8, &'static [(usize, usize)]);
+
+/// The parts of the canon counted separately, as `(id, depth, book index ranges)`
+/// over the 66 books in canon order. Depth 1 rows sit under the depth 0 row above
+/// them. Prophecy deliberately overlaps: Daniel also counts in Prophets and
+/// Revelation in Letters & Revelation. Not [`crate::reference::CANON_SEGMENTS`]:
+/// that is the canon map's eight bands, where Psalms sits inside Wisdom.
+pub const SECTIONS: [Section; 11] = [
+    ("bible", 0, &[(0, 65)]),
+    ("ot", 0, &[(0, 38)]),
+    ("law", 1, &[(0, 4)]),
+    ("history", 1, &[(5, 16)]),
+    ("psalms", 1, &[(18, 18)]),
+    ("wisdom", 1, &[(17, 17), (19, 21)]),
+    ("prophets", 1, &[(22, 38)]),
+    ("nt", 0, &[(39, 65)]),
+    ("gospelsActs", 1, &[(39, 43)]),
+    ("lettersRevelation", 1, &[(44, 65)]),
+    ("prophecy", 0, &[(26, 26), (65, 65)]),
+];
+
+/// How many times one section has been read through.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionReads {
+    /// Stable id from [`SECTIONS`]; `bible` is the whole canon.
+    pub id: &'static str,
+    /// The section's name in the reader's language.
+    pub name: String,
+    pub depth: u8,
+    /// Chapters in the section (those the corpus has words for).
+    pub chapters: u16,
+    /// Times through: the fewest reads of any chapter in the section. Psalm 23
+    /// read fifty times does not move it; the last unread psalm does.
+    pub reads: u32,
+    /// Chapters already read more than `reads` times — the way into the next
+    /// time through.
+    pub ahead: u16,
+}
+
+/// A section's name. Reuses the canon map's names where they mean the same books,
+/// and the book's own name for Psalms, so nothing can name them two ways.
+fn section_name(id: &str) -> String {
+    let lang = crate::i18n::active();
+    match id {
+        "ot" => crate::i18n::t(lang, "booknav.old", &[]),
+        "nt" => crate::i18n::t(lang, "booknav.new", &[]),
+        "psalms" => crate::i18n::book_name(lang, "Ps"),
+        "law" => crate::reference::segment_label("Law", lang),
+        "history" => crate::reference::segment_label("History", lang),
+        "wisdom" => crate::reference::segment_label("Wisdom", lang),
+        "prophets" => crate::reference::segment_label("Prophets", lang),
+        _ => crate::i18n::t(lang, &format!("reading.section.{id}"), &[]),
+    }
+}
+
+/// Every [`SECTIONS`] row, in order. Chapters the corpus has no words for are
+/// left out, as [`books`] leaves them out of "all of it read".
+pub fn sections(words: &ChapterWords, store: &Store) -> Vec<SectionReads> {
+    let ids: Vec<&str> = canon::book_ids().collect();
+    SECTIONS
+        .iter()
+        .map(|&(id, depth, ranges)| {
+            let mut counts = Vec::new();
+            for &(lo, hi) in ranges {
+                for book in &ids[lo..=hi] {
+                    let recs = store.get(*book);
+                    for c in 1..=words.chapters(book) {
+                        if words.words(book, c) == 0 {
+                            continue;
+                        }
+                        let r = recs.and_then(|v| v.iter().find(|r| r.chapter == c));
+                        counts.push(r.map_or(0, ChapterReading::times_read));
+                    }
+                }
+            }
+            let reads = counts.iter().copied().min().unwrap_or(0);
+            SectionReads {
+                id,
+                name: section_name(id),
+                depth,
+                chapters: counts.len() as u16,
+                reads,
+                ahead: counts.iter().filter(|&&n| n > reads).count() as u16,
             }
         })
         .collect()
@@ -588,7 +707,10 @@ pub fn books(corpus: &Corpus, words: &ChapterWords, store: &Store, now: &str) ->
 // ── the forecast ─────────────────────────────────────────────────────────────
 
 /// When the reader will have read the whole Bible at their pace so far — the
-/// Study screen's line under the coverage bar.
+/// Study screen's line under the coverage bar. It is about the time through
+/// under way: a chapter is read when it has been read more times than the
+/// least-read chapter in the Bible (see [`sections`]), so the first time through
+/// is "has a full read" and every later one works the same way.
 ///
 /// The pace is the words of every chapter with a full read, over the days from
 /// the earliest such read to today (inclusive, so a first day of reading is one
@@ -625,24 +747,28 @@ pub fn forecast(words: &ChapterWords, store: &Store, now: &str) -> Option<Foreca
     let (mut words_read, mut words_left) = (0u32, 0u32);
     let (mut chapters_read, mut chapters_left) = (0u16, 0u16);
     let mut start: Option<i64> = None;
-    for book in canon::book_ids() {
-        let recs = store.get(book);
-        for c in 1..=words.chapters(book) {
-            let w = words.words(book, c);
-            if w == 0 {
-                continue;
+    let chapters: Vec<(u32, Option<&ChapterReading>)> = canon::book_ids()
+        .flat_map(|book| {
+            let recs = store.get(book);
+            (1..=words.chapters(book))
+                .map(move |c| (words.words(book, c), recs.and_then(|v| v.iter().find(|r| r.chapter == c))))
+        })
+        .filter(|(w, _)| *w > 0)
+        .collect();
+    let floor = chapters.iter().map(|(_, r)| r.map_or(0, ChapterReading::times_read)).min().unwrap_or(0);
+    for &(w, r) in &chapters {
+        // Read this time through, dated by its last read — which, for a
+        // chapter ahead of the floor, falls inside the time through under way.
+        let last = r.filter(|r| r.times_read() > floor).and_then(|r| r.last_read.as_deref());
+        match last.and_then(date_to_days) {
+            Some(d) => {
+                words_read += w;
+                chapters_read += 1;
+                start = Some(start.map_or(d, |s| s.min(d)));
             }
-            let last = recs.and_then(|v| v.iter().find(|r| r.chapter == c)).and_then(|r| r.last_read.as_deref());
-            match last.and_then(date_to_days) {
-                Some(d) => {
-                    words_read += w;
-                    chapters_read += 1;
-                    start = Some(start.map_or(d, |s| s.min(d)));
-                }
-                None => {
-                    words_left += w;
-                    chapters_left += 1;
-                }
+            None => {
+                words_left += w;
+                chapters_left += 1;
             }
         }
     }
@@ -855,6 +981,7 @@ pub fn record(
     let completed = pct >= COMPLETE_AT && total > 0 && reached_end(corpus, book, chapter, rec.reached);
     let first_pass = completed && rec.last_read.is_none();
     if completed {
+        rec.reads = rec.times_read() + 1;
         rec.last_read = Some(day_of(now));
         rec.touched = Some(day_of(now));
         rec.reached = 0;
@@ -882,6 +1009,11 @@ pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -
     let first_pass = match list.iter_mut().find(|r| r.chapter == chapter) {
         Some(r) => {
             let first = r.last_read.is_none();
+            // Setting the same day again is the dialog tapped twice, not a second
+            // reading — it must not add one.
+            if r.last_read.as_deref() != Some(day.as_str()) {
+                r.reads = r.times_read() + 1;
+            }
             r.last_read = Some(day.clone());
             r.touched = Some(day);
             r.reached = 0;
@@ -895,6 +1027,7 @@ pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -
                 dwell: 0.0,
                 last_read: Some(day.clone()),
                 touched: Some(day),
+                reads: 1,
                 extra: Map::new(),
             });
             true
@@ -1298,6 +1431,100 @@ mod tests {
         assert_eq!(gen.heat.standing, Standing::Read);
         assert!((gen.heat.pct - 1.0).abs() < 1e-6);
         assert_eq!(gen.read, 3);
+    }
+
+    #[test]
+    fn every_full_pass_is_counted_and_a_pass_from_before_counting_is_one() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        let home = scratch("count");
+        // Gen 3 is one 5-word verse: reaching verse 1 with a minute banked reads it.
+        for _ in 0..2 {
+            assert!(record(&home, &c, &w, "Gen", 3, 1, 60.0, NOW).unwrap().completed);
+        }
+        // A part-read pass adds nothing.
+        record(&home, &c, &w, "Gen", 3, 1, 0.1, NOW).unwrap();
+        mark_read(&home, "Gen", 3, "2026-05-04").unwrap();
+        mark_read(&home, "Gen", 3, "2026-05-04").unwrap();
+        let (store, _) = load(&home);
+        assert_eq!(
+            book_chapters(&c, &w, &store, "Gen", NOW)[2].reads,
+            3,
+            "two read, one marked, the second mark a repeat tap"
+        );
+
+        // A record written before the count existed: a date and no count is one read.
+        let old: ChapterReading = serde_json::from_str(r#"{"c":1,"lastRead":"2025-01-01"}"#).unwrap();
+        assert_eq!(old.times_read(), 1);
+        assert_eq!(ChapterReading::default().times_read(), 0);
+        // And never written back as a count, so a file nobody re-read is unchanged.
+        assert!(!serde_json::to_string(&old).unwrap().contains("reads"));
+        let twice = ChapterReading { reads: 2, ..old };
+        assert!(serde_json::to_string(&twice).unwrap().contains(r#""reads":2"#));
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_section_has_been_read_as_often_as_its_least_read_chapter() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        let mut store = Store::new();
+        let ch = |chapter, reads| ChapterReading {
+            chapter,
+            reads,
+            last_read: Some("2026-07-20".into()),
+            ..Default::default()
+        };
+        store.insert("Gen".into(), vec![ch(1, 5), ch(2, 2), ch(3, 2)]);
+        let all = sections(&w, &store);
+        let law = all.iter().find(|s| s.id == "law").unwrap();
+        assert_eq!((law.chapters, law.reads, law.ahead), (3, 2, 1), "Gen 1 read five times does not lift Genesis");
+        // The toy corpus has only Genesis, so the whole Bible is Genesis too.
+        assert_eq!(all[0].id, "bible");
+        assert_eq!(all[0].reads, 2);
+        let gen = books(&c, &w, &store, NOW).into_iter().find(|b| b.book == "Gen").unwrap();
+        assert_eq!(gen.reads, 2);
+        // A section with no text counts nothing, rather than "read" by vacuity.
+        let ps = all.iter().find(|s| s.id == "psalms").unwrap();
+        assert_eq!((ps.chapters, ps.reads), (0, 0));
+        // One unread chapter holds the whole section at zero.
+        store.get_mut("Gen").unwrap().pop();
+        assert_eq!(sections(&w, &store)[0].reads, 0);
+    }
+
+    /// The sections are bundles of books and nothing more: no count is stored per
+    /// section, so regrouping only changes this table. Pin what each one holds.
+    #[test]
+    fn the_sections_hold_the_books_they_are_named_for() {
+        let ids: Vec<&str> = canon::book_ids().collect();
+        let books_of = |id: &str| -> Vec<&str> {
+            let (_, _, ranges) = SECTIONS.iter().find(|s| s.0 == id).unwrap();
+            ranges.iter().flat_map(|&(lo, hi)| ids[lo..=hi].iter().copied()).collect()
+        };
+        assert_eq!(books_of("bible").len(), 66);
+        assert_eq!(books_of("law"), ["Gen", "Exod", "Lev", "Num", "Deut"]);
+        assert_eq!(books_of("history").first(), Some(&"Josh"));
+        assert_eq!(books_of("history").last(), Some(&"Esth"));
+        assert_eq!(books_of("psalms"), ["Ps"]);
+        assert_eq!(books_of("wisdom"), ["Job", "Prov", "Eccl", "Song"]);
+        assert_eq!(books_of("prophets").first(), Some(&"Isa"));
+        assert_eq!(books_of("prophets").last(), Some(&"Mal"));
+        assert_eq!(books_of("gospelsActs"), ["Matt", "Mark", "Luke", "John", "Acts"]);
+        assert_eq!(books_of("lettersRevelation").first(), Some(&"Rom"));
+        assert_eq!(books_of("lettersRevelation").last(), Some(&"Rev"));
+        assert_eq!(books_of("prophecy"), ["Dan", "Rev"]);
+        // Each testament's rows split it exactly: every book once, none left over.
+        for (testament, parts) in [
+            ("ot", ["law", "history", "psalms", "wisdom", "prophets"].as_slice()),
+            ("nt", &["gospelsActs", "lettersRevelation"]),
+        ] {
+            let mut joined: Vec<&str> = parts.iter().flat_map(|p| books_of(p)).collect();
+            joined.sort_by_key(|b| canon::book_order(b));
+            assert_eq!(joined, books_of(testament), "{testament}");
+        }
+        for (id, ..) in SECTIONS {
+            assert!(!section_name(id).starts_with("reading."), "{id} has no name");
+        }
     }
 
     #[test]
@@ -1721,5 +1948,24 @@ mod tests {
         assert_eq!(forecast(&w, &load(&home).0, NOW), None);
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&home2);
+    }
+
+    /// Finishing once must not end the forecast for good: every chapter keeps a
+    /// date after the first time through, so a forecast that only asked "has it a
+    /// date?" would have nothing left to project, ever again.
+    #[test]
+    fn the_forecast_follows_the_second_time_through() {
+        let w = ChapterWords::build(&toy());
+        let home = scratch("forecast-again");
+        for ch in 1..=3 {
+            mark_read(&home, "Gen", ch, "2026-01-01").unwrap();
+        }
+        // Gen 1 (10 words) again on the 20th; Gen 2 and 3 (25 words) to go. 10
+        // words over 9 days → ceil(25 / 1.11) = 23 days on from the 28th.
+        mark_read(&home, "Gen", 1, "2026-07-20").unwrap();
+        let f = forecast(&w, &load(&home).0, NOW).unwrap();
+        assert_eq!((f.start.as_str(), f.chapters_read, f.chapters_left), ("2026-07-20", 1, 2));
+        assert_eq!(f.finish, "2026-08-20");
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

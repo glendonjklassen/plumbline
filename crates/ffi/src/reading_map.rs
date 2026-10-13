@@ -33,7 +33,7 @@ impl PlumblineEngine {
 }
 
 /// Every book's reading standing at `now` (RFC3339), canon order, as
-/// `{books:[…],since,spec}`. Never null on a live engine.
+/// `{books:[…],since,spec,forecast?,sections:[…]}`. Never null on a live engine.
 ///
 /// # Safety
 /// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
@@ -53,6 +53,7 @@ pub unsafe extern "C" fn plumbline_engine_reading_books_json(
             since,
             spec: reading::spec(),
             forecast: reading::forecast(e.reading_words(), &store, now),
+            sections: reading::sections(e.reading_words(), &store),
         })
     })
 }

@@ -91,11 +91,12 @@ pub struct Config {
     /// Where the reader was, per seating ([`crate::session_slot`]), keyed by slot
     /// token. [`Config::panes`] is the fallback for a slot never used.
     pub slots: BTreeMap<String, PaneRef>,
-    /// Lifetime reads of the whole Bible; `-1` = never said (0 is a legitimate
-    /// answer). Seeded once by hand; after that only finishing the canon moves it.
+    /// Times through the whole Bible BEFORE the reading map's own count, given
+    /// once by hand; `-1` = never said (0 is a legitimate answer). A shell shows
+    /// this plus `reading::sections`' count, and adds it to every section alike.
     pub bible_reads: i64,
-    /// Whether the current full-canon state has been counted, so finishing
-    /// credits exactly one read. Cleared when the map drops below complete.
+    /// Retired: the old build's "this full map is already counted" flag. Read
+    /// only to convert (`from_wire`) and never set again.
     pub bible_reads_credited: bool,
     /// Verse-per-line reading mode.
     pub verse_per_line: bool,
@@ -483,8 +484,13 @@ impl Config {
                 .collect(),
             // Clamp: shells index panes with this.
             active: if n_panes == 0 { 0 } else { w.active_pane.min(n_panes - 1) },
-            bible_reads: w.bible_reads,
-            bible_reads_credited: w.bible_reads_credited,
+            // `bible_reads` used to be the whole count, a finished map included
+            // once credited. Now the map's pass is counted by the map, so a credited
+            // pass is taken back out of the hand count, once: the flag goes with it.
+            // An older build that credits again sets the flag again, and this
+            // undoes that again, so the two cannot drift.
+            bible_reads: if w.bible_reads_credited && w.bible_reads > 0 { w.bible_reads - 1 } else { w.bible_reads },
+            bible_reads_credited: false,
             slots: w
                 .slots
                 .into_iter()
@@ -794,6 +800,20 @@ mod tests {
         assert!(serde_json::to_string(&with_key).unwrap().contains("\"church\":false"));
     }
 
+    /// The old counter folded a finished map into the hand count and flagged it
+    /// credited. The map now counts its own passes, so loading takes that one back
+    /// out — once, or the reader loses a read on every launch.
+    #[test]
+    fn a_credited_map_pass_leaves_the_hand_count() {
+        let load = |json: &str| Config::from_wire(serde_json::from_str(json).unwrap());
+        let c = load(r#"{"bibleReads":11,"bibleReadsCredited":true}"#);
+        assert_eq!((c.bible_reads, c.bible_reads_credited), (10, false));
+        let again = load(&serde_json::to_string(&c.to_wire()).unwrap());
+        assert_eq!(again.bible_reads, 10, "the conversion ran twice");
+        assert_eq!(load(r#"{"bibleReads":11}"#).bible_reads, 11, "an uncredited count is the hand count as given");
+        assert_eq!(load("{}").bible_reads, -1, "never said stays never said");
+    }
+
     #[test]
     fn roundtrips_and_reload_is_not_first_run() {
         let path = std::env::temp_dir().join(format!("plumbline-cfg-rt-{}.json", std::process::id()));
@@ -810,7 +830,9 @@ mod tests {
             // skipped on the wire, so it would round-trip even through a key
             // that is never written or never read.
             bible_reads: 7,
-            bible_reads_credited: true,
+            // Retired: loading converts it away, so it cannot round-trip — see
+            // `a_credited_map_pass_leaves_the_hand_count`.
+            bible_reads_credited: false,
             slots: BTreeMap::from([(
                 "sunday-morning".to_string(),
                 PaneRef { book: "Ps".into(), chapter: 23, verse: Some(4), lang: String::new() },
