@@ -1873,6 +1873,171 @@ pub unsafe extern "C" fn plumbline_engine_thread_add(
     })
 }
 
+/// Add the passage `ref_key`..`end_verse` (same chapter; `end_verse` 0 = the one
+/// verse) to the thread named `name`, created on first use — `thread_add` for
+/// a RANGE, "Eph 2:8–9" as one stop. The entry's `span`/`text` describe the
+/// first verse, as the format says; `end` carries the stop. Null on success.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_thread_add_range(
+    engine: *mut PlumblineEngine,
+    name: *const c_char,
+    ref_key: *const c_char,
+    end_verse: u32,
+    note: *const c_char,
+    added: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(name), Some(rk), Some(added)) = (opt_str(name), opt_str(ref_key), opt_str(added)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let Some(vref) = VRef::parse_ref_key(rk) else {
+            return out_string(format!("bad ref: {rk}"));
+        };
+        // The LAST verse number, not the count: the two agree in the shipped
+        // corpus, and a fixture with gaps must not reject a real stop.
+        let last =
+            engine.corpus.chapter_verses(&vref.book, vref.chapter).last().map(|v| v.vref().verse as u32).unwrap_or(0);
+        let end = match end_verse {
+            0 => None,
+            e if e > vref.verse as u32 && e <= last => Some(e as u16),
+            e => return out_string(format!("bad range end {e} for {rk}")),
+        };
+        let (span, text) = match engine.corpus.verse(&vref) {
+            Some(v) => {
+                let words: Vec<String> = v.tokens.iter().map(|t| t.word.clone()).collect();
+                ((0u16, words.len().saturating_sub(1) as u16), words)
+            }
+            None => ((0, 0), Vec::new()),
+        };
+        let entry =
+            ThreadEntry { vref, span, text, note: opt_str(note).map(str::to_string), added: added.to_string(), end };
+        let mut study = engine.study_write();
+        match thread::add_to_thread(&home, &study.threads, name, canon::TOKENIZATION_VERSION, entry) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Create an EMPTY thread named `name` whose shape is `outline_json` — a JSON
+/// array of `thread::OutlineBlock` (`{"kind":"heading","text":…}`,
+/// `{"kind":"point","text":…}`; passage blocks make no sense here and are
+/// dropped). What a new sermon is before its first passage. A thread of that
+/// name is an error. Null on success.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_thread_create(
+    engine: *mut PlumblineEngine,
+    name: *const c_char,
+    outline_json: *const c_char,
+    created: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(name), Some(created)) = (opt_str(name), opt_str(created)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let outline: Vec<thread::OutlineBlock> = match opt_str(outline_json) {
+            None | Some("") => Vec::new(),
+            Some(j) => match serde_json::from_str(j) {
+                Ok(o) => o,
+                Err(e) => return out_string(format!("bad outline: {e}")),
+            },
+        };
+        let mut study = engine.study_write();
+        match thread::create_thread(&home, &study.threads, name, canon::TOKENIZATION_VERSION, outline, created) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Replace the outline of the thread named `name` with `outline_json` (the same
+/// array `thread_create` takes, passage blocks included — `{"kind":"passage",
+/// "ref":"Rom 3:23","added":…}` names an entry by its key). The entries are
+/// reordered to follow it; see `thread::normalize_outline`. `[]` takes the
+/// shape away. Null on success.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_thread_set_outline(
+    engine: *mut PlumblineEngine,
+    name: *const c_char,
+    outline_json: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let (Some(name), Some(j)) = (opt_str(name), opt_str(outline_json)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let outline: Vec<thread::OutlineBlock> = match serde_json::from_str(j) {
+            Ok(o) => o,
+            Err(e) => return out_string(format!("bad outline: {e}")),
+        };
+        let mut study = engine.study_write();
+        match thread::set_thread_outline(&study.threads, name, outline, &now_stamp()) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Read `query` as a passage the way a sermon names one — `Eph 2:8`,
+/// `Ephesians 2:8-10`, `Eph 2` — against the corpus. JSON
+/// `{"verse": refKey | null, "display": …, "end": verse | null}`: `verse` null
+/// means nothing in the text answers to it. Caller-freed; null on a null engine.
+///
+/// # Safety
+/// `engine` is a valid engine pointer; `query` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_passage_query_json(
+    engine: *const PlumblineEngine,
+    query: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => {
+            let found = opt_str(query).and_then(|q| plumbline_core::search::parse_passage_query(&e.corpus, q));
+            out_json(&serde_json::json!({
+                "verse": found.as_ref().map(|(v, _)| v.ref_key()),
+                "display": found.as_ref().map(|(v, _)| v.display()).unwrap_or_default(),
+                "end": found.and_then(|(_, end)| end),
+            }))
+        }
+        None => ptr::null_mut(),
+    })
+}
+
 /// Delete the thread named `name` — its file and every entry on it. Matched
 /// case-insensitively, like `plumbline_engine_thread_add`. A name with no thread is a success.
 /// Null on success, else an owned error string.
@@ -3171,6 +3336,15 @@ impl PanelSource for PlumblineEngine {
                         display: e.vref.display(),
                         text: e.text.clone(),
                         note: e.note.clone(),
+                    })
+                    .collect(),
+                outline: wire::outline_to_wire(&lt.thread)
+                    .into_iter()
+                    .map(|b| match (b.kind, b.entry) {
+                        ("heading", _) => panel::OutlineView::Heading(b.text),
+                        ("point", _) => panel::OutlineView::Point(b.text),
+                        (_, Some(i)) => panel::OutlineView::Passage(i),
+                        (_, None) => panel::OutlineView::Point(b.text),
                     })
                     .collect(),
             })

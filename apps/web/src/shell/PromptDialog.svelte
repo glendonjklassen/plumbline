@@ -22,7 +22,12 @@
   // is pressed in does not decide whether it works. Enter stays here because it
   // is this dialog's own submit and nothing else's.
   function onKeydown(e: KeyboardEvent): void {
-    if (e.key === "Enter" && (!s.promptReq?.multiline || e.ctrlKey)) finish(value);
+    if (e.key === "Enter" && (!s.promptReq?.multiline || e.ctrlKey)) {
+      // Consumed here: finishing hands focus back to the button that asked,
+      // and the same key's press would otherwise activate it and ask again.
+      e.preventDefault();
+      finish(value);
+    }
   }
 </script>
 

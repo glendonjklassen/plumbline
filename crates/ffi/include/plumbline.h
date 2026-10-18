@@ -408,6 +408,54 @@ char *plumbline_engine_thread_add(struct PlumblineEngine *engine,
                                   const char *note,
                                   const char *added);
 
+// Add the passage `ref_key`..`end_verse` (same chapter; `end_verse` 0 = the one
+// verse) to the thread named `name`, created on first use — `thread_add` for
+// a RANGE, "Eph 2:8–9" as one stop. The entry's `span`/`text` describe the
+// first verse, as the format says; `end` carries the stop. Null on success.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_thread_add_range(struct PlumblineEngine *engine,
+                                        const char *name,
+                                        const char *ref_key,
+                                        uint32_t end_verse,
+                                        const char *note,
+                                        const char *added);
+
+// Create an EMPTY thread named `name` whose shape is `outline_json` — a JSON
+// array of `thread::OutlineBlock` (`{"kind":"heading","text":…}`,
+// `{"kind":"point","text":…}`; passage blocks make no sense here and are
+// dropped). What a new sermon is before its first passage. A thread of that
+// name is an error. Null on success.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_thread_create(struct PlumblineEngine *engine,
+                                     const char *name,
+                                     const char *outline_json,
+                                     const char *created);
+
+// Replace the outline of the thread named `name` with `outline_json` (the same
+// array `thread_create` takes, passage blocks included — `{"kind":"passage",
+// "ref":"Rom 3:23","added":…}` names an entry by its key). The entries are
+// reordered to follow it; see `thread::normalize_outline`. `[]` takes the
+// shape away. Null on success.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_thread_set_outline(struct PlumblineEngine *engine,
+                                          const char *name,
+                                          const char *outline_json);
+
+// Read `query` as a passage the way a sermon names one — `Eph 2:8`,
+// `Ephesians 2:8-10`, `Eph 2` — against the corpus. JSON
+// `{"verse": refKey | null, "display": …, "end": verse | null}`: `verse` null
+// means nothing in the text answers to it. Caller-freed; null on a null engine.
+//
+// # Safety
+// `engine` is a valid engine pointer; `query` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_passage_query_json(const struct PlumblineEngine *engine, const char *query);
+
 // Delete the thread named `name` — its file and every entry on it. Matched
 // case-insensitively, like `plumbline_engine_thread_add`. A name with no thread is a success.
 // Null on success, else an owned error string.

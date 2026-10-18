@@ -340,6 +340,106 @@ fn null_and_freed_handles_are_safe() {
     }
 }
 
+/// The sermon surface over a thread: born empty with a shape, the shape rides
+/// the wire resolved to entry indices, an ordinary add lands on its end, the
+/// shape can be set back with a passage placed, a range is one stop, and a
+/// typed passage resolves against the text.
+#[test]
+fn a_sermon_outline_round_trips_via_abi() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-sermon-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null());
+        let c = |s: &str| CString::new(s).unwrap();
+        let stamp = c("2026-01-01T00:00:00Z");
+
+        let shape = c(r#"[{"kind":"heading","text":"Me"},{"kind":"point","text":"why"}]"#);
+        assert!(plumbline_engine_thread_create(e, c("Grace").as_ptr(), shape.as_ptr(), stamp.as_ptr()).is_null());
+        // The same name again is refused, not overwritten.
+        assert!(!plumbline_engine_thread_create(e, c("grace").as_ptr(), shape.as_ptr(), stamp.as_ptr()).is_null());
+        let threads: Value = serde_json::from_str(&take(plumbline_engine_threads_json(e)).unwrap()).unwrap();
+        let t = &threads["threads"][0];
+        assert_eq!(t["name"], "Grace");
+        assert_eq!(t["entries"].as_array().unwrap().len(), 0);
+        assert_eq!(t["outline"][0]["kind"], "heading");
+        assert_eq!(t["outline"][1]["text"], "why");
+        assert_eq!(t["outline"][1]["entry"], Value::Null);
+
+        // A passage added the ordinary way lands on the end, resolved to its entry.
+        assert!(plumbline_engine_thread_add(
+            e,
+            c("Grace").as_ptr(),
+            c("John 3:18").as_ptr(),
+            ptr::null(),
+            stamp.as_ptr()
+        )
+        .is_null());
+        // A range: one stop running to a later verse; a stop past the chapter is refused.
+        let later = c("2026-01-02T00:00:00Z");
+        assert!(!plumbline_engine_thread_add_range(
+            e,
+            c("Grace").as_ptr(),
+            c("John 3:16").as_ptr(),
+            99,
+            ptr::null(),
+            later.as_ptr()
+        )
+        .is_null());
+        assert!(plumbline_engine_thread_add_range(
+            e,
+            c("Grace").as_ptr(),
+            c("John 3:16").as_ptr(),
+            18,
+            ptr::null(),
+            later.as_ptr()
+        )
+        .is_null());
+        let threads: Value = serde_json::from_str(&take(plumbline_engine_threads_json(e)).unwrap()).unwrap();
+        let t = &threads["threads"][0];
+        assert_eq!(t["outline"][2]["kind"], "passage");
+        assert_eq!(t["outline"][2]["entry"], 0);
+        assert_eq!(t["outline"][3]["entry"], 1);
+        assert_eq!(t["entries"][1]["verse"], "John 3:16");
+        assert_eq!(t["entries"][1]["end"], 18);
+
+        // The author puts John 3:16 first, under the heading.
+        let shaped = c(concat!(
+            r#"[{"kind":"heading","text":"Bible"},"#,
+            r#"{"kind":"passage","ref":"John 3:16","added":"2026-01-02T00:00:00Z"},"#,
+            r#"{"kind":"point","text":"then"},"#,
+            r#"{"kind":"passage","ref":"John 3:18","added":"2026-01-01T00:00:00Z"}]"#
+        ));
+        assert!(plumbline_engine_thread_set_outline(e, c("Grace").as_ptr(), shaped.as_ptr()).is_null());
+        let threads: Value = serde_json::from_str(&take(plumbline_engine_threads_json(e)).unwrap()).unwrap();
+        let t = &threads["threads"][0];
+        assert_eq!(t["entries"][0]["verse"], "John 3:16", "entries follow the outline");
+        assert_eq!(t["outline"][1]["entry"], 0);
+        assert_eq!(t["outline"][3]["entry"], 1);
+        assert!(!plumbline_engine_thread_set_outline(e, c("Grace").as_ptr(), c("not json").as_ptr()).is_null());
+
+        // A typed passage resolves against the corpus, or says so.
+        let q: Value =
+            serde_json::from_str(&take(plumbline_engine_passage_query_json(e, c("John 3:16").as_ptr())).unwrap())
+                .unwrap();
+        assert_eq!(q["verse"], "John 3:16");
+        assert_eq!(q["end"], Value::Null);
+        let q: Value =
+            serde_json::from_str(&take(plumbline_engine_passage_query_json(e, c("Nope 9:9").as_ptr())).unwrap())
+                .unwrap();
+        assert_eq!(q["verse"], Value::Null);
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
 #[test]
 fn authoring_round_trip_via_abi() {
     use std::ffi::CString;

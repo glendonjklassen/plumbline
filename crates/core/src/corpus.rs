@@ -918,6 +918,35 @@ mod tests {
         assert!(!v.tokens[1].has_flag(FLAG_PARA));
     }
 
+    /// The shipped corpus carries no word the import split at a markup
+    /// boundary. The eBible module closes some Strong's `<w>` tags mid-word
+    /// (`<w>agains</w>t`, `<w>who</w><w>soever</w>`), the overlay importer took
+    /// every tag edge as a word edge, and 55 New Testament words shipped in two
+    /// pieces ("agains t", "mid night") — repaired by
+    /// `data-prep/kjv/fix-tag-splits.py`. A re-import without that pass would
+    /// bring them back, and the probe below sees it: a lone lowercase letter
+    /// that is not the article is only ever a severed suffix ("give n",
+    /// "afrai d"), and the Ephesians word is the one that was reported.
+    #[test]
+    fn shipped_corpus_has_no_tag_split_words() {
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let Ok(c) = load_corpus(repo.join("data/kjv.jsonl")) else {
+            println!("no data pack; skipping");
+            return;
+        };
+        let eph = c.verse(&VRef::new("Eph", 6, 12)).unwrap();
+        let words: Vec<&str> = eph.tokens.iter().map(|t| t.word.as_str()).collect();
+        assert_eq!(words[13], "against", "{words:?}");
+        assert_eq!(eph.tokens[13].strongs, vec!["G4314".to_string()]);
+        let severed: Vec<String> = c
+            .verses_iter()
+            .flat_map(|v| v.tokens.iter().map(move |t| (v.vref(), t)))
+            .filter(|(_, t)| t.word.len() == 1 && t.word.chars().all(|ch| ch.is_ascii_lowercase()) && t.word != "a")
+            .map(|(r, t)| format!("{r:?} {:?}", t.word))
+            .collect();
+        assert!(severed.is_empty(), "severed suffixes: {severed:?}");
+    }
+
     #[test]
     fn rejects_out_of_order() {
         let bad = concat!(

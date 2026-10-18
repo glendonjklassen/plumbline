@@ -290,6 +290,18 @@ pub struct ThreadView {
     pub opening: String,
     pub closing: String,
     pub entries: Vec<ThreadEntryView>,
+    /// The sermon shape, when the thread has one — see
+    /// [`crate::thread::OutlineBlock`]. Empty = none: the entries are the order.
+    pub outline: Vec<OutlineView>,
+}
+
+/// One outline block, resolved for painting: a passage names the entry it
+/// stands for by index into [`ThreadView::entries`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OutlineView {
+    Heading(String),
+    Point(String),
+    Passage(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -1658,7 +1670,29 @@ pub fn thread_detail(src: &dyn PanelSource, index: usize, edit: bool) -> Vec<Blo
     out.extend(doc("panel.notesHeader", format!("editthreadnotes:{index}"), &t.notes));
     out.extend(doc("panel.openingHeader", format!("editthreadopening:{index}"), &t.opening));
     let last = t.entries.len().saturating_sub(1);
-    for (e, en) in t.entries.iter().enumerate() {
+    // In READ mode a thread with an outline is read in the outline's order,
+    // headings and points between the passages — the sermon as it is preached.
+    // Edit mode lists the passages alone: its controls are the entry controls,
+    // and the outline has an editor of its own (the shell's sermon screen).
+    let walk: Vec<OutlineView> = if edit || t.outline.is_empty() {
+        (0..t.entries.len()).map(OutlineView::Passage).collect()
+    } else {
+        t.outline.clone()
+    };
+    for item in walk {
+        let e = match item {
+            OutlineView::Heading(text) => {
+                out.push(Block::Rule);
+                out.push(Block::para(vec![Run::new(text, sz::LABEL, Color::Ink).bold()]));
+                continue;
+            }
+            OutlineView::Point(text) => {
+                out.push(Block::para(vec![Run::new(text, sz::BODY, Color::Ink)]));
+                continue;
+            }
+            OutlineView::Passage(e) => e,
+        };
+        let Some(en) = t.entries.get(e) else { continue };
         out.push(Block::Rule);
         // The reference row; in edit mode its controls sit right-aligned on
         // the same row — ↑ ↓ ＋(note) ✕ — glyphs only, at a size a thumb can

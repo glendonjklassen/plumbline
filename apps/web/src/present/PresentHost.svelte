@@ -27,7 +27,29 @@
    *  An absent bookend is simply not in this list, so the walk of a thread
    *  without them is the walk this screen has always had, and clearing one
    *  removes its card rather than leaving a blank. */
-  type Step = { kind: "verse"; entry: Entry } | { kind: "bookend"; text: string };
+  type Step = { kind: "verse"; entry: Entry } | { kind: "bookend"; text: string } | { kind: "heading"; text: string };
+
+  /** Whether a sermon's headings and points are walked between its passages,
+   *  or the passages alone — the presenter's switch (maintainer, 2026-10-18).
+   *  Remembered per device; a read that throws (private window) means on. */
+  const OUTLINE_KEY = "plumbline:presentOutline";
+  let showOutline = $state(
+    (() => {
+      try {
+        return localStorage.getItem(OUTLINE_KEY) !== "off";
+      } catch {
+        return true;
+      }
+    })(),
+  );
+  function toggleOutline(): void {
+    showOutline = !showOutline;
+    try {
+      localStorage.setItem(OUTLINE_KEY, showOutline ? "on" : "off");
+    } catch {
+      /* per-viewer convenience only */
+    }
+  }
 
   const threads = $derived.by(() => {
     void s.studyEpoch;
@@ -101,12 +123,28 @@
 
   /** The walk: opening (if any), every passage, closing (if any). The end card
    *  still follows at `steps.length`, as it always did. */
+  /** The outline blocks that are the presenter's own words — what the switch
+   *  shows or hides. Empty for a thread that is passages alone. */
+  const outlineWords = $derived(
+    ((thread?.outline ?? []) as any[]).filter((b) => b.kind !== "passage" && String(b.text ?? "").trim()),
+  );
   const steps = $derived.by((): Step[] => {
     const opening = (thread?.opening ?? "").trim();
     const closing = (thread?.closing ?? "").trim();
+    // A sermon walked in its outline's order: a heading is its own card, a
+    // point speaks in the bookends' voice. Off, or no outline: the passages.
+    const middle: Step[] =
+      showOutline && outlineWords.length > 0
+        ? ((thread.outline as any[]).flatMap((b): Step[] => {
+            if (b.kind === "passage") return entries[b.entry] ? [{ kind: "verse", entry: entries[b.entry] }] : [];
+            const text = String(b.text ?? "").trim();
+            if (!text) return [];
+            return [b.kind === "heading" ? { kind: "heading", text } : { kind: "bookend", text }];
+          }))
+        : entries.map((entry) => ({ kind: "verse" as const, entry }));
     return [
       ...(opening ? [{ kind: "bookend" as const, text: opening }] : []),
-      ...entries.map((entry) => ({ kind: "verse" as const, entry })),
+      ...middle,
       ...(closing ? [{ kind: "bookend" as const, text: closing }] : []),
     ];
   });
@@ -180,7 +218,7 @@
     // the thread as it was meant to be read rather than a bare verse list.
     const lines = [thread.name, ""];
     for (const st of steps) {
-      if (st.kind === "bookend") lines.push(st.text, "");
+      if (st.kind === "bookend" || st.kind === "heading") lines.push(st.text, "");
       else {
         lines.push(st.entry.display, st.entry.body);
         if (st.entry.note) lines.push(`— ${st.entry.note}`);
@@ -287,6 +325,11 @@
         <button class="close" onclick={() => (thread = null)} aria-label={t("bar.back")}>‹</button>
         <span class="title">{thread.name}</span>
         <span class="spacer"></span>
+        {#if outlineWords.length > 0}
+          <button class="sharebtn" aria-pressed={showOutline} onclick={toggleOutline}>
+            {showOutline ? t("present.hideOutline") : t("present.showOutline")}
+          </button>
+        {/if}
         <button class="sharebtn" onclick={() => (showQr = !showQr)}>
           {showQr ? t("present.hideQr") : t("present.share")}
         </button>
@@ -308,8 +351,8 @@
              a couple of verses and it's all smushed"). The list is replaced
              wholesale on every change, so position is a sound identity here. -->
         {#each steps as st, i (i)}
-          <button class="entry" class:bookend={st.kind === "bookend"} onclick={() => (focus = i)}>
-            {#if st.kind === "bookend"}
+          <button class="entry" class:bookend={st.kind === "bookend"} class:heading={st.kind === "heading"} onclick={() => (focus = i)}>
+            {#if st.kind === "bookend" || st.kind === "heading"}
               <span class="body">{st.text}</span>
             {:else}
               <span class="ref">{st.entry.display}</span>
@@ -334,6 +377,8 @@
                own words, and labelling it "Opening" in front of the person
                being shown it would read as stage directions left in. -->
           <p class="fbody">{step.text}</p>
+        {:else if step.kind === "heading"}
+          <p class="fbody fheading">{step.text}</p>
         {:else}
           <p class="fref">{step.entry.display}</p>
           <p class="fbody">{step.entry.body}</p>
@@ -572,6 +617,17 @@
   .entry.bookend .body {
     font-size: calc(18px * var(--uiScale, 1));
     color: #453f36;
+  }
+  /* A heading row: the sermon's section, set bold at the scripture's size so
+     the overview reads as an outline. */
+  .entry.heading .body {
+    font-size: calc(19px * var(--uiScale, 1));
+    font-weight: 700;
+    color: #211f1a;
+  }
+  .focus .fheading {
+    font-weight: 700;
+    color: #211f1a;
   }
   /* The focused bookend card (opening and closing both): the same voice shift —
      upright, one size step below the verse, softer ink. */

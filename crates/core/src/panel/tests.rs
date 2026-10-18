@@ -581,6 +581,7 @@ fn rendering_concordance_matches_by_normalized_key() {
 fn threads_list_and_detail() {
     let f = Fake {
         threads: vec![ThreadView {
+            outline: Vec::new(),
             name: "Grace".into(),
             notes: "on unmerited favour".into(),
             opening: String::new(),
@@ -680,6 +681,7 @@ fn threads_list_and_detail() {
 fn thread_bookends_render_only_when_they_exist() {
     let with = |opening: &str, closing: &str| Fake {
         threads: vec![ThreadView {
+            outline: Vec::new(),
             name: "Plan".into(),
             notes: String::new(),
             opening: opening.into(),

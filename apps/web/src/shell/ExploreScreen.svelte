@@ -174,6 +174,13 @@
       count: ((s.qStale("threads")?.threads ?? []) as any[]).length,
       go: () => (s.panel = { kind: "threads" }),
     },
+    // The sermon editor: a thread written top to bottom as headings, points
+    // and passages. Counts the threads that have that shape.
+    {
+      id: "sermons",
+      count: ((s.qStale("threads")?.threads ?? []) as any[]).filter((t) => (t.outline?.length ?? 0) > 0).length,
+      go: () => s.openSermons("explore"),
+    },
     // A door: there is more than one thing to do with a tag library (browse,
     // rename, merge) and a card raising the panel directly fits only one.
     { id: "tags", count: ((s.qStale("tags")?.tags ?? []) as any[]).length, go: () => (s.screen = "tags") },

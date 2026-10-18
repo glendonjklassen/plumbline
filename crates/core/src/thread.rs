@@ -137,6 +137,36 @@ impl<'de> Deserialize<'de> for ThreadEntry {
     }
 }
 
+/// One block of a thread's OUTLINE — the sermon's shape, top to bottom.
+///
+/// A thread's passages are its `entries`; the outline is the order they are
+/// spoken in, with the author's own material between them: a `Heading` opens a
+/// section ("Me", "Need", "Bible", "You", "We" is the seed, but the text is the
+/// author's), a `Point` is a line of the author's that is not Scripture, and a
+/// `Passage` points at one entry by its natural key `(refKey, added)` —
+/// docs/STABLE-IDS.md — rather than by position, so an entry removed or
+/// re-added elsewhere never shifts what a block means.
+///
+/// Additive against the frozen format: a thread without an outline has none,
+/// and is written without the key. An older build that reorders such a
+/// thread's entries leaves the outline behind, which is why [`normalize_outline`]
+/// re-derives agreement on every load and write instead of trusting the file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum OutlineBlock {
+    Heading {
+        text: String,
+    },
+    Point {
+        text: String,
+    },
+    Passage {
+        #[serde(rename = "ref")]
+        ref_key: String,
+        added: String,
+    },
+}
+
 /// A named trail of passages plus a running notes document.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Thread {
@@ -178,6 +208,12 @@ pub struct Thread {
     /// a serde rename that does not match the data silently reads false, which
     /// only a test over the SHIPPED files catches (`stock_gospel_defaults_load`).
     pub gospel_default: bool,
+    /// The sermon shape over the entries — see [`OutlineBlock`]. Empty means the
+    /// thread has none: its entries ARE its order. Never carries a passage block
+    /// for an entry the thread lacks, and never lacks one for an entry it has,
+    /// once it has passed through [`normalize_outline`] — which every load and
+    /// every write does.
+    pub outline: Vec<OutlineBlock>,
     /// Every key in the file this build has never heard of, carried back out
     /// again on save.
     ///
@@ -217,6 +253,8 @@ struct ThreadRepr {
     lang: Option<String>,
     #[serde(default, rename = "gospelDefault")]
     gospel_default: bool,
+    #[serde(default)]
+    outline: Vec<OutlineBlock>,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -253,6 +291,8 @@ struct ThreadOut<'a> {
     lang: &'a Option<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not", rename = "gospelDefault")]
     gospel_default: bool,
+    #[serde(skip_serializing_if = "<[OutlineBlock]>::is_empty")]
+    outline: &'a [OutlineBlock],
     #[serde(flatten)]
     extra: &'a Map<String, Value>,
 }
@@ -289,6 +329,7 @@ impl Thread {
             updated: &self.updated,
             lang: &self.lang,
             gospel_default: self.gospel_default,
+            outline: &self.outline,
             extra: &self.extra,
         }
     }
@@ -312,6 +353,7 @@ impl<'de> Deserialize<'de> for Thread {
             updated: r.updated,
             lang: r.lang,
             gospel_default: r.gospel_default,
+            outline: r.outline,
             extra: r.extra,
         })
     }
@@ -371,7 +413,12 @@ pub fn load_threads(home: impl AsRef<Path>) -> (Vec<LoadedThread>, Vec<String>) 
         match std::fs::read(&path) {
             Err(e) => errors.push(format!("{}: {e}", path.display())),
             Ok(bytes) => match serde_json::from_slice::<Thread>(&bytes) {
-                Ok(thread) => loaded.push(LoadedThread { file: path, thread }),
+                Ok(mut thread) => {
+                    // A file an older build reordered under its outline reads as
+                    // the outline says, and the next save writes that down.
+                    normalize_outline(&mut thread);
+                    loaded.push(LoadedThread { file: path, thread })
+                }
                 Err(e) => errors.push(format!("{}: {e}", path.display())),
             },
         }
@@ -408,6 +455,7 @@ pub fn thread_file(home: impl AsRef<Path>, name: &str) -> PathBuf {
 /// stamping lives in the writer.
 pub fn write_thread(path: impl AsRef<Path>, thread: &Thread, now: &str) -> Result<(), Error> {
     let mut stamped = thread.clone();
+    normalize_outline(&mut stamped);
     stamped.updated = Some(now.to_string());
     if stamped.id.is_none() {
         stamped.id = Some(crate::store::new_id());
@@ -482,11 +530,116 @@ pub fn add_to_thread(
             // reading. A writer would be the wrong place — it also runs on
             // re-save, where an unstamped older file would gain a confident
             // wrong answer. See `i18n::stamp`.
+            outline: Vec::new(),
             extra: crate::i18n::stamped_extra(),
         };
         write_thread(&path, &thread, &created)?;
         Ok(path)
     }
+}
+
+/// Create an EMPTY thread named `name` with `outline` as its shape — what a new
+/// sermon is before its first passage. `add_to_thread` creates on first use
+/// too, but only with a passage in hand; an outline of headings has none yet.
+/// A thread of that name already loaded (case-insensitively, like every other
+/// lookup here) is an error, never overwritten.
+pub fn create_thread(
+    home: impl AsRef<Path>,
+    loaded: &[LoadedThread],
+    name: &str,
+    tok_version: &str,
+    outline: Vec<OutlineBlock>,
+    created: &str,
+) -> Result<PathBuf, Error> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(Error::Corpus("a thread needs a name".to_string()));
+    }
+    let wanted = name.to_lowercase();
+    if loaded.iter().any(|lt| lt.thread.name.to_lowercase() == wanted) {
+        return Err(Error::Corpus(format!("a thread named {name} already exists")));
+    }
+    let path = thread_file(&home, name);
+    if path.exists() {
+        return Err(Error::Corpus(format!("{} exists but could not be read — refusing to overwrite", path.display())));
+    }
+    let thread = Thread {
+        name: name.to_string(),
+        tok_version: tok_version.to_string(),
+        notes: String::new(),
+        opening: String::new(),
+        closing: String::new(),
+        entries: Vec::new(),
+        created: created.to_string(),
+        id: None,
+        updated: None,
+        lang: None,
+        gospel_default: false,
+        outline,
+        extra: crate::i18n::stamped_extra(),
+    };
+    write_thread(&path, &thread, created)?;
+    Ok(path)
+}
+
+/// Replace a thread's outline. The passage blocks decide the entries' order
+/// from here on (see [`normalize_outline`]); an empty outline takes the shape
+/// away and leaves the entries as they stand.
+pub fn set_thread_outline(
+    loaded: &[LoadedThread],
+    name: &str,
+    outline: Vec<OutlineBlock>,
+    now: &str,
+) -> Result<PathBuf, Error> {
+    edit_thread(loaded, name, now, |t| t.outline = outline)
+}
+
+/// Make the outline and the entries agree, in place. Nothing to do without an
+/// outline. With one:
+///
+/// 1. a passage block naming an entry the thread lacks is dropped;
+/// 2. an entry no block names gets a passage block appended, in entry order —
+///    this is how `add_to_thread` lands a new passage on the outline without
+///    knowing it exists;
+/// 3. the entries are reordered to the blocks' order, so a build that walks
+///    `entries` alone (Present, the panel, an older release) reads the same
+///    sermon.
+///
+/// Two entries can share a key (the same verse added twice in one millisecond
+/// is not forbidden), so blocks claim entries first come, first served, and
+/// the two agree on which is which by position.
+pub fn normalize_outline(thread: &mut Thread) {
+    if thread.outline.is_empty() {
+        return;
+    }
+    let mut claimed = vec![false; thread.entries.len()];
+    let mut order: Vec<usize> = Vec::with_capacity(thread.entries.len());
+    let entries = &thread.entries;
+    thread.outline.retain(|b| match b {
+        OutlineBlock::Passage { ref_key, added } => {
+            let found = entries
+                .iter()
+                .enumerate()
+                .position(|(i, e)| !claimed[i] && e.added == *added && e.vref.ref_key() == *ref_key);
+            match found {
+                Some(i) => {
+                    claimed[i] = true;
+                    order.push(i);
+                    true
+                }
+                None => false,
+            }
+        }
+        _ => true,
+    });
+    for (i, e) in thread.entries.iter().enumerate() {
+        if !claimed[i] {
+            order.push(i);
+            thread.outline.push(OutlineBlock::Passage { ref_key: e.vref.ref_key(), added: e.added.clone() });
+        }
+    }
+    let mut slots: Vec<Option<ThreadEntry>> = std::mem::take(&mut thread.entries).into_iter().map(Some).collect();
+    thread.entries = order.into_iter().filter_map(|i| slots[i].take()).collect();
 }
 
 /// Find the loaded thread named `name` (case-insensitive) or error — the shared
@@ -608,6 +761,22 @@ pub fn move_in_thread(
         // file would bump `updated` and make a no-op look like an edit to
         // anything diffing or syncing it.
         return Ok(lt.file.clone());
+    }
+    // With an outline, the outline is the order: move the entry's BLOCK to
+    // where the entry it displaces sits, and let the write re-derive the
+    // entries from that. Moving the entry alone would be undone by the next
+    // normalize, which trusts the blocks.
+    if !thread.outline.is_empty() {
+        let block_of = |t: &Thread, i: usize| {
+            let e = &t.entries[i];
+            t.outline.iter().position(|b| {
+                matches!(b, OutlineBlock::Passage { ref_key, added } if *ref_key == e.vref.ref_key() && *added == e.added)
+            })
+        };
+        if let (Some(bf), Some(bt)) = (block_of(&thread, from), block_of(&thread, to)) {
+            let block = thread.outline.remove(bf);
+            thread.outline.insert(bt, block);
+        }
     }
     let entry = thread.entries.remove(from);
     thread.entries.insert(to, entry);
@@ -761,6 +930,122 @@ mod tests {
         assert!(move_in_thread(&loaded, "Romans Road", 0, 0, "2026-08-18T00:00:00Z").is_err());
         assert!(move_in_thread(&loaded, "Nope", 0, 0, "2026-08-18T00:00:00Z").is_err());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The outline: headings and points between the passages, the passages
+    /// named by key. It persists, it ORDERS the entries (a build that walks
+    /// `entries` alone reads the sermon in the preached order), a block naming
+    /// a passage the thread lost is dropped, and a passage added without the
+    /// outline knowing lands on its end.
+    #[test]
+    fn an_outline_orders_the_entries_and_reconciles_on_every_write() {
+        let home = std::env::temp_dir().join(format!("plumbline-outline-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let entry = |v: VRef, added: &str| ThreadEntry {
+            vref: v,
+            span: (0, 1),
+            text: vec!["a".into(), "b".into()],
+            note: None,
+            added: added.into(),
+            end: None,
+        };
+        let heading = |t: &str| OutlineBlock::Heading { text: t.into() };
+        let point = |t: &str| OutlineBlock::Point { text: t.into() };
+        let passage = |r: &str, a: &str| OutlineBlock::Passage { ref_key: r.into(), added: a.into() };
+
+        // Born empty, with its shape.
+        let (loaded, _) = load_threads(&home);
+        create_thread(
+            &home,
+            &loaded,
+            "Grace",
+            "kjv1769-tok2",
+            vec![heading("Me"), heading("Bible")],
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+        let (loaded, _) = load_threads(&home);
+        assert!(create_thread(&home, &loaded, "grace", "kjv1769-tok2", vec![], "2026-01-02T00:00:00Z").is_err());
+        assert_eq!(loaded[0].thread.outline.len(), 2);
+        assert!(loaded[0].thread.entries.is_empty());
+
+        // Two passages added the ordinary way land on the end, in order.
+        add_to_thread(&home, &loaded, "Grace", "kjv1769-tok2", entry(VRef::new("Eph", 2, 8), "2026-01-03T00:00:00Z"))
+            .unwrap();
+        let (loaded, _) = load_threads(&home);
+        add_to_thread(&home, &loaded, "Grace", "kjv1769-tok2", entry(VRef::new("Rom", 3, 23), "2026-01-04T00:00:00Z"))
+            .unwrap();
+        let (loaded, _) = load_threads(&home);
+        let t = &loaded[0].thread;
+        assert_eq!(t.outline[2], passage("Eph 2:8", "2026-01-03T00:00:00Z"));
+        assert_eq!(t.outline[3], passage("Rom 3:23", "2026-01-04T00:00:00Z"));
+
+        // The author shapes it: Romans first, a point between, a dangling block
+        // that names nothing.
+        let shaped = vec![
+            heading("Me"),
+            point("why this matters"),
+            heading("Bible"),
+            passage("Rom 3:23", "2026-01-04T00:00:00Z"),
+            passage("Gen 1:1", "2026-01-01T00:00:00Z"),
+            passage("Eph 2:8", "2026-01-03T00:00:00Z"),
+        ];
+        set_thread_outline(&loaded, "Grace", shaped, "2026-01-05T00:00:00Z").unwrap();
+        let (loaded, _) = load_threads(&home);
+        let t = &loaded[0].thread;
+        assert_eq!(t.entries[0].vref, VRef::new("Rom", 3, 23), "entries follow the outline");
+        assert_eq!(t.entries[1].vref, VRef::new("Eph", 2, 8));
+        assert_eq!(t.outline.len(), 5, "the block naming no entry is gone");
+        assert_eq!(t.outline[1], point("why this matters"));
+        let bytes = std::fs::read_to_string(&loaded[0].file).unwrap();
+        assert!(bytes.contains("\"outline\""));
+        assert!(bytes.contains("\"kind\": \"passage\""));
+
+        // A move through the entry API moves the BLOCK, so the shape keeps up.
+        move_in_thread(&loaded, "Grace", 1, 0, "2026-01-06T00:00:00Z").unwrap();
+        let (loaded, _) = load_threads(&home);
+        let t = &loaded[0].thread;
+        assert_eq!(t.entries[0].vref, VRef::new("Eph", 2, 8));
+        assert_eq!(t.outline[3], passage("Eph 2:8", "2026-01-03T00:00:00Z"));
+        assert_eq!(t.outline[4], passage("Rom 3:23", "2026-01-04T00:00:00Z"));
+
+        // Removing an entry takes its block with it; the author's words stay.
+        remove_from_thread(&loaded, "Grace", 0, "2026-01-07T00:00:00Z").unwrap();
+        let (loaded, _) = load_threads(&home);
+        let t = &loaded[0].thread;
+        assert_eq!(t.outline.len(), 4);
+        assert_eq!(t.outline[3], passage("Rom 3:23", "2026-01-04T00:00:00Z"));
+
+        // An empty outline takes the shape away and the file loses the key.
+        set_thread_outline(&loaded, "Grace", vec![], "2026-01-08T00:00:00Z").unwrap();
+        let bytes = std::fs::read_to_string(&loaded[0].file).unwrap();
+        assert!(!bytes.contains("outline"), "{bytes}");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A file an OLDER build reordered under the outline (it walks and writes
+    /// `entries` alone) reads back in the outline's order, not the file's — the
+    /// outline is the order, and the load reconciles rather than trusting.
+    #[test]
+    fn a_load_reconciles_entries_an_older_build_reordered() {
+        let file = r#"{"format":"overlay-thread-v1","name":"x","tokenization":"kjv1769-tok2","created":"c",
+            "entries":[{"ref":"Rom 3:23","span":[0,1],"text":[],"added":"a1"},
+                       {"ref":"Eph 2:8","span":[0,1],"text":[],"added":"a2"},
+                       {"ref":"John 3:16","span":[0,1],"text":[],"added":"a3"}],
+            "outline":[{"kind":"heading","text":"Bible"},{"kind":"passage","ref":"Eph 2:8","added":"a2"},
+                       {"kind":"point","text":"so"},{"kind":"passage","ref":"Rom 3:23","added":"a1"}]}"#;
+        let home = std::env::temp_dir().join(format!("plumbline-outline-old-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("threads")).unwrap();
+        std::fs::write(home.join("threads/x.json"), file).unwrap();
+        let (loaded, errs) = load_threads(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        let t = &loaded[0].thread;
+        let order: Vec<String> = t.entries.iter().map(|e| e.vref.ref_key()).collect();
+        assert_eq!(order, ["Eph 2:8", "Rom 3:23", "John 3:16"]);
+        assert_eq!(t.outline.len(), 5, "the unreferenced passage is appended");
+        assert!(matches!(&t.outline[4], OutlineBlock::Passage { ref_key, .. } if ref_key == "John 3:16"));
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]

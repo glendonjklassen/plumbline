@@ -18,6 +18,7 @@
   // literals, so these are named as the ids they are).
   const cards = [
     { nameKey: "nav.present", descKey: "preach.present.desc", go: () => (s.showPresent = true) },
+    { nameKey: "explore.sermons", descKey: "explore.sermons.desc", go: () => s.openSermons("preach") },
     { nameKey: "explore.weaves", descKey: "explore.weaves.desc", go: () => (s.panel = { kind: "weaves" }) },
     { nameKey: "explore.tags", descKey: "explore.tags.desc", go: () => (s.panel = { kind: "tags" }) },
     { nameKey: "explore.notes", descKey: "explore.notes.desc", go: () => (s.panel = { kind: "notesBrowser" }) },

@@ -338,6 +338,48 @@ pub struct WireThread {
     /// Whether this is the gospel walk for readers of `lang` — see
     /// `thread::gospel_default`. Always present; false for authored threads.
     pub gospel_default: bool,
+    /// The sermon shape — `thread::OutlineBlock`, each resolved to the entry it
+    /// names. Always present; `[]` for a thread without one.
+    pub outline: Vec<WireOutlineBlock>,
+}
+
+/// One outline block on the wire. A FIXED shape: every field on every kind, so
+/// a strict decoder binds one struct. `kind` is `heading` | `point` |
+/// `passage`; `text` is the author's words for the first two and `""` for a
+/// passage; `entry` indexes `entries` for a passage and is null otherwise.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireOutlineBlock {
+    pub kind: &'static str,
+    pub text: String,
+    pub entry: Option<usize>,
+}
+
+/// Resolve a thread's outline blocks to entry indices. The thread has been
+/// through `thread::normalize_outline` (every load does), so a passage block
+/// always finds its entry; one that somehow does not is left out rather than
+/// sent as a passage of nothing.
+pub fn outline_to_wire(t: &plumbline_core::thread::Thread) -> Vec<WireOutlineBlock> {
+    use plumbline_core::thread::OutlineBlock;
+    let mut claimed = vec![false; t.entries.len()];
+    t.outline
+        .iter()
+        .filter_map(|b| match b {
+            OutlineBlock::Heading { text } => {
+                Some(WireOutlineBlock { kind: "heading", text: text.clone(), entry: None })
+            }
+            OutlineBlock::Point { text } => Some(WireOutlineBlock { kind: "point", text: text.clone(), entry: None }),
+            OutlineBlock::Passage { ref_key, added } => {
+                let i = t
+                    .entries
+                    .iter()
+                    .enumerate()
+                    .position(|(i, e)| !claimed[i] && e.added == *added && e.vref.ref_key() == *ref_key)?;
+                claimed[i] = true;
+                Some(WireOutlineBlock { kind: "passage", text: String::new(), entry: Some(i) })
+            }
+        })
+        .collect()
 }
 
 #[derive(Serialize)]
@@ -383,6 +425,7 @@ pub fn threads_to_wire(loaded: &[LoadedThread]) -> WireThreads {
                         .collect(),
                     lang: t.lang.clone(),
                     gospel_default: t.gospel_default,
+                    outline: outline_to_wire(t),
                 }
             })
             .collect(),
