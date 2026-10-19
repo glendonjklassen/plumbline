@@ -32,7 +32,7 @@ jobs:
   # Build + test the crates: the pure domain core, layout, the R&D flags,
   # and the C ABI.
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -71,7 +71,7 @@ jobs:
   # invocation in its own job, so feature unification from sibling -p flags
   # (or another crate's dev-deps) can't silently switch its features on.
   rnd-featureless:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -88,7 +88,7 @@ jobs:
   # Formatting + clippy, both HARD gates: an advisory lint buys nothing, because
   # nobody reads a green run's warnings.
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       # A file tracked against .gitignore's stated intent is a second source of
@@ -127,7 +127,7 @@ jobs:
   # The workspace declares rust-version = "1.85"; make sure the portable
   # crates actually still compile on that toolchain, not just on stable.
   msrv:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85
@@ -139,7 +139,7 @@ jobs:
   # then fail if anything changed. A changed #[no_mangle] surface that was not
   # regenerated shows up here as a diff.
   bindings:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -160,7 +160,7 @@ jobs:
   # Its own job rather than a step inside the web build so a stray literal
   # fails fast rather than after a wasm compile and a browser download.
   i18n:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -174,7 +174,7 @@ jobs:
   # responsiveness (freeze regression), word study, search, themes, the
   # navigator, and the backup round-trip.
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Playwright's own container rather than a bare runner: `npx playwright
     # install --with-deps` was 9m20s of every run, mostly apt-get walking
     # WebKit's dependency closure. The image ships chromium + webkit and those
