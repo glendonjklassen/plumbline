@@ -1359,6 +1359,46 @@ pub fn parse_ref_query(corpus: &Corpus, q: &str) -> Option<(String, u16, Option<
     Some((bid, 1, None))
 }
 
+/// Read a query as a PASSAGE — a verse, a run of verses in one chapter, or a
+/// whole chapter — the way a sermon names one: `Eph 2:8`, `Eph 2:8-10`,
+/// `Ephesians 2:8–10`, `Eph 2`. The answer is the first verse plus the verse
+/// the passage runs to (`None` for a single verse). A whole chapter runs from
+/// its first verse to its last. The book and both ends are validated against
+/// the corpus, exactly as [`parse_ref_query`] validates; a backwards range is
+/// no passage.
+pub fn parse_passage_query(corpus: &Corpus, q: &str) -> Option<(crate::reference::VRef, Option<u16>)> {
+    let q = q.trim();
+    // `8-10` after the colon: split the range off first, so the head parses as
+    // an ordinary reference. En and em dashes are what a keyboard autocorrects
+    // the hyphen into.
+    let (head, tail) = match q.rfind(':') {
+        Some(colon) => {
+            let after = &q[colon + 1..];
+            match after.find(['-', '–', '—']) {
+                Some(dash) => (&q[..colon + 1 + dash], Some(after[dash..].trim_start_matches(['-', '–', '—']).trim())),
+                None => (q, None),
+            }
+        }
+        None => (q, None),
+    };
+    let (book, chapter, verse) = parse_ref_query(corpus, head)?;
+    let last = corpus.chapter_verses(&book, chapter).last().map(|v| v.vref().verse).unwrap_or(0);
+    match (verse, tail) {
+        (Some(v), None) => Some((crate::reference::VRef::new(book, chapter, v), None)),
+        (Some(v), Some(t)) => {
+            let end: u16 = t.parse().ok()?;
+            if end <= v || end > last {
+                return None;
+            }
+            Some((crate::reference::VRef::new(book, chapter, v), Some(end)))
+        }
+        (None, None) if last > 0 => {
+            Some((crate::reference::VRef::new(book, chapter, 1), if last > 1 { Some(last) } else { None }))
+        }
+        _ => None,
+    }
+}
+
 fn validate(corpus: &Corpus, bid: String, c: u16, mv: Option<u16>) -> Option<(String, u16, Option<u16>)> {
     let nc = corpus.chapter_count(&bid);
     if c < 1 || c > nc {
@@ -1367,7 +1407,9 @@ fn validate(corpus: &Corpus, bid: String, c: u16, mv: Option<u16>) -> Option<(St
     match mv {
         None => Some((bid, c, None)),
         Some(v) => {
-            let nv = corpus.chapter_verses(&bid, c).len() as u16;
+            // The last verse NUMBER: the same as the count in the shipped text,
+            // and the right bound for a corpus with gaps.
+            let nv = corpus.chapter_verses(&bid, c).last().map(|v| v.verse).unwrap_or(0);
             if v >= 1 && v <= nv {
                 Some((bid, c, Some(v)))
             } else {
@@ -1860,6 +1902,26 @@ mod tests {
             }
             _ => panic!("expected phrase hit"),
         }
+    }
+
+    /// A passage the way a sermon names one: a verse, a run in one chapter
+    /// (hyphen or the dashes a keyboard turns it into), or a whole chapter.
+    /// Backwards and out-of-chapter runs are no passage at all.
+    #[test]
+    fn a_passage_query_reads_ranges_and_whole_chapters() {
+        let c = corpus::from_str(SAMPLE).unwrap();
+        let v = |b: &str, ch: u16, vs: u16| crate::reference::VRef::new(b, ch, vs);
+        assert_eq!(parse_passage_query(&c, "Gen 1:2"), Some((v("Gen", 1, 2), None)));
+        assert_eq!(parse_passage_query(&c, "Genesis 1:1-3"), Some((v("Gen", 1, 1), Some(3))));
+        assert_eq!(parse_passage_query(&c, "Gen 1:1–3"), Some((v("Gen", 1, 1), Some(3))));
+        assert_eq!(parse_passage_query(&c, "gen 1:2 - 3"), Some((v("Gen", 1, 2), Some(3))));
+        assert_eq!(parse_passage_query(&c, "Gen 1"), Some((v("Gen", 1, 1), Some(3))));
+        assert_eq!(parse_passage_query(&c, "John 3:16"), Some((v("John", 3, 16), None)));
+        assert_eq!(parse_passage_query(&c, "Gen 1:3-2"), None);
+        assert_eq!(parse_passage_query(&c, "Gen 1:2-9"), None);
+        assert_eq!(parse_passage_query(&c, "Gen 1:2-"), None);
+        assert_eq!(parse_passage_query(&c, "Nope 1:1"), None);
+        assert_eq!(parse_passage_query(&c, ""), None);
     }
 
     #[test]

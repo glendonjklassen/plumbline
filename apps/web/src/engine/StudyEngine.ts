@@ -546,6 +546,30 @@ export class StudyEngine {
   threadSetClosing(name: string, closing: string): string | null {
     return this.#author("plumbline_engine_thread_set_closing", (f, ...p) => f(this.#engine, ...p), [name, closing]);
   }
+  /** An EMPTY thread with a shape — what a new sermon is. `outlineJson` is the
+   *  array `threadSetOutline` takes (headings and points; no passages yet). */
+  threadCreate(name: string, outlineJson: string, created: string): string | null {
+    return this.#author("plumbline_engine_thread_create", (f, ...p) => f(this.#engine, ...p), [name, outlineJson, created]);
+  }
+  /** Replace the sermon shape: `[{kind:"heading"|"point", text} | {kind:"passage",
+   *  ref, added}]`. The entries are reordered to follow it (core
+   *  `thread::normalize_outline`); `[]` takes the shape away. */
+  threadSetOutline(name: string, outlineJson: string): string | null {
+    return this.#author("plumbline_engine_thread_set_outline", (f, ...p) => f(this.#engine, ...p), [name, outlineJson]);
+  }
+  /** `threadAdd` for a RANGE — `endVerse` 0 is the one verse. */
+  threadAddRange(name: string, refKey: string, endVerse: number, note: string | null, added: string): string | null {
+    return this.#author(
+      "plumbline_engine_thread_add_range",
+      (f, n, r, no, a) => f(this.#engine, n, r, endVerse, no, a),
+      [name, refKey, note, added],
+    );
+  }
+  /** A typed passage — "John 3:16", "Eph 2:8-10", "Eph 2" — resolved against the
+   *  text: `{verse: refKey | null, display, end: verse | null}`. */
+  passageQuery(text: string): any {
+    return this.#json("plumbline_engine_passage_query_json", text);
+  }
   /** Drop entry `index`. The thread survives its last entry — deleting the thread
    *  itself is `threadRemove`. */
   threadEntryRemove(name: string, index: number): string | null {

@@ -13,6 +13,7 @@
   import TagsScreen from "./TagsScreen.svelte";
   import WeavesScreen from "./WeavesScreen.svelte";
   import PreachScreen from "./PreachScreen.svelte";
+  import SermonScreen from "./SermonScreen.svelte";
   import HymnalScreen from "../hymnal/HymnalScreen.svelte";
   import MarkReadDialog from "./MarkReadDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
@@ -199,7 +200,12 @@
           ? "sing"
           : s.screen === "share"
             ? "share"
-            : "read",
+            : s.screen === "sermon"
+              ? // The editor lights the hub it was opened from.
+                s.sermonFrom === "explore"
+                ? "study"
+                : s.sermonFrom
+              : "read",
   );
 
   // The reader's text size over the 18px the chrome was drawn at, times the
@@ -370,6 +376,8 @@
       <WeavesScreen />
     {:else if s.screen === "preach"}
       <PreachScreen />
+    {:else if s.screen === "sermon"}
+      <SermonScreen />
     {:else if s.screen === "hymnal"}
       <HymnalScreen />
     {:else if s.screen === "share"}

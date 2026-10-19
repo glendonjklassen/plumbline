@@ -333,6 +333,11 @@
         {t("share.gospelGo")}
       </button>
     </div>
+    <div class="card" data-surface="share sermons">
+      <h3>{t("explore.sermons")}</h3>
+      <p class="desc">{t("explore.sermons.desc")}</p>
+      <button class="visit" onclick={() => s.openSermons("share")}>{t("sermon.open")}</button>
+    </div>
     <!-- The palette: one link, built from what the recipient will actually get.
          Every control here only offers what EXISTS in the chosen language — the
          engine answers that per language (`shareOptions`), and what is not

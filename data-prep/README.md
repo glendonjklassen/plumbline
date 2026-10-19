@@ -41,6 +41,14 @@ checkout (`ml/` and `pipelines/`, each with its own README). Plumbline does
 **not** reimplement them — the runtime only reads their outputs, exactly as it
 reads `kjv.jsonl`. Run them once against a hydrated home:
 
+- **`kjv.jsonl`** — the overlay importer's SWORD pass, then
+  `python3 data-prep/kjv/fix-tag-splits.py` from the repo root. The eBible
+  module closes some Strong's `<w>` tags mid-word and the importer takes every
+  tag edge as a word edge, so 55 New Testament words came out in two pieces
+  ("agains t", "mid night", "who soever" — the list is in the script). The
+  script rejoins them and re-indexes the two token-addressed sidecars
+  (`akjv.jsonl`, `morphology.jsonl`); rebuild `akjv.akjvb` after it. A core
+  test (`shipped_corpus_has_no_tag_split_words`) fails if a re-import skips it.
 - **`concept-vectors.vec`** — `python3 ml/train_concept2vec.py` then
   `python3 ml/align_hg.py`. Skip-gram with negative sampling in **pure NumPy**
   (no gensim/torch, no GPU); minutes on a laptop. `align_hg.py` rotates the

@@ -314,7 +314,24 @@ export class Session {
     | "share"
     | "search"
     | "devotional"
+    | "sermon"
   >("read");
+
+  // ── the sermon editor ───────────────────────────────────────────────────────
+
+  /** Which thread the sermon editor has open; null is its list of sermons. */
+  sermonName = $state<string | null>(null);
+  /** The hub the editor was entered from — Study, Preach or Share all offer it
+   *  — and where its ‹ returns. */
+  sermonFrom = $state<"explore" | "preach" | "share">("preach");
+
+  /** Open the sermon editor from `from`, on `name` or on the list. */
+  openSermons(from: "explore" | "preach" | "share", name: string | null = null): void {
+    this.dismissTransient();
+    this.sermonFrom = from;
+    this.sermonName = name;
+    this.screen = "sermon";
+  }
 
   // ── devotionals ─────────────────────────────────────────────────────────────
 
@@ -457,6 +474,7 @@ export class Session {
    */
   static readonly TRANSIENT = [
     ["screen", "read"],
+    ["sermonName", null],
     ["panel", null],
     ["mapPopup", null],
     ["memorize", null],
@@ -542,6 +560,10 @@ export class Session {
       // "memorize" with no view would render an empty screen with no way out.
       this.memorize = null;
       this.screen = "explore";
+    } else if (this.screen === "sermon") {
+      // Up one: an open sermon closes to the list, the list to the hub it came from.
+      if (this.sermonName) this.sermonName = null;
+      else this.screen = this.sermonFrom;
     } else if (this.screen !== "read") {
       this.goRead();
     } else {
