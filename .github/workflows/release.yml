@@ -38,7 +38,7 @@ jobs:
   # v0.3.0 taught us to avoid; artifacts labelled with the wrong version are
   # worse than a release that stops and says why.
   version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       name: ${{ steps.v.outputs.name }}
       code: ${{ steps.v.outputs.code }}
@@ -79,7 +79,7 @@ jobs:
   # describe a build that did not ship. (v0.3.0's lesson, one platform's break
   # blocking every other artifact, no longer applies: the PWA is the one artifact.)
   create-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [version, ci]
     steps:
       # Guarded on the step, not the job: a skipped job skips everything that
@@ -98,8 +98,12 @@ jobs:
   # commit: data pack → wasm engine → Vite bundle; the bundle is base "./" so
   # the /plumbline/ subpath needs no rebuild.
   pages:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [version, ci]
+    # The European mirror (ops/hetzner/). Job-level so the step's `if` can see
+    # it: a fork or a checkout without the secrets simply skips the mirror.
+    env:
+      MIRROR_HOST: ${{ secrets.MIRROR_HOST }}
     permissions:
       contents: read
       pages: write
@@ -176,3 +180,23 @@ jobs:
         id: deploy
         if: github.event_name != 'workflow_dispatch'
         uses: actions/deploy-pages@v4
+
+      # The same `dist` to the European mirror (ops/hetzner/README.md), after
+      # Pages so the canonical site is never behind the mirror. The pack is
+      # content-addressed, so a release that changed one file uploads one file;
+      # --delay-updates keeps the swap close to atomic; CNAME is GitHub's alone.
+      # The host key is PINNED (MIRROR_KNOWN_HOSTS), not accepted on first use:
+      # a deploy key that will talk to whoever answers the IP is no deploy key.
+      - name: Mirror the site to the European host
+        if: github.event_name != 'workflow_dispatch' && env.MIRROR_HOST != ''
+        env:
+          MIRROR_SSH_KEY: ${{ secrets.MIRROR_SSH_KEY }}
+          MIRROR_KNOWN_HOSTS: ${{ secrets.MIRROR_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$MIRROR_SSH_KEY" > ~/.ssh/mirror
+          printf '%s\n' "$MIRROR_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/mirror ~/.ssh/known_hosts
+          rsync -az --delete --delay-updates --exclude CNAME \
+            -e "ssh -i ~/.ssh/mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+            apps/web/dist/ "deploy@${MIRROR_HOST}:/srv/plumbline/"

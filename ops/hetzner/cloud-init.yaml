@@ -1,0 +1,117 @@
+#cloud-config
+# Plumbline mirror — Hetzner Cloud, Debian 13. Paste into "Cloud config" when
+# creating the server (ops/hetzner/README.md walks through it). Serves plain
+# HTTP until a hostname replaces `:80`. If the package's stock Caddyfile wins
+# the race on first boot, `systemctl reload caddy` once the deferred write has
+# landed, or re-paste the block below.
+#
+# What it does: a `deploy` user with your SSH key; root login and
+# passwords off; ufw (22/80/443) and fail2ban on; unattended security updates
+# with a reboot window; Caddy serving /srv/plumbline with automatic HTTPS.
+
+hostname: plumbline-mirror
+timezone: UTC
+
+users:
+  - name: deploy
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    lock_passwd: true
+    ssh_authorized_keys:
+      # The maintainer's key for this box, and the release workflow's deploy key
+      # (ops/hetzner/README.md). Replace both when rebuilding for someone else.
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGszTS8ZuSO9aAHnH46ZVxW9Wk2Tks7V+6D0R2f1LdeS plumbline mirror
+      - CI_DEPLOY_PUBLIC_KEY
+
+package_update: true
+package_upgrade: true
+packages: [caddy, ufw, fail2ban, unattended-upgrades, rsync]
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-hardening.conf
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      ChallengeResponseAuthentication no
+      PubkeyAuthentication yes
+      X11Forwarding no
+      AllowAgentForwarding no
+      AllowTcpForwarding no
+      MaxAuthTries 3
+      LoginGraceTime 20
+      ClientAliveInterval 300
+      ClientAliveCountMax 2
+      AllowUsers deploy
+  - path: /etc/fail2ban/jail.local
+    content: |
+      [DEFAULT]
+      bantime = 1h
+      findtime = 10m
+      maxretry = 5
+      backend = systemd
+      [sshd]
+      enabled = true
+  - path: /etc/apt/apt.conf.d/52unattended-upgrades-local
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+      Unattended-Upgrade::Remove-Unused-Dependencies "true";
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+  - path: /etc/sysctl.d/99-hardening.conf
+    content: |
+      net.ipv4.conf.all.rp_filter = 1
+      net.ipv4.conf.default.rp_filter = 1
+      net.ipv4.conf.all.accept_redirects = 0
+      net.ipv6.conf.all.accept_redirects = 0
+      net.ipv4.conf.all.send_redirects = 0
+      net.ipv4.conf.all.accept_source_route = 0
+      net.ipv6.conf.all.accept_source_route = 0
+      net.ipv4.tcp_syncookies = 1
+      kernel.kptr_restrict = 2
+      kernel.dmesg_restrict = 1
+  - path: /etc/caddy/Caddyfile
+    # After the caddy package, so its stock Caddyfile cannot win.
+    defer: true
+    content: |
+      # Plain HTTP until there is a hostname: replace `:80` with it, point DNS
+      # here, `systemctl reload caddy`, and Caddy fetches the certificate itself.
+      :80 {
+          root * /srv/plumbline
+          encode zstd gzip
+          # Everything under /pack/ is content-addressed (?h=<hash>): cache for a year.
+          @pack path /pack/*
+          header @pack Cache-Control "public, max-age=31536000, immutable"
+          # The shell and worker must always revalidate, or an update never lands.
+          @shell path / /sw.js /index.html /shell-manifest.json /manifest.webmanifest
+          header @shell Cache-Control "no-cache"
+          header {
+              X-Content-Type-Options nosniff
+              Referrer-Policy strict-origin-when-cross-origin
+              Permissions-Policy "camera=(), microphone=(), geolocation=()"
+              -Server
+          }
+          handle_errors {
+              @404 expression {http.error.status_code} == 404
+              rewrite @404 /404.html
+              file_server
+          }
+          file_server
+      }
+
+runcmd:
+  - [sysctl, --system]
+  - [ufw, default, deny, incoming]
+  - [ufw, default, allow, outgoing]
+  - [ufw, allow, "22/tcp"]
+  - [ufw, allow, "80/tcp"]
+  - [ufw, allow, "443/tcp"]
+  - [ufw, --force, enable]
+  - [mkdir, -p, /srv/plumbline]
+  - [chown, -R, "deploy:deploy", /srv/plumbline]
+  - [systemctl, enable, --now, fail2ban]
+  - [systemctl, enable, --now, caddy]
+  - [systemctl, restart, ssh]
+  - [passwd, -l, root]
