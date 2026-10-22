@@ -142,15 +142,25 @@ test("Present walks the outline, and the switch hides the presenter's words", as
   await expect(overview.locator(".entry")).toHaveCount(3);
 });
 
-// Each save comes back from the engine as a fresh thread; rebuilding the draft from
-// it used to mint new block uids, and the list is keyed by uid, so the field being
-// typed in was replaced and lost focus after every save. Fails against that: the
-// textarea holding the cursor is a new element after the save lands, and
-// `toBeFocused` reads the live one. The wait is for the save, observed in the
-// engine's outline, not a guessed delay.
+// Two ways a save used to take the cursor. Rebuilding the draft from the engine's
+// echo minted new block uids, and the list is keyed by uid, so the field being
+// typed in was replaced. And a draft marked clean before the refetch landed was
+// rebuilt from the thread as it was BEFORE the save, so a block just added
+// vanished and came back as a new element. Fails against either: the textarea
+// holding the cursor is a new element, and `toBeFocused` reads the live one. The
+// wait is for the save, observed in the engine's outline, not a guessed delay.
 test("typing in a sermon keeps the cursor through each save", async ({ page }) => {
   await boot(page);
   await settleBackground(page);
+  // Throttled, so the window between a save landing and its refetch is wide
+  // enough to see: on a fast machine the bug this guards passes 8 of 8 and fails
+  // 4 of 4 at this rate. CDP is Chromium's; elsewhere the test runs unthrottled.
+  try {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 8 });
+  } catch {
+    /* not Chromium */
+  }
   await page.evaluate(() => (window as any).__plumbline.openSermons("preach"));
   await page.getByRole("button", { name: "New sermon" }).click();
   const prompt = page.locator('[aria-label="Sermon title"]');

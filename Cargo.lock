@@ -408,7 +408,7 @@ dependencies = [
 
 [[package]]
 name = "plumbline-core"
-version = "0.78.1"
+version = "0.78.2"
 dependencies = [
  "base64",
  "bincode",
@@ -425,7 +425,7 @@ dependencies = [
 
 [[package]]
 name = "plumbline-ffi"
-version = "0.78.1"
+version = "0.78.2"
 dependencies = [
  "cbindgen",
  "plumbline-core",
@@ -437,7 +437,7 @@ dependencies = [
 
 [[package]]
 name = "plumbline-hydrate"
-version = "0.78.1"
+version = "0.78.2"
 dependencies = [
  "plumbline-core",
  "plumbline-rnd",
@@ -445,14 +445,14 @@ dependencies = [
 
 [[package]]
 name = "plumbline-layout"
-version = "0.78.1"
+version = "0.78.2"
 dependencies = [
  "plumbline-core",
 ]
 
 [[package]]
 name = "plumbline-rnd"
-version = "0.78.1"
+version = "0.78.2"
 dependencies = [
  "plumbline-core",
  "serde",

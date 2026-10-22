@@ -100,6 +100,13 @@
     const g = gen;
     const err = await s.author("threadSetOutline", name, wire(draft));
     if (err) s.showToast(err);
+    // Wait for the save's own echo before marking the draft clean. The write
+    // clears the read cache, and until the refetch lands `thread` answers with
+    // the thread as it was BEFORE this save; a draft marked clean in that window
+    // is rebuilt from it, so a block added a moment ago vanishes — cursor and
+    // all — and comes back as a new element when the fresh thread arrives. On a
+    // slow machine that window is wide (the v0.78.0 and v0.78.1 release runs).
+    await s.fetchQ("threads").catch(() => {});
     if (gen === g) gen = 0;
   }
   /** A text edit: saved after a pause. */
