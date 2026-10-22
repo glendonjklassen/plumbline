@@ -157,6 +157,30 @@ jobs:
           fi
 
   # Every user-visible string in the shell comes from crates/core/src/i18n.
+  # Known vulnerabilities in what the build pulls in. cargo-audit reads
+  # Cargo.lock against the RustSec database; npm audit reads package-lock.json
+  # against npm's (no install: the lockfile is the tree). Each fails on a
+  # vulnerability. cargo-audit's unmaintained/yanked notices stay warnings — the
+  # answer to those is a migration, not a bump (bincode 1.x, RUSTSEC-2025-0141,
+  # is the one open today). The npm side audits the dev tooling too, since that
+  # is what runs on every release machine; `high` so a moderate advisory in a
+  # build tool prints without holding a release.
+  advisories:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: Rust dependencies against RustSec
+        run: cargo audit
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: npm dependencies against the npm advisory database
+        working-directory: apps/web
+        run: npm audit --audit-level=high
+
   # Its own job rather than a step inside the web build so a stray literal
   # fails fast rather than after a wasm compile and a browser download.
   i18n:

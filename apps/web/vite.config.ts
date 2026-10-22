@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { DEFAULT_FONT, FONT_ALL_FILES, FONT_FILES } from "./src/engine/fonts.generated";
@@ -29,6 +30,18 @@ const ALL_FONT_PATHS: string[] = [...FONT_ALL_FILES];
 // independently-computed ids would disagree by a millisecond and the sweep would
 // treat the running build as stale.
 const BUILD_ID = Date.now().toString(36);
+
+// The production Content-Security-Policy, read out of the box's Caddyfile in
+// ops/hetzner/cloud-init.yaml rather than copied, so `vite preview` — and with
+// it the whole Playwright suite — runs under exactly the policy readers get. A
+// directive the app cannot live with fails e2e here, not the site there.
+// HSTS is not mirrored: browsers ignore it over plain http, which preview is.
+function productionCsp(): string {
+  const src = readFileSync(new URL("../../ops/hetzner/cloud-init.yaml", import.meta.url), "utf8");
+  const line = /^\s*Content-Security-Policy "([^"]+)"$/m.exec(src);
+  if (!line) throw new Error("ops/hetzner/cloud-init.yaml has no Content-Security-Policy line");
+  return line[1];
+}
 
 export default defineConfig({
   base: "./",
@@ -111,5 +124,8 @@ export default defineConfig({
   ],
   build: {
     target: "es2022",
+  },
+  preview: {
+    headers: { "Content-Security-Policy": productionCsp() },
   },
 });

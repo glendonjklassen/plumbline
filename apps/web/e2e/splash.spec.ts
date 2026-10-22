@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { bootErrorCopy } from "../src/engine/bootError";
 import { BOOT_STRINGS } from "../src/lib/i18n.generated";
+import { serveStubWorkers, STUB_WORKER_URL_JS } from "./stub-worker";
 
 // THE FIRST SCREEN, and for a long time the least examined one.
 //
@@ -68,7 +69,11 @@ async function boot(page: Page): Promise<void> {
  *  cache, so a route on its URL never fires. Being the worker is the only way to
  *  hold the splash still. */
 async function stubEngine(page: Page, raw: string | null): Promise<void> {
-  await page.addInitScript((message: string | null) => {
+  // Same-origin, not a blob: — see stub-worker.ts. Every caller runs with the
+  // service worker blocked, which that file explains.
+  await serveStubWorkers(page);
+  await page.addInitScript(([message, urlOf]: [string | null, string]) => {
+    const stubUrl = (0, eval)(urlOf) as (src: string) => string;
     const Real = window.Worker;
     const src =
       message === null
@@ -79,11 +84,11 @@ async function stubEngine(page: Page, raw: string | null): Promise<void> {
           " }); };";
     class Stub extends Real {
       constructor(_url: string | URL, opts?: WorkerOptions) {
-        super(URL.createObjectURL(new Blob([src], { type: "text/javascript" })), opts);
+        super(stubUrl(src), opts);
       }
     }
     (window as any).Worker = Stub;
-  }, raw);
+  }, [raw, STUB_WORKER_URL_JS] as [string | null, string]);
 }
 
 /** A silent engine: the splash goes up and stays up, so `applyTheme()` can never
@@ -95,6 +100,9 @@ const noEngine = (page: Page) => stubEngine(page, null);
 // reads "plumbline:palette"). Red: the splash paints rgb(252, 249, 244) — the
 // light default — for a reader whose theme is dark. That IS the bug: a cream
 // flash on every launch.
+test.describe("with the engine stubbed", () => {
+  test.use({ serviceWorkers: "block" });
+
 test("the splash paints last session's palette, before any engine exists", async ({ page }) => {
   await boot(page);
 
@@ -114,6 +122,10 @@ test("the splash paints last session's palette, before any engine exists", async
   await noEngine(page);
   await page.goto("/");
   await expect(page.locator(".splash")).toBeVisible({ timeout: 30_000 });
+  // The stub is silent, so the splash must be WAITING. An error here means the stub
+  // never ran (a refused worker raises one at once), and the colour below would
+  // then be measured on the wrong screen.
+  await expect(page.locator(".splash .error"), "the silent stub did not run").toHaveCount(0);
 
   // The premise: nothing mounted a session this load, so `applyTheme()` cannot
   // be what painted it. Without this the test could pass on the running app.
@@ -124,9 +136,10 @@ test("the splash paints last session's palette, before any engine exists", async
 
   await expect(page.locator(".splash")).toHaveCSS("background-color", rgb(coreHex("Dark", "paper")));
 });
+});
 
 test.describe("a first-ever visit on a dark device", () => {
-  test.use({ colorScheme: "dark" });
+  test.use({ colorScheme: "dark", serviceWorkers: "block" });
 
   // MUTATION: delete the `@media (prefers-color-scheme: dark)` block from
   // index.html's head. Red: rgb(252, 249, 244) — cream, on a device that asked
@@ -135,6 +148,7 @@ test.describe("a first-ever visit on a dark device", () => {
     await noEngine(page);
     await page.goto("/");
     await expect(page.locator(".splash")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".splash .error"), "the silent stub did not run").toHaveCount(0);
     expect(
       await page.evaluate(() => localStorage.getItem("plumbline:palette")),
       "this device already had a stored palette, so it is not testing a first visit",
@@ -323,7 +337,7 @@ test("every boot failure maps to something a reader can act on", () => {
 //   b) gen-i18n.mjs — change PREFIX to something no key starts with. Red: the
 //      splash paints raw ids ("boot.error.network").
 test.describe("a German device", () => {
-  test.use({ locale: "de-DE" });
+  test.use({ locale: "de-DE", serviceWorkers: "block" });
 
   test("reads the boot-failure screen in German, with no engine to ask", async ({ page }) => {
     await stubEngine(page, "TypeError: Failed to fetch");
@@ -347,6 +361,9 @@ test.describe("a German device", () => {
 //   b) App.svelte — delete the <details> block under the Retry button. Red: "the
 //      raw string is not reachable anywhere on the error screen" — which is what
 //      a bug report has to paste.
+test.describe("a stubbed boot failure", () => {
+  test.use({ serviceWorkers: "block" });
+
 test("a boot failure says something a reader can act on, and keeps the raw string", async ({ page }) => {
   const RAW = "data pack file data/kjv.jsonl.idxcache: HTTP 503";
   await stubEngine(page, RAW);
@@ -375,4 +392,5 @@ test("a boot failure says something a reader can act on, and keeps the raw strin
   ).toContain(RAW);
   await page.locator(".splash details summary").click();
   await expect(raw).toBeVisible();
+});
 });

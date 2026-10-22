@@ -24,7 +24,14 @@ users:
       # The maintainer's key for this box, and the release workflow's deploy key
       # (ops/hetzner/README.md). Replace both when rebuilding for someone else.
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGszTS8ZuSO9aAHnH46ZVxW9Wk2Tks7V+6D0R2f1LdeS plumbline mirror
-      - CI_DEPLOY_PUBLIC_KEY
+      # The release workflow's key, bound to one command: an rsync INTO
+      # /srv/plumbline. `restrict` is no forwarding, no pty, no X11; rrsync
+      # (shipped by the rsync package) refuses everything that is not an rsync
+      # server rooted there and `-wo` refuses to send anything back, so a leaked
+      # key can overwrite the public site and nothing else. Every path the
+      # client names is read relative to that root, which is why release.yml
+      # targets `:/` (rehearsed with the release's exact flags, 2026-10-22).
+      - restrict,command="/usr/bin/rrsync -wo /srv/plumbline" CI_DEPLOY_PUBLIC_KEY
 
 package_update: true
 package_upgrade: true
@@ -231,22 +238,46 @@ write_files:
       # here, `systemctl reload caddy`, and Caddy fetches the certificate itself.
       # The live box: `plumblinebible.org, www.plumblinebible.org,
       # plumblinebible.ch, www.plumblinebible.ch {`.
+
+      # On every response, the 404 page included: handle_errors is a second
+      # handler chain, so a `header` in the site block alone left the error
+      # page bare (seen live, 2026-10-22). check-site.sh holds what the box
+      # serves to this block, on / and on a 404, so an edit made on the box by
+      # hand and not here fails the daily check.
+      (security) {
+          header {
+              X-Content-Type-Options nosniff
+              Referrer-Policy strict-origin-when-cross-origin
+              Permissions-Policy "camera=(), microphone=(), geolocation=()"
+              # A year, www included; the site has only ever answered plain
+              # HTTP with a redirect. No `preload`: that list is one-way.
+              Strict-Transport-Security "max-age=31536000; includeSubDomains"
+              # What the page may load, and from where: everything is its own
+              # origin, the engine worker and the service worker included, and
+              # the worker needs 'wasm-unsafe-eval' to instantiate the engine.
+              # The two sha256s are the only inline code: index.html's theme
+              # script and 404.html's redirect. apps/web/e2e/csp.spec.ts
+              # re-derives both from the build, and `vite preview` serves this exact value (read
+              # out of this file by vite.config.ts), so the whole Playwright
+              # suite runs under it. 'unsafe-inline' for styles only, because
+              # Svelte sets style attributes and no hash can allow those.
+              Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-vsnIEdpkWvc7k7xpwZUTXrKhTiZ5Z5Rq7pRqznCi7vQ=' 'sha256-Kc/Y37SDOEpCuxYePP5/9M81Qv039zsTRntxdCV2vJw='; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+              -Server
+          }
+      }
+
       :80 {
           root * /srv/plumbline
           encode zstd gzip
+          import security
           # Everything under /pack/ is content-addressed (?h=<hash>): cache for a year.
           @pack path /pack/*
           header @pack Cache-Control "public, max-age=31536000, immutable"
           # The shell and worker must always revalidate, or an update never lands.
           @shell path / /sw.js /index.html /shell-manifest.json /manifest.webmanifest
           header @shell Cache-Control "no-cache"
-          header {
-              X-Content-Type-Options nosniff
-              Referrer-Policy strict-origin-when-cross-origin
-              Permissions-Policy "camera=(), microphone=(), geolocation=()"
-              -Server
-          }
           handle_errors {
+              import security
               @404 expression {http.error.status_code} == 404
               rewrite @404 /404.html
               file_server

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { serveStubWorkers, STUB_WORKER_URL_JS } from "./stub-worker";
 
 // With no `error` or `unhandledrejection` handler, an exception in an effect or a
 // promise nobody awaited left the reader tapping a page that had quietly died, with
@@ -103,24 +104,40 @@ test("a storm of faults is one bar, and dismissing it is final", async ({ page }
 
 // Fails without `!session` in `noteMishap`'s guard: the bar covers the splash's own
 // error screen, so the reader is told the same thing twice by the vaguer of the two.
+test.describe("with the engine stubbed", () => {
+  // The stub is served same-origin (stub-worker.ts), which needs the service worker
+  // out of the way.
+  test.use({ serviceWorkers: "block" });
+
 test("the splash's own boot error is not repeated by the bar", async ({ page }) => {
   // A stub engine worker that fails the boot RPC, so the splash owns the screen with
   // its error. Boot's fetches happen inside the worker, where page-level routing
   // cannot see them, so replacing the worker is the only way in.
-  await page.addInitScript(() => {
+  //
+  // It used to be a blob: worker, which the production policy refuses — and a refused
+  // worker ALSO puts an error on the splash, so this test kept passing while the stub
+  // never ran. The raw-string check below is what tells the two apart: only the stub
+  // says "engine open failed".
+  await serveStubWorkers(page);
+  await page.addInitScript((urlOf: string) => {
+    const stubUrl = (0, eval)(urlOf) as (src: string) => string;
     const Real = window.Worker;
     const src =
       "self.onmessage = (e) => { if (e.data && e.data.op === 'boot') " +
       "self.postMessage({ id: e.data.id, error: 'engine open failed' }); };";
     class Stub extends Real {
       constructor(_url: string | URL, opts?: WorkerOptions) {
-        super(URL.createObjectURL(new Blob([src], { type: "text/javascript" })), opts);
+        super(stubUrl(src), opts);
       }
     }
     (window as any).Worker = Stub;
-  });
+  }, STUB_WORKER_URL_JS);
   await page.goto("/");
   await expect(page.locator(".splash .error")).toBeVisible({ timeout: 30_000 });
+  await expect(
+    page.locator(".splash details pre"),
+    "the stub never ran — the splash is showing some other boot failure, so this test proves nothing",
+  ).toContainText("engine open failed");
 
   await throwLoose(page, "during boot (test)", 3);
   await page.waitForTimeout(1_000);
@@ -129,4 +146,5 @@ test("the splash's own boot error is not repeated by the bar", async ({ page }) 
     "the boot error screen already says what happened and offers a Retry; the bar is a second, vaguer copy of it",
   ).toHaveCount(0);
   await expect(page.locator(".splash .error")).toBeVisible();
+});
 });
