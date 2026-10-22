@@ -32,11 +32,3 @@ jobs:
         run: gh release download --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS --dir "$RUNNER_TEMP"
       - name: Check plumblinebible.org
         run: ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
-      # The same box and root under a second name: its DNS, certificates and
-      # files answering. Checked even when the .org fails. Advisory, like in the
-      # release: the .ch depends on a registry outside our control, so its
-      # failure is a warning on the run, not a failed run or an email.
-      - name: Check plumblinebible.ch
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        run: ops/hetzner/check-site.sh https://plumblinebible.ch

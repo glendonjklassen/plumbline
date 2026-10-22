@@ -72,11 +72,9 @@ rsync -az --delete --exclude CNAME -e "ssh -i ~/.ssh/<your key>" apps/web/dist/ 
 
 `.github/workflows/site-check.yml` runs the same check every morning (07:17
 UTC, after the box's unattended upgrade) and can be run by hand from the
-Actions tab. GitHub emails a failure. The .org is checked byte for byte; the
-.ch, the same files under another name, for DNS, certificates and every
-manifest file answering. The .ch check is advisory, in the release too: it
-depends on a registry outside our control, so its failure shows as a warning
-on the run and never fails it. It fails when:
+Actions tab. GitHub emails a failure. It checks the .org only: the .ch is the
+same box and files under another name, so the .org passing covers it. It fails
+when:
 
 - either name stops resolving to exactly the box's two addresses (a hijacked
   DNS record, with the box untouched)

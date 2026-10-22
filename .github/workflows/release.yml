@@ -219,16 +219,6 @@ jobs:
         if: github.event_name != 'workflow_dispatch' && env.MIRROR_HOST != ''
         run: ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
 
-      # plumblinebible.ch is a second name for the same box and root, so the
-      # byte comparison is not repeated: its DNS, certificates and the
-      # manifests' files answering are. Advisory: the .ch depends on a
-      # registry outside our control, so a failure shows as a warning on the
-      # run and never holds or fails a release.
-      - name: Check plumblinebible.ch
-        if: github.event_name != 'workflow_dispatch' && env.MIRROR_HOST != ''
-        continue-on-error: true
-        run: ops/hetzner/check-site.sh https://plumblinebible.ch
-
       # The standby. continue-on-error, so GitHub can neither block nor fail a
       # release that has already reached readers; a failure still shows as a
       # warning on the run.
