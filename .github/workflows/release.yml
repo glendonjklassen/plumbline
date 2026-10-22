@@ -220,7 +220,7 @@ jobs:
           # srv/plumbline inside the first and fail.
           rsync -az --delete --delay-updates --exclude CNAME \
             -e "ssh -i ~/.ssh/mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
-            apps/web/dist/ "deploy@${MIRROR_HOST}:/"
+            apps/web/dist/ "release@${MIRROR_HOST}:/"
 
       # Proves the upload landed rather than assuming it: DNS points at the box,
       # every served file matches the checksums just attached, and the

@@ -21,10 +21,13 @@ files), Debian 13, public IPv4 + IPv6, a Hetzner firewall allowing inbound TCP
 22/80/443 only, built from [cloud-init.yaml](cloud-init.yaml) pasted into the
 console's "Cloud config" field. What that gives:
 
-- a `deploy` user, key-only; root locked, passwords off, forwarding off,
-  `deploy` the only user sshd admits. The release workflow's key is bound to
-  `rrsync -wo /srv/plumbline`: it can rsync into the web root and do nothing
-  else, not read it back, not open a shell
+- a `deploy` user (the maintainer, sudo) and a `release` user (owns the web
+  root, no sudo), both key-only; root locked, passwords off, forwarding off,
+  those two the only users sshd admits. The release workflow's key is in
+  `release` alone and bound to `rrsync -wo /srv/plumbline`: it can rsync into
+  the web root and do nothing else — not read it back, not open a shell, and
+  with no sudo on the account, not reach the rest of the box through a flaw in
+  the rsync receiver either
 - ufw default-deny with 22/80/443; fail2ban on sshd
 - unattended security upgrades, rebooting at 04:30 UTC when a kernel asks
 - Caddy from its own apt repository (key pinned in the cloud-init), which the
@@ -58,12 +61,12 @@ alone. The `MIRROR_` names date from when this box was a mirror.
 | Secret | What |
 |---|---|
 | `MIRROR_HOST` | the box's hostname or IP |
-| `MIRROR_SSH_KEY` | the PRIVATE half of a key made for this and nothing else, whose public half is in `/home/deploy/.ssh/authorized_keys`, bound to rrsync as below |
+| `MIRROR_SSH_KEY` | the PRIVATE half of a key made for this and nothing else, whose public half is in `/home/release/.ssh/authorized_keys`, bound to rrsync as below |
 | `MIRROR_KNOWN_HOSTS` | the box's host keys, so the workflow talks only to it: `ssh-keyscan -H <host> 2>/dev/null` |
 
 To mint the deploy key: `ssh-keygen -t ed25519 -f mirror-ci -N "" -C "plumbline release"`,
-put `mirror-ci.pub` on one line of the box's `authorized_keys` with the
-restriction in front of it, the contents of `mirror-ci` in the secret, then
+put `mirror-ci.pub` on one line of `/home/release/.ssh/authorized_keys` with
+the restriction in front of it, the contents of `mirror-ci` in the secret, then
 delete both local files:
 
 ```
@@ -75,13 +78,36 @@ refuses every command but an rsync server rooted at `/srv/plumbline`, and
 `-wo` refuses to send anything back. A leaked key can overwrite the public
 site and nothing else, and the next release overwrites it again. rrsync reads
 every path relative to that root, which is why the workflow's target is
-`deploy@<host>:/`. If the key ever leaks, remove that line and rotate the
+`release@<host>:/`. If the key ever leaks, remove that line and rotate the
 secret; nothing else is affected.
+
+### Moving the release key to its own user (a box built before 2026-10-23)
+
+The key used to sit in `deploy`'s `authorized_keys`, beside the maintainer's,
+on an account with passwordless sudo. On such a box, as `deploy`, before
+tagging a release that targets `release@`:
+
+```sh
+sudo adduser --disabled-password --gecos "" --shell /bin/sh release
+sudo install -d -m 700 -o release -g release /home/release/.ssh
+grep 'plumbline release$' ~/.ssh/authorized_keys | sudo install -m 600 -o release -g release /dev/stdin /home/release/.ssh/authorized_keys
+sudo cat /home/release/.ssh/authorized_keys          # one line, starting restrict,command=
+sed -i '/plumbline release$/d' ~/.ssh/authorized_keys
+sudo chown -R release:release /srv/plumbline
+sudo sed -i 's/^AllowUsers deploy$/AllowUsers deploy release/' /etc/ssh/sshd_config.d/10-hardening.conf
+sudo sshd -t && sudo systemctl reload ssh
+```
+
+Then, from a second terminal, confirm `ssh deploy@<host>` still works before
+closing the first. The secrets do not change: same key, same host. The first
+release after this is the test of it; an upload refused there is this list
+done in the wrong order, and `gh run rerun <run-id> --failed` resumes once the
+box is right.
 
 By hand, with your own (unrestricted) key, the same upload is
 
 ```sh
-rsync -az --delete --exclude CNAME -e "ssh -i ~/.ssh/<your key>" apps/web/dist/ deploy@<host>:/srv/plumbline/
+rsync -az --delete --exclude CNAME --rsync-path="sudo -u release rsync" -e "ssh -i ~/.ssh/<your key>" apps/web/dist/ deploy@<host>:/srv/plumbline/
 ```
 
 ## The headers

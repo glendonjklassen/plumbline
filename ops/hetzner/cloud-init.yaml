@@ -15,22 +15,30 @@ hostname: plumbline-mirror
 timezone: UTC
 
 users:
+  # The maintainer: sudo, for the box's upkeep. Only the maintainer's own key
+  # lands here (ops/hetzner/README.md); replace it when rebuilding for someone
+  # else.
   - name: deploy
     groups: [sudo]
     shell: /bin/bash
     sudo: ["ALL=(ALL) NOPASSWD:ALL"]
     lock_passwd: true
     ssh_authorized_keys:
-      # The maintainer's key for this box, and the release workflow's deploy key
-      # (ops/hetzner/README.md). Replace both when rebuilding for someone else.
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGszTS8ZuSO9aAHnH46ZVxW9Wk2Tks7V+6D0R2f1LdeS plumbline mirror
-      # The release workflow's key, bound to one command: an rsync INTO
-      # /srv/plumbline. `restrict` is no forwarding, no pty, no X11; rrsync
-      # (shipped by the rsync package) refuses everything that is not an rsync
-      # server rooted there and `-wo` refuses to send anything back, so a leaked
-      # key can overwrite the public site and nothing else. Every path the
-      # client names is read relative to that root, which is why release.yml
-      # targets `:/` (rehearsed with the release's exact flags, 2026-10-22).
+  # The release workflow's user: owns the web root, has no sudo, and admits one
+  # key bound to one command — an rsync INTO /srv/plumbline. `restrict` is no
+  # forwarding, no pty, no X11; rrsync (shipped by the rsync package) refuses
+  # everything that is not an rsync server rooted there and `-wo` refuses to
+  # send anything back. A leaked key, or a bug in the rsync receiver, can
+  # overwrite the public site and nothing else: there is no sudo on this account
+  # to reach past it. Every path the client names is read relative to that root,
+  # which is why release.yml targets `:/`. The shell is a real one because sshd
+  # runs a forced command through it; the key's restriction is what stops a
+  # login, not the shell.
+  - name: release
+    shell: /bin/sh
+    lock_passwd: true
+    ssh_authorized_keys:
       - restrict,command="/usr/bin/rrsync -wo /srv/plumbline" CI_DEPLOY_PUBLIC_KEY
 
 package_update: true
@@ -52,7 +60,7 @@ write_files:
       LoginGraceTime 20
       ClientAliveInterval 300
       ClientAliveCountMax 2
-      AllowUsers deploy
+      AllowUsers deploy release
   - path: /etc/fail2ban/jail.local
     content: |
       [DEFAULT]
@@ -294,7 +302,7 @@ runcmd:
   - [ufw, allow, "443/tcp"]
   - [ufw, --force, enable]
   - [mkdir, -p, /srv/plumbline]
-  - [chown, -R, "deploy:deploy", /srv/plumbline]
+  - [chown, -R, "release:release", /srv/plumbline]
   - [systemctl, enable, --now, fail2ban]
   - [systemctl, enable, --now, caddy]
   - [systemctl, restart, ssh]
