@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { settleBackground } from "./settle";
 
 // TAG CATEGORIES (maintainer UAT, 2026-08-18): "tags need categories otherwise
 // it'll be soooo long." A category is assigned on the MANAGEMENT screen only —
@@ -76,6 +77,11 @@ test("a category set on the management screen groups the picker and the library"
 // Red: the pick dialog below never appears (the flow goes straight to text).
 test("an existing category is picked, not retyped — and freetext stays behind New", async ({ page }) => {
   await boot(page);
+  // `categorize` reads the existing headings from the cached tag list. A background
+  // stage landing mid-test clears the whole cache, the list reads empty, and the flow
+  // goes straight to the text prompt — the same symptom as the mutation below. Settled
+  // first, only the bug can produce it.
+  await settleBackground(page);
   await makeTags(page);
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;

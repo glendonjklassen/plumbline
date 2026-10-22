@@ -50,12 +50,14 @@ use plumbline_core::strongs::{self, OccurrenceIx, StrongsDict};
 use plumbline_core::tag::{self, LoadedTag, TagTarget};
 use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
 use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
-use plumbline_core::{canon, devotional, export, hymnal, i18n, notes, session_slot, theme, usernote, VRef};
+use plumbline_core::{canon, devotional, export, hymnal, i18n, notes, session_slot, theme, tombstone, usernote, VRef};
 use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, MeasureMemo, Memoized};
 use plumbline_rnd::{bridge, burst, concept, morph};
 
+pub mod backup;
 pub mod devotionals;
 pub mod dwell;
+pub mod notes_abi;
 pub mod plans;
 pub mod reading_map;
 pub mod share;
@@ -711,8 +713,8 @@ struct StudyData {
     threads: Vec<LoadedThread>,
     tags: Vec<LoadedTag>,
     weaves: Vec<LoadedWeave>,
-    /// The reader's personal per-verse notes, keyed by verse.
-    user_notes: std::collections::HashMap<VRef, usernote::LoadedNote>,
+    /// The reader's personal notes — any number per verse — in reading order.
+    user_notes: Vec<usernote::LoadedNote>,
 }
 
 /// Load notes + threads + tags + weaves + personal notes from `home` (empty
@@ -728,6 +730,36 @@ fn load_study(home: &Option<PathBuf>) -> StudyData {
         },
         None => StudyData::default(),
     }
+}
+
+/// Record deletions for the restore merge (`core::tombstone`), so a backup
+/// restored later cannot bring them back.
+///
+/// Best effort, after the deletion has happened: failing the call over its
+/// record would report an error for a delete that worked. A lost record costs
+/// at most that one item returning on a restore of an older backup.
+pub(crate) fn record_deleted(home: &Option<PathBuf>, keys: Vec<String>) {
+    if let Some(home) = home {
+        let _ = tombstone::record(home, &keys, &now_stamp());
+    }
+}
+
+/// The deletion-record identity of a named object (by id, else by name).
+fn identity_of(id: Option<&str>, name: &str) -> String {
+    tombstone::identity(id, name)
+}
+
+/// The deletion records for the tag(s) answering to `name`, case-insensitively.
+fn tag_keys(tags: &[LoadedTag], name: &str) -> Vec<String> {
+    let wanted = name.trim().to_lowercase();
+    tags.iter()
+        .filter(|lt| lt.tag.name.trim().to_lowercase() == wanted)
+        .map(|lt| tombstone::tag(&identity_of(lt.tag.id.as_deref(), &lt.tag.name)))
+        .collect()
+}
+
+fn file_name_of(path: &std::path::Path) -> String {
+    path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default()
 }
 
 // The ABI promises `*const PlumblineEngine` is safe to share across threads for reads while
@@ -2060,8 +2092,16 @@ pub unsafe extern "C" fn plumbline_engine_thread_remove(
             return out_string("null or invalid argument".to_string());
         };
         let mut study = engine.study_write();
+        let wanted = name.trim().to_lowercase();
+        let keys: Vec<String> = study
+            .threads
+            .iter()
+            .filter(|lt| lt.thread.name.trim().to_lowercase() == wanted)
+            .map(|lt| tombstone::thread(&identity_of(lt.thread.id.as_deref(), &lt.thread.name)))
+            .collect();
         match thread::remove_thread(&study.threads, name) {
             Ok(_) => {
+                record_deleted(&engine.home, keys);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2147,6 +2187,8 @@ pub unsafe extern "C" fn plumbline_engine_tag_remove(
         match found {
             Some(lt) => match tag::remove_member(&lt, &target, &now_stamp()) {
                 Ok(()) => {
+                    let id = identity_of(lt.tag.id.as_deref(), &lt.tag.name);
+                    record_deleted(&engine.home, vec![tombstone::tag_member(&id, &tombstone::member_target(&target))]);
                     *study = load_study(&engine.home);
                     ptr::null_mut()
                 }
@@ -2176,8 +2218,10 @@ pub unsafe extern "C" fn plumbline_engine_tag_delete(engine: *mut PlumblineEngin
             return out_string("null or invalid argument".to_string());
         };
         let mut study = engine.study_write();
+        let keys = tag_keys(&study.tags, name);
         match tag::remove_tag(&study.tags, name) {
             Ok(_) => {
+                record_deleted(&engine.home, keys);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2214,8 +2258,19 @@ pub unsafe extern "C" fn plumbline_engine_tag_rename(
             return out_string("null or invalid argument".to_string());
         };
         let mut study = engine.study_write();
+        // A tag written before ids existed is known elsewhere only by its old name;
+        // the rename gives it an id, so the old name is recorded as gone, or another
+        // device's copy would come back beside it on a restore.
+        let wanted = from.trim().to_lowercase();
+        let keys: Vec<String> = study
+            .tags
+            .iter()
+            .filter(|lt| lt.tag.id.is_none() && lt.tag.name.trim().to_lowercase() == wanted)
+            .map(|lt| tombstone::tag(&identity_of(None, &lt.tag.name)))
+            .collect();
         match tag::rename_tag(&home, &study.tags, from, to, &now_stamp()) {
             Ok(_) => {
+                record_deleted(&engine.home, keys);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2287,8 +2342,10 @@ pub unsafe extern "C" fn plumbline_engine_tag_merge(
             return out_string("null or invalid argument".to_string());
         };
         let mut study = engine.study_write();
+        let keys = tag_keys(&study.tags, from);
         match tag::merge_tags(&study.tags, from, into, &now_stamp()) {
             Ok(_) => {
+                record_deleted(&engine.home, keys);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2442,8 +2499,10 @@ pub unsafe extern "C" fn plumbline_engine_weave_approve(engine: *mut PlumblineEn
         let Some(i) = nth_suggested(&study.weaves, index as usize) else {
             return out_string(format!("no suggested weave at index {index}"));
         };
+        let keys = vec![tombstone::suggested(&file_name_of(&study.weaves[i].file))];
         match weave::approve_weave(&home, &study.weaves[i], &now_stamp()) {
             Ok(_) => {
+                record_deleted(&engine.home, keys);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2470,8 +2529,10 @@ pub unsafe extern "C" fn plumbline_engine_weave_reject(engine: *mut PlumblineEng
         let Some(i) = nth_suggested(&study.weaves, index as usize) else {
             return out_string(format!("no suggested weave at index {index}"));
         };
+        let keys = vec![tombstone::suggested(&file_name_of(&study.weaves[i].file))];
         match weave::reject_weave(&study.weaves[i]) {
             Ok(()) => {
+                record_deleted(&engine.home, keys);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2500,8 +2561,14 @@ pub unsafe extern "C" fn plumbline_engine_weave_delete(engine: *mut PlumblineEng
         let Some(lw) = study.weaves.get(index as usize) else {
             return out_string(format!("no weave at index {index}"));
         };
+        let keys = vec![if weave::is_suggested(lw) {
+            tombstone::suggested(&file_name_of(&lw.file))
+        } else {
+            tombstone::weave(&identity_of(lw.weave.id.as_deref(), &lw.weave.name))
+        }];
         match weave::reject_weave(lw) {
             Ok(()) => {
+                record_deleted(&engine.home, keys);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -3314,9 +3381,12 @@ impl PanelSource for PlumblineEngine {
         let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
         self.study_read().notes.get(&v).cloned().unwrap_or_default()
     }
-    fn user_note(&self, verse: &str) -> Option<String> {
-        let v = VRef::parse_ref_key(verse)?;
-        self.study_read().user_notes.get(&v).map(|ln| ln.note.text.clone())
+    fn user_notes(&self, verse: &str) -> Vec<(String, String)> {
+        let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
+        usernote::notes_on(&self.study_read().user_notes, &v)
+            .into_iter()
+            .map(|ln| (ln.note.id.clone(), ln.note.text.clone()))
+            .collect()
     }
     fn threads(&self) -> Vec<panel::ThreadView> {
         self.study_read()
@@ -3969,98 +4039,6 @@ pub unsafe extern "C" fn plumbline_engine_copy_text(
     })
 }
 
-/// The reader's personal note on a verse as JSON (`{verse,display,text,created,
-/// updated}`), or null when the verse has no note (or the engine has no home).
-///
-/// # Safety
-/// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_user_note_json(
-    engine: *const PlumblineEngine,
-    ref_key: *const c_char,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
-            return ptr::null_mut();
-        };
-        let Some(v) = VRef::parse_ref_key(rk) else { return ptr::null_mut() };
-        match e.study_read().user_notes.get(&v) {
-            Some(ln) => out_json(&wire::WireUserNote {
-                verse: v.ref_key(),
-                display: v.display(),
-                text: ln.note.text.clone(),
-                created: ln.note.created.clone(),
-                updated: ln.note.updated.clone(),
-            }),
-            None => ptr::null_mut(),
-        }
-    })
-}
-
-/// All the reader's personal notes as JSON (`{notes:[…]}`), in canonical reading order. Never
-/// null on a live engine (no notes → empty list).
-///
-/// # Safety
-/// `engine` is a live engine (or null → null).
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_user_notes_json(engine: *const PlumblineEngine) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let Some(e) = engine.as_ref() else { return ptr::null_mut() };
-        let study = e.study_read();
-        let mut notes: Vec<&usernote::LoadedNote> = study.user_notes.values().collect();
-        notes.sort_by_key(|a| a.note.vref.reading_key());
-        let notes = notes
-            .into_iter()
-            .map(|ln| wire::WireUserNote {
-                verse: ln.note.vref.ref_key(),
-                display: ln.note.vref.display(),
-                text: ln.note.text.clone(),
-                created: ln.note.created.clone(),
-                updated: ln.note.updated.clone(),
-            })
-            .collect();
-        out_json(&wire::WireUserNotes { notes })
-    })
-}
-
-/// Set (or clear, with an empty `text`) the reader's personal note on a verse,
-/// atomically, then reload. `stamp` is a caller-supplied UTC timestamp. Null on
-/// success, else an owned error string.
-///
-/// # Safety
-/// `engine` is a live engine; the string args are null or valid NUL-terminated
-/// UTF-8 for the call.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_user_note_set(
-    engine: *mut PlumblineEngine,
-    ref_key: *const c_char,
-    text: *const c_char,
-    stamp: *const c_char,
-) -> *mut c_char {
-    guard_err(|| {
-        let Some(engine) = engine.as_mut() else {
-            return out_string("null engine".to_string());
-        };
-        let Some(home) = engine.home.clone() else {
-            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
-        };
-        let (Some(rk), Some(text), Some(stamp)) = (opt_str(ref_key), opt_str(text), opt_str(stamp)) else {
-            return out_string("null or invalid argument".to_string());
-        };
-        let Some(v) = VRef::parse_ref_key(rk) else {
-            return out_string(format!("bad ref: {rk}"));
-        };
-        let mut study = engine.study_write();
-        match usernote::set_note(&home, &v, text, stamp) {
-            Ok(_) => {
-                *study = load_study(&engine.home);
-                ptr::null_mut()
-            }
-            Err(e) => out_string(e.to_string()),
-        }
-    })
-}
-
 /// The colour palette for a theme (`light`/`dark`/`night`; unknown → light) as
 /// JSON — every semantic role as a `#rrggbb` hex. Engine-independent. Never null.
 ///
@@ -4369,8 +4347,12 @@ pub unsafe extern "C" fn plumbline_engine_memory_remove(
         let Some(vref) = opt_str(verse_ref).and_then(VRef::parse_ref_key) else {
             return out_string("bad ref".to_string());
         };
+        let keys = vec![tombstone::card(&file_name_of(&memory::card_file(&home, &vref)))];
         match memory::remove_card(&home, &vref) {
-            Ok(()) => ptr::null_mut(),
+            Ok(()) => {
+                record_deleted(&engine.home, keys);
+                ptr::null_mut()
+            }
             Err(e) => out_string(e.to_string()),
         }
     })

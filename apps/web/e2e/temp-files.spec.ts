@@ -146,7 +146,7 @@ test("a stranded temp file never reaches a backup, and every dotted file the rea
   // in every backup from now on. It must take nothing else with it.
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    await s.engine.userNoteSet("Gen 1:1", "swept", "2026-07-29T00:00:00Z");
+    await s.engine.userNoteAdd("Gen 1:1", "swept", "2026-07-29T00:00:00Z");
   });
   await expect
     .poll(async () => (await userKeys(page)).some((k) => k.startsWith("notes/")), { timeout: 20_000 })

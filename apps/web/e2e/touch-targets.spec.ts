@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { settleBackground } from "./settle";
 
 // Every control in the chrome is at least 44×44.
 //
@@ -101,6 +102,7 @@ const SURFACES: { name: string; open?: string; clicks?: string[]; settle: string
   { name: "mark chapter read", open: `s.markReadFor = { book: "Gen", chapter: 1 }`, settle: '[data-surface="mark read"]' },
   { name: "history", open: `s.showHistory = true`, settle: '[data-surface="history"]' },
   { name: "settings", open: `s.showSettings = true`, settle: '[data-surface="settings"] .done' },
+  { name: "backup", open: `s.showBackup = true`, settle: '[data-surface="backup"] .done' },
   { name: "keyboard shortcuts", open: `s.showShortcuts = true`, settle: ".dialog .close" },
   { name: "explore", open: `s.screen = "explore"`, settle: ".ex-card" },
   { name: "the memorize hub", open: `s.memorize = { view: "hub" }; s.screen = "memorize"`, settle: ".screen .actions button" },
@@ -168,6 +170,12 @@ test("every control in the chrome clears the 44px tap floor", async ({ page }) =
 //   expect(received).toBeLessThan(expected)  Expected: < 30  Received: 44'.
 test("the floor does not inflate the links inside study prose", async ({ page }) => {
   await boot(page);
+  // A word study opened before the index warm finishes answers in part and is
+  // re-fetched when the warm lands (session `onWarmReady`), which replaces the link
+  // being measured — or, on a loaded run, keeps it from appearing inside the wait
+  // below at all. Settled first, the panel is drawn once and measured once. This
+  // cannot hide the bug: an inflated link is 44px however settled the page is.
+  await settleBackground(page);
   // A word study, NOT "Guide & about": the guide's prose is a block list with no
   // linked runs at all (measured — 0 `.link` in it), so it cannot demonstrate
   // anything about links. A word study is core Strong's, needs no analysis pack,
@@ -178,9 +186,10 @@ test("the floor does not inflate the links inside study prose", async ({ page })
   const link = page.locator('[data-surface="study panel"] .blocks .link').first();
   await expect(link).toBeVisible({ timeout: 20_000 });
 
-  const box = (await link.boundingBox())!;
+  const box = await link.boundingBox();
+  expect(box, "the study link left the page before it could be measured").not.toBeNull();
   expect(
-    box.height,
+    box!.height,
     "an in-sentence study link was inflated into a 44px tap target, so the paragraph around it is now 44px per line",
   ).toBeLessThan(30);
 

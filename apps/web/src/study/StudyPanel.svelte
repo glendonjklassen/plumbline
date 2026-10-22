@@ -148,19 +148,19 @@
         {#if notes.length === 0}
           <p class="nb-empty">{t("panel.noNotes")}</p>
         {/if}
-        {#each notes as n (n.verse)}
+        {#each notes as n (n.id)}
           <div class="nb-note">
             <div class="nb-head">
               <button class="nb-ref" onclick={(e) => onLink(goUri(n.verse), e)}>
                 {n.display ?? n.verse}
               </button>
-              <button class="nb-edit" onclick={(e) => onLink(`editnote:${n.verse}`, e)}>✎ {t("panel.edit")}</button>
+              <button class="nb-edit" onclick={(e) => onLink(`editnote:${n.id}`, e)}>✎ {t("panel.edit")}</button>
               <!-- Delete without opening: emptying the editor also deletes (and
                    also asks), but a row you can only remove by editing it is an
                    affordance gap — see manifest §Ask before destroying anything. -->
               <button
                 class="nb-del"
-                onclick={() => void deleteNote(s, n.verse, n.display ?? n.verse)}
+                onclick={() => void deleteNote(s, n.id, n.display ?? n.verse)}
                 aria-label={t("notes.deleteVerb")}
                 title={t("notes.deleteVerb")}>✕</button>
             </div>

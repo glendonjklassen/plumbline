@@ -121,8 +121,8 @@ and a shared link opens straight at the passage it names. From there:
 5. The bottom bar goes to **Read**, **Study** (your notes, tags, threads and
    weaves, memorization, reading plans and the reading map), **Preach**
    (Present and its materials), **Share**, and **Sing** (the hymnal). The
-   **≡ menu** holds History, the guide, and Settings — including **backup to
-   a zip** that restores on any device.
+   **≡ menu** holds History, the guide, **Backup** and Settings. A backup
+   restores on any device.
 
 ## Share the Bible — and your church — with one code
 
@@ -169,10 +169,17 @@ notes as they go.
 ## Your data
 
 Your notes, tags, threads, weaves, reading history and memory work are yours, and
-they stay on your device. **Settings → Back up (.zip)** exports all of it, and
-**Restore from backup…** loads it on any device — the archive layout is shared
-between the phone and the browser, so a phone backup restores in the browser
-and vice versa.
+they stay on your device. **≡ → Backup → Secure backup** exports all of it as one file,
+encrypted with a five-word phrase the app makes once and shows you — on a phone
+it goes straight to the share sheet, so Proton Drive, kDrive, Files or a mail
+to yourself are one tap away — and **Restore from backup…** loads it on any
+device that is told the phrase. **Backup** makes an unencrypted
+zip instead; anyone with that file can read it. Restoring a backup adds it to
+what the device already has rather than replacing it, so two devices' notes,
+tags, plans and reading combine, and anything deleted on either stays deleted. The file is a standard [age](https://age-encryption.org)
+file: `age -d plumbline-backup-….age` and the phrase recover the zip inside
+without Plumbline. Nobody can recover a lost phrase, Plumbline included. Older
+zips restore as before.
 
 ## Data provenance
 

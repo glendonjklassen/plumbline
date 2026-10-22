@@ -28,10 +28,25 @@
 - Frozen contracts: the on-disk data formats (§Data formats below), `kjv1769-tok2`
   tokenization stamp, the camelCase wire JSON (additive evolution only), and
   refKey (`"Gen 1:7"`). The format tags keep their pre-rename names on purpose —
-  `pure-note-v1` (`crates/core/src/usernote.rs`) is serialized into every user
-  note file and already sits inside shipped backup zips, so renaming it with the
-  product would break restore-from-backup; same for `overlay-weave-v2` and
-  `overlay-memory-v1`.
+  they sit inside shipped backup zips, so renaming them with the product would
+  break restore-from-backup: `overlay-weave-v2`, `overlay-memory-v1`, and
+  `pure-note-v1`, which is still READ (never written) since notes became
+  `plumbline-note-v2` in v0.78.0 (below).
+- **Breaking, v0.78.0: notes are a list per verse.** One file per note,
+  `notes/<slug of refKey>-<id>.json`, format `plumbline-note-v2` with an `id`
+  (`crates/core/src/usernote.rs`). A `pure-note-v1` file still loads as one note
+  whose id is derived from its verse and creation stamp, so two devices agree on
+  it, and is rewritten as v2 on its next edit. Builds before 0.78.0 refuse v2
+  files. The ABI's `plumbline_engine_user_note_set` is gone; notes are added,
+  edited and deleted by id.
+- **Restore merges** (`crates/core/src/merge.rs`): it combines the backup with
+  the device instead of writing over it — notes by id (newer edit wins, different
+  ids all kept), unions for tag members, weave links and plan days, per-chapter
+  maxima for reading, the backup's settings with both histories. Every deletion
+  is recorded in `deleted/tombstones.json` (`crates/core/src/tombstone.rs`) by the
+  ABI endpoint that did it, so a restore never brings it back. Records are kept,
+  not pruned. A new delete path must record its tombstone, or merges will
+  resurrect what it deleted.
 - The bundled stock study set lives at `stock/` (threads/tags/weaves); the
   shell seeds it once and user edits/deletions stick.
 
@@ -99,6 +114,12 @@ genuinely thin.
   notesSource, created, approved, links:[{a:"Gen 1:7", b:..., label?, approved?,
   spanA?, spanB?}]}`. A weave is an undirected graph of verse↔verse links.
 - **`refKey`** — the frozen compact ref string, `"Gen 1:7"` (OSIS book id).
+- **encrypted backup** — the backup zip sealed as an **age v1** file
+  (`age-encryption.org/v1`) with one `scrypt` recipient, work factor 2^15, the
+  passphrase being five BIP39 English words (`crates/core/src/backup.rs`, checked
+  against the C2SP age vectors). Chosen so `age -d` opens it without Plumbline;
+  do not fork the format. The phrase lives in the shell's `localStorage`
+  (`plumbline:backupPhrase`), never in the home.
 - **tokenization version** — `kjv1769-tok2`; loaders refuse a version mismatch.
 
 The **tokenizer** stays an offline data-prep step — the runtime only

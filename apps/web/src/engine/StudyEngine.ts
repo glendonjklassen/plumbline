@@ -591,16 +591,25 @@ export class StudyEngine {
   weaveSetNotes(name: string, notes: string): string | null {
     return this.#author("plumbline_engine_weave_set_notes", (f, ...p) => f(this.#engine, ...p), [name, notes]);
   }
-  userNoteSet(refKey: string, text: string, stamp: string): string | null {
-    return this.#author("plumbline_engine_user_note_set", (f, ...p) => f(this.#engine, ...p), [refKey, text, stamp]);
+  /** Add a new note on a verse. A verse holds any number of them. */
+  userNoteAdd(refKey: string, text: string, stamp: string): string | null {
+    return this.#author("plumbline_engine_user_note_add", (f, ...p) => f(this.#engine, ...p), [refKey, text, stamp]);
+  }
+  /** Replace one note's text, by id. Empty text deletes it. */
+  userNoteEdit(id: string, text: string, stamp: string): string | null {
+    return this.#author("plumbline_engine_user_note_edit", (f, ...p) => f(this.#engine, ...p), [id, text, stamp]);
+  }
+  userNoteDelete(id: string): string | null {
+    return this.#author("plumbline_engine_user_note_delete", (f, ...p) => f(this.#engine, ...p), [id]);
   }
   // ── user notes / copy ──────────────────────────────────────────────────────
 
   copyText(refKey: string, kind: string): string | null {
     return this.#text("plumbline_engine_copy_text", refKey, kind);
   }
-  userNote(refKey: string): any {
-    return this.#json("plumbline_engine_user_note_json", refKey);
+  /** One note by id, or null. */
+  userNote(id: string): any {
+    return this.#json("plumbline_engine_user_note_json", id);
   }
   userNotes(): any {
     return this.#json("plumbline_engine_user_notes_json");

@@ -207,9 +207,14 @@ jobs:
           printf '%s\n' "$MIRROR_SSH_KEY" > ~/.ssh/mirror
           printf '%s\n' "$MIRROR_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/mirror ~/.ssh/known_hosts
+          # `:/`, not `:/srv/plumbline/`: on the box this key is bound to
+          # `rrsync -wo /srv/plumbline` (ops/hetzner/cloud-init.yaml), which
+          # roots every path the client names there and refuses anything that
+          # is not an rsync into it. The old target would nest a second
+          # srv/plumbline inside the first and fail.
           rsync -az --delete --delay-updates --exclude CNAME \
             -e "ssh -i ~/.ssh/mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
-            apps/web/dist/ "deploy@${MIRROR_HOST}:/srv/plumbline/"
+            apps/web/dist/ "deploy@${MIRROR_HOST}:/"
 
       # Proves the upload landed rather than assuming it: DNS points at the box,
       # every served file matches the checksums just attached, and the

@@ -94,7 +94,7 @@ test("a save this device refuses is reported, retried, and lands once it can", a
   // the attempt counter below counts only what this test caused.
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    await s.engine.userNoteSet("John 3:16", "a note on a healthy disk", "2026-07-29T00:00:00Z");
+    await s.engine.userNoteAdd("John 3:16", "a note on a healthy disk", "2026-07-29T00:00:00Z");
   });
   await expect
     .poll(() => userValuesContaining(page, "a note on a healthy disk"), {
@@ -108,7 +108,7 @@ test("a save this device refuses is reported, retried, and lands once it can", a
   // is concerned this succeeded.
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    await s.engine.userNoteSet("Gen 1:1", "a note on a full disk", "2026-07-29T00:00:00Z");
+    await s.engine.userNoteAdd("Gen 1:1", "a note on a full disk", "2026-07-29T00:00:00Z");
   });
 
   // 1. The reader is told.
@@ -175,7 +175,7 @@ test("a note written 5 ms before the tab is put away still reaches storage", asy
 
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    await s.engine.userNoteSet("Ps 23:1", "written just before leaving", "2026-07-29T00:00:00Z");
+    await s.engine.userNoteAdd("Ps 23:1", "written just before leaving", "2026-07-29T00:00:00Z");
     await new Promise((r) => setTimeout(r, 5));
   });
 

@@ -115,13 +115,13 @@ test("the tool cards count what is in them, and stay quiet at zero", async ({ pa
   expect(await countOn(page, "Notes")).toBeNull();
 
   await page.evaluate(async () => {
-    await (window as any).__plumbline.engine.userNoteSet("John 3:16", "hub probe", "2026-08-13T00:00:00Z");
+    await (window as any).__plumbline.engine.userNoteAdd("John 3:16", "hub probe", "2026-08-13T00:00:00Z");
   });
   // The chip appears without a reload: an authoring write invalidates the cache these read
   // through, which is the half a fetched-once count misses.
   await expect.poll(async () => countOn(page, "Notes"), { timeout: 15_000 }).toBe("1");
   await page.evaluate(async () => {
-    await (window as any).__plumbline.engine.userNoteSet("Rom 8:28", "second", "2026-08-13T00:00:00Z");
+    await (window as any).__plumbline.engine.userNoteAdd("Rom 8:28", "second", "2026-08-13T00:00:00Z");
   });
   await expect.poll(async () => countOn(page, "Notes"), { timeout: 15_000 }).toBe("2");
 

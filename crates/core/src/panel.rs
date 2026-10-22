@@ -483,8 +483,9 @@ pub trait PanelSource {
     /// The tags holding a verse, as `(tag index, name)`.
     fn verse_tags(&self, verse: &str) -> Vec<(usize, String)>;
     fn verse_notes(&self, verse: &str) -> Vec<String>;
-    /// The reader's own personal note on a verse (Tier 0 #3), if any.
-    fn user_note(&self, verse: &str) -> Option<String>;
+    /// The reader's own notes on a verse, oldest first, as `(id, text)` — any
+    /// number of them (`usernote`).
+    fn user_notes(&self, verse: &str) -> Vec<(String, String)>;
 
     fn threads(&self) -> Vec<ThreadView>;
     fn tags(&self) -> Vec<TagView>;
@@ -650,9 +651,13 @@ pub enum PanelLink {
         thread: usize,
         entry: usize,
     },
-    /// `editnote:REF` — prompt, then set the reader's personal note on REF.
-    EditNote {
+    /// `addnote:REF` — prompt, then add a new note on REF.
+    AddNote {
         refkey: String,
+    },
+    /// `editnote:ID` — prompt with note ID's text, then save it (empty deletes).
+    EditNote {
+        id: String,
     },
     /// `guide` / `about` — open the in-app guide / about card in the panel.
     Guide,
@@ -755,7 +760,8 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
             let (t, e) = rest.split_once(':')?;
             PanelLink::RemoveEntry { thread: t.parse().ok()?, entry: e.parse().ok()? }
         }
-        "editnote" => PanelLink::EditNote { refkey: rest.to_string() },
+        "addnote" => PanelLink::AddNote { refkey: rest.to_string() },
+        "editnote" => PanelLink::EditNote { id: rest.to_string() },
         "guide" => PanelLink::Guide,
         "about" => PanelLink::About,
         _ => return None,
@@ -1213,32 +1219,37 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
     }
 }
 
-/// The reader's own note for a verse — emitted near the **top** of the word study,
-/// their words before the evidence. Never gated. The edit link prompts; empty text
-/// clears.
+/// The reader's own notes on a verse — emitted near the **top** of the word
+/// study, their words before the evidence. Never gated. The header's verb adds a
+/// note; each note carries its own edit link (empty text deletes it).
 fn user_note_block(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
-    let mine = src.user_note(verse);
     out.push(Block::Para {
         runs: vec![
             // `panel.yourNote` IS the pencil; the verb beside it must not carry a
             // second one, or the row reads "✎   ✎ add".
             Run::new(s("panel.yourNote"), sz::LABEL, Color::Ink).bold(),
             Run::new("   ", sz::LABEL, Color::Ink),
-            Run::new(
-                if mine.as_deref().is_some_and(|t| !t.is_empty()) { s("panel.editNote") } else { s("panel.addNote") },
-                sz::CAPTION,
-                Color::Gold,
-            )
-            .link(format!("editnote:{verse}")),
+            Run::new(s("panel.addNote"), sz::CAPTION, Color::Gold).link(format!("addnote:{verse}")),
         ],
         indent: false,
         top_gap: true,
         drag: None,
     });
-    if let Some(text) = mine {
-        if !text.is_empty() {
-            out.push(Block::para(vec![Run::new(text, sz::NOTE, Color::Ink)]));
+    note_rows(src, verse, out);
+}
+
+/// One paragraph per note on `verse`: the text, then its edit link. The editor
+/// itself offers Delete.
+fn note_rows(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
+    for (id, text) in src.user_notes(verse) {
+        if text.is_empty() {
+            continue;
         }
+        out.push(Block::para(vec![
+            Run::new(text, sz::NOTE, Color::Ink),
+            Run::new("   ", sz::CAPTION, Color::Ink),
+            Run::new(s("panel.editNote"), sz::CAPTION, Color::Gold).link(format!("editnote:{id}")),
+        ]));
     }
 }
 
@@ -1394,17 +1405,13 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
         out.push(Block::Para {
             runs: vec![
                 Run::new(s("panel.notesHeader"), sz::LABEL, Color::Ink).bold(),
-                Run::new("＋", sz::LABEL, Color::Gold).link(format!("editnote:{verse}")).end(),
+                Run::new("＋", sz::LABEL, Color::Gold).link(format!("addnote:{verse}")).end(),
             ],
             indent: false,
             top_gap: true,
             drag: None,
         });
-        if let Some(text) = src.user_note(verse) {
-            if !text.is_empty() {
-                out.push(Block::para(vec![Run::new(text, sz::NOTE, Color::Ink)]));
-            }
-        }
+        note_rows(src, verse, &mut out);
     }
 
     let view = match q.lens {

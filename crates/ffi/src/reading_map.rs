@@ -195,7 +195,10 @@ pub unsafe extern "C" fn plumbline_engine_reading_forget(
             return out_string("null or invalid argument".to_string());
         };
         match reading::forget(&home, book, chapter as u16) {
-            Ok(()) => ptr::null_mut(),
+            Ok(()) => {
+                crate::record_deleted(&engine.home, vec![plumbline_core::tombstone::reading(book, chapter as u16)]);
+                ptr::null_mut()
+            }
             Err(e) => out_string(e.to_string()),
         }
     })

@@ -9,9 +9,6 @@
   import { completeOffline, surveyOffline, type OfflineSurvey } from "../engine/offline";
   import { PERF } from "../engine/perf";
   import type { WorkerDiagnostics } from "../engine/worker-client";
-  import { zipRead, zipWrite } from "../engine/zip";
-  import { idbApply } from "../engine/idb";
-  import { nowStamp } from "../engine/StudyEngine";
   import {
     deviceLocale,
     fill,
@@ -25,37 +22,6 @@
     t, rememberLangChosen } from "../lib/i18n.svelte";
 
   const s = getSession();
-
-  // Backup / restore: the authored home dirs as a zip. Must stay in step with
-  // engine/home.ts's USER_DIRS — a dir missing from this restore filter exports
-  // into the zip and is then silently dropped on the way back in.
-  const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", "reading/", "plans/", "devotionals/", ".config/"];
-
-  // Pre-rename archives carry the config under ".config/pure-study/"; the live
-  // home reads ".config/plumbline/". Remapped on restore only — nothing writes
-  // the old name back. Without this an older backup drops the user's settings.
-  const LEGACY_CONFIG = ".config/pure-study/";
-  const currentConfigPath = (p: string): string =>
-    p.startsWith(LEGACY_CONFIG) ? ".config/plumbline/" + p.slice(LEGACY_CONFIG.length) : p;
-
-  // Once a restore has muted this session's writes (`s.restoring` + `freeze()`,
-  // neither of which has an undo) the session can no longer save anything, so a
-  // failure past that point must reload regardless — and the message rides
-  // across the reload in sessionStorage.
-  const RESTORE_FAILED = "plumbline:restoreFailed";
-  /** A failed restore to tell the reader about, blocking. */
-  let restoreFailed = $state<string | null>(null);
-  // Read on mount, and this dialog is mounted for the whole session, so the
-  // notice lands whether or not Settings was open when the page came back.
-  try {
-    const carried = sessionStorage.getItem(RESTORE_FAILED);
-    if (carried) {
-      sessionStorage.removeItem(RESTORE_FAILED);
-      restoreFailed = carried;
-    }
-  } catch {
-    /* no session storage — then nothing was carried across either */
-  }
 
   /** The configured Sunday service start as an `<input type="time">` value —
    *  "HH:MM", or "" when never set. */
@@ -76,88 +42,6 @@
       s.config.sundayService = h * 60 + m;
     }
     s.saveConfig();
-  }
-
-  async function backup(): Promise<void> {
-    const name = `plumbline-backup-${nowStamp().slice(0, 10)}.zip`;
-    try {
-      const files = new Map<string, Uint8Array>(await s.rpc.exportUserData());
-      files.set(
-        "plumbline-backup.json",
-        new TextEncoder().encode(JSON.stringify({ format: 1, app: "web", exported: nowStamp() })),
-      );
-      const blob = new Blob([zipWrite(files) as unknown as BlobPart], { type: "application/zip" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = name;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      // There is no completion signal for a download, so the toast names the
-      // file and says what we did, not that it landed on the device.
-      const n = files.size - 1;
-      s.showToast(plural("settings.backedUp.one", "settings.backedUp.other", n, { name }));
-    } catch (err) {
-      // A toast, not the blocking notice a failed restore gets: nothing was
-      // written and the reader is looking at the button that is also the repair.
-      // It must not stay silent, though — unguarded, a rejection made the button
-      // look like a browser that saved the file somewhere unnoticed.
-      const why = err instanceof Error ? err.message : String(err);
-      s.showToast(t("settings.backupFailed", { why }));
-    }
-  }
-
-  async function restore(e: Event): Promise<void> {
-    const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = "";
-    if (!file) return;
-    // Whether this session's writes have been muted yet — set BEFORE they are,
-    // so a `freeze()` that itself fails still ends in a reload.
-    let muted = false;
-    try {
-      const entries = await zipRead(new Uint8Array(await file.arrayBuffer()));
-      // Only home-relative authored paths — no traversal, nothing else.
-      const safe = new Map<string, Uint8Array>();
-      for (const [path, bytes] of entries)
-        if (BACKUP_DIRS.some((d) => path.startsWith(d)) && !path.includes(".."))
-          safe.set(currentConfigPath(path), bytes);
-      if (safe.size === 0) {
-        s.showToast(t("settings.restoreNothing"));
-        return;
-      }
-      // The restored files are now the truth — nothing (incl. the pagehide
-      // flush) may persist the current session over them; just reload.
-      muted = true;
-      s.restoring = true;
-      await s.rpc.freeze(); // the debounced authoring persist must not fire either
-      await idbApply("user", safe);
-      // The close-safe theme cache mirrors THIS session's config; the boot
-      // reconcile would trust it over the restored home's own theme.
-      try {
-        localStorage.removeItem("plumbline:themeChoice");
-      } catch {
-        /* no storage: nothing cached to override the restore anyway */
-      }
-      location.reload(); // the engine re-opens over the restored home
-    } catch (err) {
-      const why = err instanceof Error ? err.message : String(err);
-      if (!muted) {
-        // The zip never got as far as the home; this session is still whole.
-        restoreFailed = t("settings.restoreUnreadable", { why });
-        return;
-      }
-      // `idbApply` is ONE transaction and IndexedDB rolls an aborted one back
-      // whole, so the reader's own study data is exactly as it was.
-      try {
-        sessionStorage.setItem(
-          RESTORE_FAILED,
-          t("settings.restoreIncomplete", { why }),
-        );
-      } catch {
-        /* storage refused the note; the reload still matters more than it does */
-      }
-      location.reload();
-    }
   }
 
   function toggleGate(key: "humanAnalysis" | "machineAnalysis"): void {
@@ -728,17 +612,6 @@
       </div>
       <p class="desc-note">{t("settings.defaultStyleDesc")}</p>
       <hr />
-      <!-- Backup lives with the everyday settings, not behind Advanced. -->
-      <p class="label">{t("settings.data")}</p>
-      <div class="row">
-        <button class="action" onclick={backup}>{t("settings.backup")}</button>
-        <label class="action">
-          {t("settings.restore")}
-          <input type="file" accept=".zip,application/zip" onchange={restore} hidden />
-        </label>
-      </div>
-      <p class="desc-note">{t("settings.dataDesc")}</p>
-      <hr />
       <details class="advanced">
         <summary>{t("settings.advanced")}</summary>
         <p class="desc-note">{t("settings.advancedDesc")}</p>
@@ -1024,27 +897,6 @@
   </div>
 {/if}
 
-{#if restoreFailed}
-  <!-- Not a toast: a restore can fail with the phone already back in a pocket,
-       and a reader who missed it believes their backup went in. No backdrop
-       dismiss either — a stray tap must not take the message away. -->
-  <div class="err-backdrop"></div>
-  <!-- `use:modal` with NO close: focus comes here and Tab is held here, but
-       Escape does not dismiss it (it is still swallowed, so it cannot close
-       something behind this instead). Focus goes to Close, the acknowledgement. -->
-  <div
-    class="err-dialog"
-    role="alertdialog"
-    aria-modal="true"
-    aria-label={t("settings.restoreFailedTitle")}
-    data-surface="restore-failed"
-    use:modal
-  >
-    <h2>{t("settings.restoreFailedTitle")}</h2>
-    <p class="err-body">{restoreFailed}</p>
-    <button class="done" data-modal-focus onclick={() => (restoreFailed = null)}>{t("common.close")}</button>
-  </div>
-{/if}
 
 <style>
   /* The language transition, in the splash's own look (App.svelte): it is
@@ -1123,36 +975,6 @@
   h2 {
     font-size: calc(17px * var(--uiScale, 1));
     font-weight: 600;
-  }
-  /* Above every other surface, the confirmation included. */
-  .err-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(20, 16, 8, 0.4);
-    z-index: 52;
-  }
-  .err-dialog {
-    position: fixed;
-    z-index: 53;
-    top: 22vh;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(400px, 92vw);
-    max-height: calc(70vh - var(--bottomNavH, 0px));
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 20px 22px 14px;
-    background: var(--popupPaper, #f2eee6);
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 12px;
-    box-shadow: 0 16px 64px rgba(0, 0, 0, 0.32);
-  }
-  .err-body {
-    font-size: calc(14.5px * var(--uiScale, 1));
-    line-height: 1.5;
-    color: var(--faded, #8a8276);
   }
   .rnd-status {
     display: flex;

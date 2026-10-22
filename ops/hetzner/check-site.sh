@@ -1,8 +1,9 @@
 #!/bin/sh
-# Is the site whole, and is it ours? Run by the release after every upload, and
-# daily by .github/workflows/site-check.yml, because the server changes between
-# releases too: Caddy and Debian update themselves, the certificate renews
-# itself, and a compromised box would change files without a release.
+# Checks that the live site serves what the release built. Run by the release
+# after every upload, and daily by .github/workflows/site-check.yml, because
+# the server changes between releases too: Caddy and Debian update themselves,
+# the certificate renews itself, and a compromised box would change files
+# without a release.
 #
 #   check-site.sh https://plumblinebible.org [SHA256SUMS]
 #
@@ -43,7 +44,7 @@ addrs() {
 want=$(printf '%s\n' $expect_addrs | sort -u | tr '\n' ' ')
 for name in "$host" "www.$host"; do
   got=$(addrs "$name")
-  [ "$got" = "$want" ] || fail "$name resolves to [${got% }], expected [${want% }]"
+  [ "$got" = "$want" ] || fail "$name: resolves to [${got% }], expected [${want% }]"
 done
 
 # Retried: the one request a restarting Caddy could plausibly miss.
@@ -52,9 +53,29 @@ get() {
     curl -fsS --max-time 30 -o "$tmp/$2" "$origin/$1" && return 0
     [ "$try" = 3 ] || sleep 10
   done
-  fail "$origin/$1 did not answer"
+  fail "$origin/$1: no response"
 }
 get "" index.html
+
+# The security headers are the box's own configuration, pasted from
+# cloud-init.yaml by hand, and this is what holds the two equal: the policy is
+# read out of that file, not copied here. Checked on / and on a 404, because
+# Caddy's error handler is a second chain that used to drop every header
+# (2026-10-22). HSTS and nosniff only have to be present; the CSP has to be
+# the exact string, since one dropped directive is a silent weakening.
+want_csp=$(sed -n 's/^ *Content-Security-Policy "\(.*\)"$/\1/p' "$(dirname "$(realpath "$0")")/cloud-init.yaml")
+[ -n "$want_csp" ] || fail "cloud-init.yaml: no Content-Security-Policy line"
+for path in "" "no-such-page-$$"; do
+  curl -sS --max-time 30 -D "$tmp/headers" -o /dev/null "$origin/$path" ||
+    fail "$origin/$path: no response"
+  got_csp=$(tr -d '\r' < "$tmp/headers" | sed -n 's/^[Cc]ontent-[Ss]ecurity-[Pp]olicy: //p')
+  [ "$got_csp" = "$want_csp" ] ||
+    fail "$origin/$path: Content-Security-Policy [$got_csp] does not match cloud-init.yaml [$want_csp]"
+  grep -qi '^strict-transport-security: max-age=[1-9]' "$tmp/headers" ||
+    fail "$origin/$path: no Strict-Transport-Security header"
+  grep -qi '^x-content-type-options: nosniff' "$tmp/headers" ||
+    fail "$origin/$path: no X-Content-Type-Options header"
+done
 
 if [ -n "$sums" ]; then
   # Every file at once, then one comparison that names what differs. No
@@ -64,9 +85,9 @@ if [ -n "$sums" ]; then
   (cd "$tmp/site" && curl -sS --parallel --parallel-max 8 --create-dirs --max-time 120 -K "$tmp/curl.conf") || true
   if ! (cd "$tmp/site" && sha256sum --check --quiet "$sums" 2>&1) > "$tmp/diff"; then
     sed 's/^/::error::/' "$tmp/diff"
-    fail "$origin is not serving what the release built ($(grep -c FAILED "$tmp/diff") file(s) above)"
+    fail "$origin: $(grep -c FAILED "$tmp/diff") file(s) differ from SHA256SUMS"
   fi
-  summary="$(wc -l < "$sums") files match the release"
+  summary="$(wc -l < "$sums") files match SHA256SUMS"
 else
   get shell-manifest.json shell-manifest.json
   get pack/manifest.json pack-manifest.json
@@ -74,20 +95,20 @@ else
   for path in $(jq -r '.files[]' "$tmp/shell-manifest.json") \
               $(jq -r '.files[] | "pack/\(.path).gz"' "$tmp/pack-manifest.json"); do
     if ! curl -fsSI --max-time 30 -o /dev/null "$origin/$path"; then
-      echo "::error::$origin/$path is missing"
+      echo "::error::$origin/$path: not found"
       missing=$((missing + 1))
     fi
   done
-  [ "$missing" = 0 ] || fail "$missing file(s) the manifests name are not served"
-  summary="every manifest file answers (availability only: no SHA256SUMS given)"
+  [ "$missing" = 0 ] || fail "$missing manifest file(s) not found"
+  summary="all manifest files present (no SHA256SUMS: contents not checked)"
 fi
 
 for name in "$host" "www.$host"; do
   curl -fsS --max-time 30 -o /dev/null "https://$name/" ||
-    fail "https://$name/ did not answer"
+    fail "https://$name/: no response"
   echo | openssl s_client -connect "$name:443" -servername "$name" 2>/dev/null |
     openssl x509 -noout -checkend $((min_days * 86400)) >/dev/null ||
-    fail "the certificate for $name expires within $min_days days: renewal is failing"
+    fail "$name: certificate expires within $min_days days; renewal may be failing"
 done
 
-echo "$origin is whole: DNS as expected, $summary, certificates good for $min_days+ days"
+echo "OK $origin: DNS, headers, $summary, certificates valid $min_days+ days"

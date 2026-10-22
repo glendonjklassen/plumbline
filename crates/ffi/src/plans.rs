@@ -424,7 +424,12 @@ pub unsafe extern "C" fn plumbline_engine_plan_stop(engine: *mut PlumblineEngine
         };
         let Some(id) = opt_str(id) else { return out_string("null or invalid argument".into()) };
         match plan::remove_plan(&home, id) {
-            Ok(_) => ptr::null_mut(),
+            Ok(removed) => {
+                if removed {
+                    crate::record_deleted(&engine.home, vec![plumbline_core::tombstone::plan(id)]);
+                }
+                ptr::null_mut()
+            }
             Err(e) => out_string(e.to_string()),
         }
     })

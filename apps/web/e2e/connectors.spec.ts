@@ -8,6 +8,7 @@
 // position, and no constant can satisfy both heights at once. The second height is injected CSS
 // rather than a setting, because nothing in the web chrome is font-scaled today.
 import { expect, test, type Page } from "@playwright/test";
+import { settleBackground } from "./settle";
 
 /** Endpoint-to-verse slack we allow (px): a pixel or two of centroid noise, no
  *  more. The bug this guards was 25px at the shipped chrome height. */
@@ -89,10 +90,9 @@ interface Aligned {
 
 /** Read both paints back out of the pixels, finding the dots by what they are rather than by any
  *  of the overlay's own numbers. */
-async function readAlignment(page: Page, woven: Woven): Promise<Aligned> {
+async function readOnce(page: Page, woven: Woven): Promise<Aligned> {
   // A chrome change reaches the overlay through a ResizeObserver and is painted in a rAF after
   // that, so the frames have to be given away before the pixels mean anything.
-  await page.waitForTimeout(500);
   await page.evaluate(
     () =>
       new Promise((r) =>
@@ -178,6 +178,31 @@ async function readAlignment(page: Page, woven: Woven): Promise<Aligned> {
   }, woven);
 }
 
+/** Read the pixels until two readings in a row agree and every dot is there — then the
+ *  overlay and both panes have finished painting, whatever the machine's speed.
+ *
+ *  This replaced a fixed 500 ms wait, which a loaded parallel run outlasted: the overlay
+ *  had not drawn yet and the test reported "no connector endpoint", a timing failure that
+ *  looked like the bug. Waiting for STABLE pixels cannot hide the bug itself: an overlay
+ *  measuring the wrong strip paints its endpoint in the wrong place steadily, so the
+ *  readings agree and the alignment check below fails by its own message. One that never
+ *  paints runs out the deadline and fails as "no connector endpoint drawn". */
+async function readAlignment(page: Page, woven: Woven): Promise<Aligned> {
+  const complete = (m: Aligned) =>
+    [0, 1].every((i) => m.endpoint[i] !== null && m.gutter[i] !== null && m.want[i] !== null);
+  const key = (m: Aligned) => JSON.stringify(m, (_k, v) => (typeof v === "number" ? Math.round(v * 10) : v));
+  const deadline = Date.now() + 30_000;
+  let m = await readOnce(page, woven);
+  while (Date.now() < deadline) {
+    await page.waitForTimeout(150);
+    const next = await readOnce(page, woven);
+    const same = key(next) === key(m);
+    m = next;
+    if (same && complete(m)) break;
+  }
+  return m;
+}
+
 function expectConnectorsMeetTheirVerses(m: Aligned, woven: Woven, where: string): void {
   for (const i of [0, 1]) {
     const ref = i === 0 ? woven.a : woven.b;
@@ -205,6 +230,8 @@ function expectConnectorsMeetTheirVerses(m: Aligned, woven: Woven, where: string
 test("a weave connector meets its verse, at either chrome height", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 950 });
   await boot(page);
+  // A stage landing mid-read repaints both panes and the overlay; let them all land first.
+  await settleBackground(page);
   const woven = await openWovenPair(page);
 
   const shipped = await readAlignment(page, woven);

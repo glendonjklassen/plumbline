@@ -55,6 +55,11 @@ would bind.)
 | `plumbline_engine_bridge_partners_json(code)` | R&D: fused OT↔NT bridge partners with provenance + trust prior |
 | `plumbline_engine_morph_json(ref, tok)` | R&D: a token's morphology parse + gloss |
 | `plumbline_engine_weave_approve(index)` / `_weave_reject(index)` | **review** a suggested weave by its `suggested_weaves_json` ordinal — approve promotes it into `weaves/` (all links approved), reject deletes it |
+| `plumbline_backup_encrypt(data, phrase, entropy)` / `_decrypt(data, phrase)` / `plumbline_bytes_free` | **encrypted backup**: seal bytes under a phrase as an age file, open one again (an error JSON names `wrongPhrase` apart from damage); engine-independent, entropy supplied by the shell |
+| `plumbline_backup_phrase(entropy)` / `plumbline_backup_is_encrypted(data)` | five words for a new phrase / whether bytes are an age file rather than a plain zip |
+| `plumbline_backup_merge_json(request)` | merge a backup's files into the device's (`{local, incoming}` → `{write, delete}`), engine-independent |
+| `plumbline_engine_user_notes_json` / `_user_note_json(id)` | every note (any number per verse, each with an `id`) / one note by id |
+| `plumbline_engine_user_note_add(ref, text, stamp)` / `_edit(id, text, stamp)` / `_delete(id)` | **author** notes; an emptied edit deletes. **Breaking in 0.78.0:** replaces `user_note_set` |
 
 Authoring writes go through `core::store`'s cross-platform atomic write (temp
 sibling → fsync → rename); the caller supplies UTC timestamps. An engine opened

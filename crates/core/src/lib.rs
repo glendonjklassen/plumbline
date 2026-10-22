@@ -10,6 +10,7 @@
 //! feature-gated `plumbline-rnd` crate.
 
 pub mod akjv;
+pub mod backup;
 pub mod canon;
 pub mod church;
 pub mod civil;
@@ -23,6 +24,7 @@ pub mod home;
 pub mod hymnal;
 pub mod i18n;
 pub mod memory;
+pub mod merge;
 pub mod notes;
 pub mod panel;
 pub mod plan;
@@ -36,6 +38,7 @@ pub mod strongs;
 pub mod tag;
 pub mod theme;
 pub mod thread;
+pub mod tombstone;
 pub mod usernote;
 pub mod versification;
 pub mod weave;

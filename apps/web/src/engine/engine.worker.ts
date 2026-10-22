@@ -48,6 +48,7 @@ import {
 } from "./pack";
 import { depotBytes, depotDelete, depotHas, depotKeys } from "./depot";
 import { PERF } from "./perf";
+import { backupMerge, backupOpen, backupPhrase, backupSeal } from "./backupCrypto";
 import { measureFor, readerFont, fontExtent, readerFontToken, setReaderFont } from "../reader/measure";
 import {
   DEFAULT_FONT,
@@ -1015,6 +1016,27 @@ self.onmessage = async (ev: MessageEvent) => {
       }
       case "export": {
         reply([...booted!.home.exportUserData()]);
+        break;
+      }
+      // The encrypted backup. scrypt holds this thread for a few hundred ms: a
+      // backup is a tap in Settings, not a page turn, and nothing a reader is
+      // waiting on is queued behind it. Answers are values, not throws, because
+      // the shell needs the failure's kind (see backupCrypto.ts).
+      case "backupSeal": {
+        reply(backupSeal(booted!.wasm, m.zip, m.phrase));
+        break;
+      }
+      case "backupOpen": {
+        reply(backupOpen(booted!.wasm, m.file, m.phrase));
+        break;
+      }
+      case "backupPhrase": {
+        reply(backupPhrase(booted!.wasm));
+        break;
+      }
+      case "backupMerge": {
+        // Against the live home, which holds this session's unflushed writes too.
+        reply(backupMerge(booted!.wasm, booted!.home.exportUserData(), new Map(m.incoming)));
         break;
       }
       case "flush": {

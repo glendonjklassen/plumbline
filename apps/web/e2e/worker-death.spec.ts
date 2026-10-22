@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { serveStubWorkers, STUB_WORKER_URL_JS } from "./stub-worker";
 
 // Every engine read goes through one promise map (`#waiting` in
 // engine/worker-client.ts), and nothing settled it except a reply — so a worker that
@@ -15,14 +16,22 @@ import { expect, test, type Page } from "@playwright/test";
 // the `onFatal` hook, since there is no post-boot fatal UI yet. The hook is where it
 // will attach.
 
-/** The blob-worker plumbing shared by the cases below, evaluated in the page. */
+// The stub workers below are served from the app's own origin (stub-worker.ts), not
+// built from blob: URLs. The production policy refuses a blob worker at construction,
+// and that refusal fires the same `error` event as a crash — so case 1 passed for
+// either reason, and cases 2 and 3 failed: the silent and the slow worker never ran.
+// Served same-origin, case 2 now fails only if the watchdog does not fire, and case 3
+// only if a talking worker is killed; a refused stub would answer "stopped
+// unexpectedly" to both and fail them by name.
+test.use({ serviceWorkers: "block" });
+
+/** The stub-worker plumbing shared by the cases below, evaluated in the page. */
 const HARNESS = `
   // The class under test, reached through the shell's own instance — nothing
   // exports it to the page, and in a production build the module has a hashed
   // name.
   const Rpc = Object.getPrototypeOf(window.__plumbline.rpc).constructor;
-  const workerOf = (src) =>
-    URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+  const workerOf = ${STUB_WORKER_URL_JS};
   // Never await a promise this test expects to hang: report the hang instead,
   // so a regression fails with a message rather than with a suite timeout.
   const settle = (p, ms) =>
@@ -35,6 +44,7 @@ const HARNESS = `
 /** Boot far enough that the session exists: this needs the engine client, not the
  *  reader, so the first-run chooser may still own the screen. */
 async function bootedSession(page: Page): Promise<void> {
+  await serveStubWorkers(page);
   await page.goto("/");
   await page.waitForFunction(() => !!(window as any).__plumbline?.rpc, null, { timeout: 90_000 });
 }
