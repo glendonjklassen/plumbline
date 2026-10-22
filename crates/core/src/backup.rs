@@ -129,6 +129,23 @@ fn scrypt_key(phrase: &str, salt: &[u8], log_n: u8) -> [u8; 32] {
     key
 }
 
+/// Refuse, rather than crash on, a work factor this device cannot afford.
+///
+/// scrypt at `log_n` needs `128 · r · 2^log_n` bytes (r = 8): 32 MiB at our 15,
+/// 256 MiB at the `age` CLI's default of 18. The crate allocates that with a plain
+/// `vec!`, and an allocation failure ABORTS — no unwind, so the ABI's
+/// `catch_unwind` cannot catch it, and in the browser the engine worker dies
+/// mid-restore. Reserving the same size first with `try_reserve_exact` fails
+/// softly instead; on success the block is handed back to the allocator, and
+/// scrypt's own allocation reuses it.
+fn ensure_scrypt_memory(log_n: u8) -> Result<(), Error> {
+    let need = 128usize.saturating_mul(8).saturating_mul(1usize.checked_shl(u32::from(log_n)).unwrap_or(usize::MAX));
+    let mut probe: Vec<u8> = Vec::new();
+    probe
+        .try_reserve_exact(need)
+        .map_err(|_| Error::Header("this backup needs more memory to open than this device can give".to_string()))
+}
+
 fn header_mac(file_key: &[u8; 16], header: &[u8]) -> [u8; 32] {
     let key = hkdf(file_key, &[], b"header");
     let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&key).expect("any key length");
@@ -313,6 +330,7 @@ fn unwrap_scrypt(h: &Header, phrase: &str) -> Result<[u8; 16], Error> {
     if st.body.len() != 32 {
         return Err(bad("the wrapped file key is not 32 bytes"));
     }
+    ensure_scrypt_memory(log_n)?;
     let key = scrypt_key(phrase, &salt, log_n);
     let fk = ChaCha20Poly1305::new((&key).into())
         .decrypt((&[0u8; 12]).into(), &st.body[..])
@@ -405,6 +423,16 @@ mod tests {
 
     fn entropy(seed: u8) -> Vec<u8> {
         (0..ENTROPY_LEN as u8).map(|i| i.wrapping_mul(31).wrapping_add(seed)).collect()
+    }
+
+    #[test]
+    fn a_work_factor_beyond_memory_is_refused_not_aborted() {
+        // Our own factor reserves fine, and so does the CLI default on a host.
+        assert!(ensure_scrypt_memory(WORK_FACTOR).is_ok());
+        assert!(ensure_scrypt_memory(18).is_ok());
+        // A size no allocator can give comes back as an error, not an abort. (On a
+        // 64-bit host, 2^63 bytes; on wasm32 the shift saturates to usize::MAX.)
+        assert!(matches!(ensure_scrypt_memory(60), Err(Error::Header(_))));
     }
 
     #[test]

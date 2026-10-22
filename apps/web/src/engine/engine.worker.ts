@@ -45,6 +45,7 @@ import {
   suggestedWeavesEntry,
   takePackTrace,
   verifyStored,
+  verifierFor,
 } from "./pack";
 import { depotBytes, depotDelete, depotHas, depotKeys } from "./depot";
 import { PERF } from "./perf";
@@ -417,7 +418,11 @@ async function reconcilePack(): Promise<void> {
   for (const f of gating) {
     const url = packFileUrl(f, live.version);
     if (await depotHas(url)) continue; // unchanged: same hash, same URL, already here
-    await depotBytes(url);
+    try {
+      await depotBytes(url, undefined, undefined, undefined, verifierFor(f));
+    } catch {
+      return; // a bad or failed download: keep the old pin, try again next launch
+    }
     // A hash mismatch means a truncated body or an error page served 200; stored
     // unchecked, the engine fails to parse it on every launch with no way out.
     if (!(await verifyStored(f, live.version))) return;
@@ -561,7 +566,7 @@ async function fetchOtherCorpora(): Promise<void> {
     const url = packFileUrl(f, booted!.manifest.version);
     try {
       if (!(await depotHas(url))) {
-        await depotBytes(url);
+        await depotBytes(url, undefined, undefined, undefined, verifierFor(f));
         got++;
       }
     } catch {

@@ -117,10 +117,13 @@ pub unsafe extern "C" fn plumbline_engine_user_note_edit(
             return out_string("null or invalid argument".to_string());
         };
         let mut study = engine.study_write();
+        let prior = study.user_notes.iter().find(|n| n.note.id == id).map(|n| n.note.updated.clone());
         match usernote::edit_note(&home, &study.user_notes, id, text, stamp) {
             Ok(written) => {
                 if written.is_none() {
-                    record_deleted(&engine.home, vec![tombstone::note(id)]);
+                    // After both the note's last save and this call's own stamp.
+                    let after = prior.unwrap_or_default().max(stamp.to_string());
+                    record_deleted(&engine.home, vec![tombstone::note(id)], &after);
                 }
                 *study = load_study(&engine.home);
                 ptr::null_mut()
@@ -147,10 +150,11 @@ pub unsafe extern "C" fn plumbline_engine_user_note_delete(
         }
         let Some(id) = (unsafe { opt_str(id) }) else { return out_string("null or invalid argument".to_string()) };
         let mut study = engine.study_write();
+        let prior = study.user_notes.iter().find(|n| n.note.id == id).map(|n| n.note.updated.clone());
         match usernote::delete_note(&study.user_notes, id) {
             Ok(removed) => {
                 if removed {
-                    record_deleted(&engine.home, vec![tombstone::note(id)]);
+                    record_deleted(&engine.home, vec![tombstone::note(id)], prior.as_deref().unwrap_or(""));
                 }
                 *study = load_study(&engine.home);
                 ptr::null_mut()

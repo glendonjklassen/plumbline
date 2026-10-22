@@ -19,9 +19,8 @@ weaves, and where your work is kept. Install and shortcuts live in the
   click anywhere on it to send the active pane there.
 - **1769 notes.** The margin notes of the 1769 edition (literal Hebrew
   renderings, variants) appear in the study panel for verses that have them.
-- **Simple ⇄ Full study.** The header button flips modes any time. Simple hides
-  the entire study surface; Full shows it. The first double-click in Full
-  study builds the analytics indexes — expect a short pause once per launch.
+- **Analysis.** The curated and machine-derived study sections are on by
+  default; Settings ▸ Advanced turns either off.
 
 ## Search
 
@@ -157,16 +156,19 @@ It all travels in the backup zip (`reading/`), and nobody but you ever sees it.
 
 ## Where everything lives
 
-The data home resolves in this order: `$PLUMBLINE_HOME` / `$OVERLAY_HOME` →
-the working directory tree (a checkout counts) → the executable's directory →
-the per-user data dir (`~/.local/share/plumbline` on Linux,
-`%APPDATA%\plumbline` on Windows, `~/Library/Application Support/plumbline`
-on macOS). The window title's tooltip and the first line of `plumbline-hydrate
-check` both print the resolved home.
+In the app, everything is stored in the browser, per site: plumblinebible.org
+and plumblinebible.ch each keep their own. **≡ ▸ Backup** exports it all as one
+file and restores it on any device.
 
-Inside it, **yours** (back these up): `weaves/`, `threads/`, `tags/`, `notes/`,
-`memory/`, `reading/`, `plans/`. Shipped/regenerable: `data/`, `bridge/`, and the `*.idxcache`
-startup cache. Config (mode, text size, open panes) is separate, in the
-platform config dir (`~/.config/plumbline/config.json` on Linux). Every write
+Inside that store, **yours**: `weaves/`, `threads/`, `tags/`, `notes/`,
+`memory/`, `reading/`, `plans/`, `devotionals/`, `deleted/` (the deletion
+records a restore honours) and `.config/plumbline/config.json` (text size, open
+panes, theme). Shipped/regenerable: `data/` and the `*.idxcache` startup cache.
+
+For the developer tools (`plumbline-hydrate`, the Rust tests), the data home on
+disk resolves in this order: `$PLUMBLINE_HOME` / `$OVERLAY_HOME` → the working
+directory tree (a checkout counts) → the executable's directory → the per-user
+data dir (`~/.local/share/plumbline` on Linux). The first line of
+`plumbline-hydrate check` prints the resolved home. Every write
 is atomic; a corrupt or missing optional file degrades its feature, never the
 reader.

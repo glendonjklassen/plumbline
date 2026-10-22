@@ -406,19 +406,26 @@ fn named(out: &mut Out, records: &BTreeMap<String, String>, l: &[(&str, &[u8])],
         }
     }
     // Pair each incoming object with a local one: by identity, else by the file
-    // it would occupy (the same name, so the same thing to a reader).
+    // it would occupy (the same name, so the same thing to a reader). Among
+    // several candidates — a device can hold two files with one id after a
+    // rename met a restored copy of the old name (`store::resolve_duplicate_ids`)
+    // — the NEWEST is the pair, as it is the one load shows. Pairing the stale
+    // copy would let a backup older than the newest win against the stale one
+    // and then be written over the newest's file.
     let mut pairs: Vec<(Option<usize>, Option<usize>)> = Vec::new();
     let mut taken = vec![false; locals.len()];
-    for (ii, io) in incomings.iter().enumerate() {
-        let id = io.identity();
-        let found = locals
+    let newest = |taken: &[bool], pred: &dyn Fn(&Obj) -> bool| -> Option<usize> {
+        locals
             .iter()
             .enumerate()
-            .find(|(li, lo)| !taken[*li] && lo.identity() == id)
-            .or_else(|| {
-                locals.iter().enumerate().find(|(li, lo)| !taken[*li] && file_name(lo.path) == file_name(io.path))
-            })
-            .map(|(li, _)| li);
+            .filter(|(li, lo)| !taken[*li] && pred(lo))
+            .max_by(|x, y| x.1.updated().cmp(y.1.updated()).then(y.0.cmp(&x.0)))
+            .map(|(li, _)| li)
+    };
+    for (ii, io) in incomings.iter().enumerate() {
+        let id = io.identity();
+        let found = newest(&taken, &|lo| lo.identity() == id)
+            .or_else(|| newest(&taken, &|lo| file_name(lo.path) == file_name(io.path)));
         if let Some(li) = found {
             taken[li] = true;
         }
@@ -715,30 +722,29 @@ fn reading(out: &mut Out, records: &BTreeMap<String, String>, l: &[(&str, &[u8])
     }
 }
 
-/// One chapter read on two devices: the furthest point and the longest dwell of
-/// the pass under way, the most passes, the latest dates. Other keys come from
-/// the record touched later.
+/// One chapter read on two devices: the most passes and the latest dates. The
+/// pass under way — `reached` and `dwell` — and every other key come whole from
+/// the record touched later. Maxing the pass state instead would graft a stale
+/// partial pass onto one the other device has since completed (and reset), and
+/// the next short read would complete it a second time.
 fn merge_chapter(a: &Value, b: &Value) -> Value {
-    let later = if (str_of(b, "touched"), str_of(b, "lastRead")) > (str_of(a, "touched"), str_of(a, "lastRead")) {
-        b
-    } else {
-        a
+    let rank = |v: &Value| {
+        (
+            str_of(v, "touched").to_string(),
+            str_of(v, "lastRead").to_string(),
+            v.get("reads").and_then(Value::as_u64).unwrap_or(0),
+            v.get("reached").and_then(Value::as_u64).unwrap_or(0),
+        )
     };
+    // Ties fall to the further pass, so the result does not depend on which
+    // device restored which.
+    let later = if rank(b) > rank(a) { b } else { a };
     let mut out = later.clone();
     let o = out.as_object_mut().unwrap();
-    for k in ["reached", "reads"] {
-        let m = a.get(k).and_then(Value::as_u64).unwrap_or(0).max(b.get(k).and_then(Value::as_u64).unwrap_or(0));
-        if m > 0 || o.contains_key(k) {
-            o.insert(k.into(), Value::from(m));
-        }
-    }
-    let d = a
-        .get("dwell")
-        .and_then(Value::as_f64)
-        .unwrap_or(0.0)
-        .max(b.get("dwell").and_then(Value::as_f64).unwrap_or(0.0));
-    if d > 0.0 || o.contains_key("dwell") {
-        o.insert("dwell".into(), Value::from(d));
+    let reads =
+        a.get("reads").and_then(Value::as_u64).unwrap_or(0).max(b.get("reads").and_then(Value::as_u64).unwrap_or(0));
+    if reads > 0 || o.contains_key("reads") {
+        o.insert("reads".into(), Value::from(reads));
     }
     for k in ["lastRead", "touched"] {
         let m = [str_of(a, k), str_of(b, k)].into_iter().max().unwrap_or("");

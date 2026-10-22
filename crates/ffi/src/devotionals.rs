@@ -292,7 +292,7 @@ pub unsafe extern "C" fn plumbline_engine_devotional_stop(
         match devotional::remove_run(&home, id) {
             Ok(removed) => {
                 if removed {
-                    crate::record_deleted(&engine.home, vec![plumbline_core::tombstone::devotional(id)]);
+                    crate::record_deleted(&engine.home, vec![plumbline_core::tombstone::devotional(id)], "");
                 }
                 ptr::null_mut()
             }

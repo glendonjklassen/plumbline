@@ -196,7 +196,7 @@ pub unsafe extern "C" fn plumbline_engine_reading_forget(
         };
         match reading::forget(&home, book, chapter as u16) {
             Ok(()) => {
-                crate::record_deleted(&engine.home, vec![plumbline_core::tombstone::reading(book, chapter as u16)]);
+                crate::record_deleted(&engine.home, vec![plumbline_core::tombstone::reading(book, chapter as u16)], "");
                 ptr::null_mut()
             }
             Err(e) => out_string(e.to_string()),

@@ -169,7 +169,10 @@ needed.
   leaves Playwright testing the engine you packed last time.
 - **A warm boot must make ZERO network requests before text.** The pin
   (`engine/pin.ts`) is a manifest stored in the depot, written only after every
-  file it names is verified present — so boot never asks the network anything it
+  file it names is present — and every pack file is checked against its manifest
+  hash BEFORE it is stored (`verifierFor` in `engine/pack.ts`, passed to
+  `depotBytes`), so a truncated body or a portal page is never pinned — so boot
+  never asks the network anything it
   already has. Pack URLs are content-addressed per file (`?h=<hash of raw bytes>`)
   and stored EXPLICITLY in the pin, which is what makes a release that changes one
   file download one file. The pin is a CLAIM, NOT A PROOF: browsers evict, so

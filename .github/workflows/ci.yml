@@ -28,15 +28,21 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
+# Read-only for every job, including when release.yml calls this workflow: no
+# job here publishes anything, and a third-party action has no business holding
+# a write token.
+permissions:
+  contents: read
+
 jobs:
   # Build + test the crates: the pure domain core, layout, the R&D flags,
   # and the C ABI.
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Test portable crates
         run: cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate
       - name: Test the R&D features
@@ -73,11 +79,11 @@ jobs:
   rnd-featureless:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Test plumbline-rnd with default (no) features
         run: cargo test --locked -p plumbline-rnd
       # Linted here rather than in `lint` for the same isolation reason the job
@@ -90,7 +96,7 @@ jobs:
   lint:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       # A file tracked against .gitignore's stated intent is a second source of
       # truth nobody notices, because git keeps honouring an `add` that predates
       # the rule. `git add -f` still works; this only refuses the accident.
@@ -103,12 +109,12 @@ jobs:
             echo "$tracked"
             exit 1
           fi
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: rustfmt, clippy
           # For the wasm clippy pass below.
           targets: wasm32-wasip1
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: rustfmt
         run: cargo fmt --all --check
       # `--all-targets` so every test module is linted too, not just the libs;
@@ -129,9 +135,9 @@ jobs:
   msrv:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@ccc8c1f930153b792217f06c65a38f23a882993a # 1.85
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Check portable crates on the MSRV toolchain
         run: cargo check --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate
 
@@ -141,9 +147,9 @@ jobs:
   bindings:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Regenerate FFI bindings
         run: cargo run --locked -p plumbline-ffi --features bindgen --bin plumbline-bindgen
       - name: Fail on binding drift
@@ -168,13 +174,13 @@ jobs:
   advisories:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: taiki-e/install-action@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         with:
           tool: cargo-audit
       - name: Rust dependencies against RustSec
         run: cargo audit
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: npm dependencies against the npm advisory database
@@ -186,8 +192,8 @@ jobs:
   i18n:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: No user-visible strings outside the catalogue
@@ -212,19 +218,20 @@ jobs:
     # `--ipc=host` is Playwright's guidance for chromium in containers; the
     # Actions default /dev/shm is 64 MB and chromium crashes into it.
     container:
-      image: mcr.microsoft.com/playwright:v1.62.0-noble
+      # v1.62.0-noble, by digest: a tag can be re-pointed, a digest cannot.
+      image: mcr.microsoft.com/playwright:v1.62.0-noble@sha256:baed2032d533817f3dbe6425de795788430ba345e819a1201337009ba17c9d07
       options: --ipc=host
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           targets: wasm32-wasip1
       # The image ships browsers, not compilers — and rustc needs a host `cc`
       # to link build scripts and proc macros even for a wasm target.
       - name: Host linker
         run: command -v cc || (apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev)
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           # Keyed by the lockfile, so a run that changes no dependency restores
