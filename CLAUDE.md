@@ -211,9 +211,13 @@ needed.
 
 Tag `v*` → `.github/workflows/release.yml` runs the CI workflow on that commit
 (called as its `ci` job) and, only once every job of it is green, creates a
-GitHub Release (the changelog) and deploys the PWA to GitHub Pages at
-<https://plumblinebible.org/> (custom domain; the old
-glendonjklassen.github.io/plumbline URL 301s there). A red job — a Playwright
+GitHub Release (the changelog) and deploys the PWA to <https://plumblinebible.org/>:
+a Hetzner server in Helsinki (`ops/hetzner/`, its runbook and cloud-init), where
+DNS has pointed since 2026-10. The `site` job attaches a `SHA256SUMS` of
+`dist` to the release, rsyncs `dist` there, then `ops/hetzner/check-site.sh`
+proves DNS and every served byte match, then GitHub Pages is deployed as a
+standby that cannot fail the release. The same check runs daily against the
+latest release's `SHA256SUMS` (`site-check.yml`). A red job — a Playwright
 flake included — holds the publish until it is re-run green
 (`gh run rerun <run-id> --failed`); the release then resumes on its own. A
 manual `workflow_dispatch` run is a dry run: it builds and tests everything

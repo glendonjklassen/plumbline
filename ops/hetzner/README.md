@@ -1,10 +1,14 @@
-# The European mirror
+# The server
 
-plumblinebible.org is GitHub Pages. This is the same `apps/web/dist`, served
-from a Hetzner Cloud box in Helsinki by Caddy, so the reader has a copy under
-EU jurisdiction that no single company's decision can take down with the
-canonical site. Nothing on it is private: the box holds the public bundle and
-the public data pack, and the release workflow rebuilds both from source.
+plumblinebible.org is a Hetzner Cloud box in Helsinki, serving
+`apps/web/dist` with Caddy, so the app sits under EU jurisdiction and no single
+US company's decision can take it down. `plumblinebible.org` and
+`www.plumblinebible.org` both point at it (A and AAAA). Nothing on it is
+private: the box holds the public bundle and the public data pack, and the
+release workflow rebuilds both from source.
+
+GitHub Pages hosted the site until 2026-10 and is still deployed on every
+release as a standby (see [Falling back to Pages](#falling-back-to-pages)).
 
 ## The box
 
@@ -17,17 +21,30 @@ console's "Cloud config" field. What that gives:
   `deploy` the only user sshd admits
 - ufw default-deny with 22/80/443; fail2ban on sshd
 - unattended security upgrades, rebooting at 04:30 UTC when a kernel asks
-- Caddy as an unprivileged service, root `/srv/plumbline`, a year of
-  immutable caching on the content-addressed `/pack/`, `no-cache` on the shell
-  files so an update lands, the version header stripped
+- Caddy from its own apt repository (key pinned in the cloud-init), which the
+  unattended upgrades follow too, so it stays current rather than on Debian's
+  version
+- Caddy sandboxed by a systemd drop-in: read-only filesystem except
+  `/var/lib/caddy` (its certificates), no new privileges, service syscalls only
+- Caddy as an unprivileged service, root `/srv/plumbline`, HTTPS for both
+  names with certificates it fetches and renews itself, a year of immutable
+  caching on the content-addressed `/pack/`, `no-cache` on the shell files so
+  an update lands, the version header stripped
 
-Replace the two keys under `ssh_authorized_keys` when rebuilding.
+Replace the two keys under `ssh_authorized_keys` when rebuilding. A rebuilt box
+gets a new IP, so update the DNS records, the `MIRROR_HOST` and
+`MIRROR_KNOWN_HOSTS` secrets, and `expect_addrs` in
+[check-site.sh](check-site.sh); Caddy fetches new certificates once DNS points
+at it.
 
 ## Releases land here on their own
 
-`.github/workflows/release.yml` rsyncs `dist` to the box after the Pages
-deploy, when three repository secrets exist. Without them the step is skipped,
-so a fork publishes to Pages alone.
+`.github/workflows/release.yml` checksums every file in `dist` and attaches
+the list to the GitHub Release as `SHA256SUMS`, rsyncs `dist` to the box, runs
+[check-site.sh](check-site.sh) to prove the site is serving exactly those
+bytes, then deploys the Pages standby. It needs three repository secrets;
+without them the upload and check are skipped, so a fork publishes to Pages
+alone. The `MIRROR_` names date from when this box was a mirror.
 
 | Secret | What |
 |---|---|
@@ -46,10 +63,37 @@ By hand, the same upload is
 rsync -az --delete --exclude CNAME -e "ssh -i ~/.ssh/<your key>" apps/web/dist/ deploy@<host>:/srv/plumbline/
 ```
 
-## Giving it a name
+## Knowing it is up
 
-The Caddyfile serves `:80` until there is a hostname. With one: point its A
-and AAAA records at the box, replace `:80` in `/etc/caddy/Caddyfile` with the
-hostname, `sudo systemctl reload caddy`. Caddy fetches and renews the
-certificate itself; installing and offline use only work over HTTPS, so until
-then the mirror is a smoke test, not a fallback readers can keep.
+`.github/workflows/site-check.yml` runs the same check every morning (07:17
+UTC, after the box's unattended upgrade) and can be run by hand from the
+Actions tab. GitHub emails a failure. It fails when:
+
+- either name stops resolving to exactly the box's two addresses (a hijacked
+  DNS record, with the box untouched)
+- any served file differs from the latest release's `SHA256SUMS`, or is
+  missing; the list lives on GitHub, so whoever controls the box cannot
+  rewrite it to match
+- either certificate is within 14 days of expiry, which means Caddy's renewal
+  is failing
+
+It cannot catch a box that serves GitHub's runners the real files and everyone
+else something else; the hardening above is the defence against that. For
+warning of a certificate issued for the domain anywhere else, sign the domain
+up for a certificate-transparency alert (Cert Spotter's is free).
+
+Locally, with or without a release's checksums:
+
+```sh
+gh release download --pattern SHA256SUMS --dir /tmp/plumbline-sums
+ops/hetzner/check-site.sh https://plumblinebible.org /tmp/plumbline-sums/SHA256SUMS
+ops/hetzner/check-site.sh https://plumblinebible.org   # availability only
+```
+
+## Falling back to Pages
+
+If the box is gone and a rebuild will take a while, point DNS back at GitHub
+Pages: A records `185.199.108.153`, `185.199.109.153`, `185.199.110.153`,
+`185.199.111.153` for the apex, and `www` as a CNAME to
+`glendonjklassen.github.io`. The repository's Pages settings still carry the
+custom domain, and every release has kept that copy current.
