@@ -3,7 +3,11 @@
 plumblinebible.org is a Hetzner Cloud box in Helsinki, serving
 `apps/web/dist` with Caddy, so the app sits under EU jurisdiction and no single
 US company's decision can take it down. `plumblinebible.org` and
-`www.plumblinebible.org` both point at it (A and AAAA). Nothing on it is
+`www.plumblinebible.org` both point at it (A and AAAA), and so do
+`plumblinebible.ch` and `www.plumblinebible.ch` (registered and DNS-hosted at
+Infomaniak since 2026-10), a second way in served from the same root. Each
+name is its own browser origin, so a reader's notes and settings on one do not
+appear on the other; share links and QR codes always name the .org. Nothing on it is
 private: the box holds the public bundle and the public data pack, and the
 release workflow rebuilds both from source.
 
@@ -26,13 +30,14 @@ console's "Cloud config" field. What that gives:
   version
 - Caddy sandboxed by a systemd drop-in: read-only filesystem except
   `/var/lib/caddy` (its certificates), no new privileges, service syscalls only
-- Caddy as an unprivileged service, root `/srv/plumbline`, HTTPS for both
+- Caddy as an unprivileged service, root `/srv/plumbline`, HTTPS for all four
   names with certificates it fetches and renews itself, a year of immutable
   caching on the content-addressed `/pack/`, `no-cache` on the shell files so
   an update lands, the version header stripped
 
 Replace the two keys under `ssh_authorized_keys` when rebuilding. A rebuilt box
-gets a new IP, so update the DNS records, the `MIRROR_HOST` and
+gets a new IP, so update the DNS records (the .org's and, at Infomaniak, the
+.ch's), the `MIRROR_HOST` and
 `MIRROR_KNOWN_HOSTS` secrets, and `expect_addrs` in
 [check-site.sh](check-site.sh); Caddy fetches new certificates once DNS points
 at it.
@@ -67,7 +72,9 @@ rsync -az --delete --exclude CNAME -e "ssh -i ~/.ssh/<your key>" apps/web/dist/ 
 
 `.github/workflows/site-check.yml` runs the same check every morning (07:17
 UTC, after the box's unattended upgrade) and can be run by hand from the
-Actions tab. GitHub emails a failure. It fails when:
+Actions tab. GitHub emails a failure. It checks the .org only: the .ch is the
+same box and files under another name, so the .org passing covers it. It fails
+when:
 
 - either name stops resolving to exactly the box's two addresses (a hijacked
   DNS record, with the box untouched)

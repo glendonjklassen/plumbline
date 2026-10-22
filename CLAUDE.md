@@ -19,8 +19,10 @@
   them all; ignore stale references to parity, "the two shells", or the
   Compose "UX gold standard". A native shell may be rebuilt from scratch one
   day, which is why the C ABI stays.
-- Distribution: the PWA, deployed to <https://plumblinebible.org/>. No app
-  store, no account.
+- Distribution: the PWA, deployed to <https://plumblinebible.org/>, and served
+  from the same box at <https://plumblinebible.ch/> as a second way in (a
+  separate browser origin; share links always name the .org). No app store, no
+  account.
 - `../overlay` (Haskell) is the read-only reference implementation — port
   from it, never modify it.
 - Frozen contracts: the on-disk data formats (§Data formats below), `kjv1769-tok2`
