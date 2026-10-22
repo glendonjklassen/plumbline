@@ -1,0 +1,34 @@
+name: Site check
+
+# Daily: is plumblinebible.org whole, and still serving exactly what the latest
+# release built? The release checks the site after every upload, but the server
+# changes between releases too: Debian and Caddy update themselves
+# (ops/hetzner/), the certificate renews itself every couple of months, and a
+# compromised box would change files without a release. The yardstick is the
+# SHA256SUMS the release attached on GitHub, which the box cannot touch.
+#
+# GitHub emails a scheduled run's failure to whoever last changed the cron
+# line, and pauses schedules in a repository with no activity for 60 days
+# (re-enable from the Actions tab).
+
+on:
+  schedule:
+    # After the server's unattended upgrade (06:00 plus up to an hour of
+    # jitter) and its 04:30 reboot window, so a bad update shows the same day.
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch the latest release's checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS --dir "$RUNNER_TEMP"
+      - name: Check plumblinebible.org
+        run: ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"

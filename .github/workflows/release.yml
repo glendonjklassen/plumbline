@@ -2,7 +2,8 @@ name: Release
 
 # Tag a version (v0.2.0) and this runs the CI workflow on that commit, and only
 # once every job of it is green creates a GitHub Release (the changelog) and
-# deploys the PWA (apps/web) to GitHub Pages.
+# deploys the PWA (apps/web) to plumblinebible.org, the Hetzner server in
+# ops/hetzner/, keeping GitHub Pages up to date as a standby.
 #
 # The version a reader SEES is derived once, in the `version` job below. The tag
 # keeps its `v` (it is a git name); About does not. Computed per job, consumers
@@ -93,27 +94,33 @@ jobs:
             || gh release create "${{ github.ref_name }}" --repo "$GITHUB_REPOSITORY" \
                  --title "Plumbline ${{ github.ref_name }}" --generate-notes
 
-  # Deploy the PWA to GitHub Pages — the install path (hosting decided
-  # 2026-07-25). Same pipeline the `ci` job above has just verified on this
+  # Deploy the PWA. Same pipeline the `ci` job above has just verified on this
   # commit: data pack → wasm engine → Vite bundle; the bundle is base "./" so
-  # the /plumbline/ subpath needs no rebuild.
-  pages:
+  # any path serves it without a rebuild.
+  #
+  # plumblinebible.org is the Hetzner server in Helsinki (ops/hetzner/), since
+  # 2026-10; DNS points there, not at GitHub. Pages was the host from
+  # 2026-07-25 and is still deployed after the server, as a standby a DNS
+  # change could bring back, but it cannot hold up or fail a release.
+  site:
     runs-on: ubuntu-24.04
-    needs: [version, ci]
-    # The European mirror (ops/hetzner/). Job-level so the step's `if` can see
-    # it: a fork or a checkout without the secrets simply skips the mirror.
+    # create-release: the SHA256SUMS below is attached to that release.
+    needs: [version, ci, create-release]
+    # Job-level so the steps' `if` can see it: a fork, or a checkout without the
+    # secrets, skips the server and its check. The MIRROR_ names date from when
+    # the server was a mirror; renaming them means re-entering them in Settings.
     env:
       MIRROR_HOST: ${{ secrets.MIRROR_HOST }}
     permissions:
-      contents: read
+      contents: write # attach SHA256SUMS to the release
       pages: write
       id-token: write
     concurrency:
-      group: github-pages
+      group: site-deploy
       cancel-in-progress: false
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: https://plumblinebible.org/
     steps:
       - uses: actions/checkout@v4
 
@@ -163,31 +170,34 @@ jobs:
           # The same string the APK carries — bare, no leading 'v'.
           PLUMBLINE_VERSION: ${{ needs.version.outputs.name }}
 
+      # The record of what this release serves, byte for byte, kept on GitHub
+      # where a compromised server cannot rewrite it. check-site.sh compares the
+      # live site against it after the upload and every day after (site-check.yml).
+      # Written on a dry run too, so the step itself is exercised.
+      - name: Checksum every file in the build
+        run: |
+          cd apps/web/dist
+          find . -type f ! -name CNAME -printf '%P\n' | LC_ALL=C sort | xargs sha256sum > "$RUNNER_TEMP/SHA256SUMS"
+          wc -l < "$RUNNER_TEMP/SHA256SUMS"
+
       # Everything above builds and checks; everything below publishes. A dry run
       # stops here — it has proved the bundle can be built, which is the whole
       # question a manual run is asking.
-      - uses: actions/configure-pages@v5
+      #
+      # The checksums go up BEFORE the files, so the daily check can never
+      # compare a new site against the previous release's record.
+      - name: Attach the checksums to the release
         if: github.event_name != 'workflow_dispatch'
-        with:
-          enablement: true
-
-      - uses: actions/upload-pages-artifact@v3
-        if: github.event_name != 'workflow_dispatch'
-        with:
-          path: apps/web/dist
-
-      - name: Deploy to GitHub Pages
-        id: deploy
-        if: github.event_name != 'workflow_dispatch'
-        uses: actions/deploy-pages@v4
-
-      # The same `dist` to the European mirror (ops/hetzner/README.md), after
-      # Pages so the canonical site is never behind the mirror. The pack is
-      # content-addressed, so a release that changed one file uploads one file;
-      # --delay-updates keeps the swap close to atomic; CNAME is GitHub's alone.
-      # The host key is PINNED (MIRROR_KNOWN_HOSTS), not accepted on first use:
-      # a deploy key that will talk to whoever answers the IP is no deploy key.
-      - name: Mirror the site to the European host
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" "$RUNNER_TEMP/SHA256SUMS" --clobber --repo "$GITHUB_REPOSITORY"
+      #
+      # The pack is content-addressed, so a release that changed one file uploads
+      # one file; --delay-updates keeps the swap close to atomic; CNAME is
+      # GitHub's alone. The host key is PINNED (MIRROR_KNOWN_HOSTS), not accepted
+      # on first use: a deploy key that will talk to whoever answers the IP is no
+      # deploy key.
+      - name: Upload the site to plumblinebible.org
         if: github.event_name != 'workflow_dispatch' && env.MIRROR_HOST != ''
         env:
           MIRROR_SSH_KEY: ${{ secrets.MIRROR_SSH_KEY }}
@@ -200,3 +210,31 @@ jobs:
           rsync -az --delete --delay-updates --exclude CNAME \
             -e "ssh -i ~/.ssh/mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
             apps/web/dist/ "deploy@${MIRROR_HOST}:/srv/plumbline/"
+
+      # Proves the upload landed rather than assuming it: DNS points at the box,
+      # every served file matches the checksums just attached, and the
+      # certificate is renewing. The same script runs daily (site-check.yml)
+      # for what changes between releases.
+      - name: Check plumblinebible.org is serving this release
+        if: github.event_name != 'workflow_dispatch' && env.MIRROR_HOST != ''
+        run: ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
+
+      # The standby. continue-on-error, so GitHub can neither block nor fail a
+      # release that has already reached readers; a failure still shows as a
+      # warning on the run.
+      - uses: actions/configure-pages@v5
+        if: github.event_name != 'workflow_dispatch'
+        continue-on-error: true
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'workflow_dispatch'
+        continue-on-error: true
+        with:
+          path: apps/web/dist
+
+      - name: Deploy the standby to GitHub Pages
+        if: github.event_name != 'workflow_dispatch'
+        continue-on-error: true
+        uses: actions/deploy-pages@v4

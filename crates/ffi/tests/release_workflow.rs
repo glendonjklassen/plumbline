@@ -2,9 +2,9 @@
 //!
 //! CI and `release.yml` both fire on the same `v*` tag, so neither covers for
 //! the other. These tests read `release.yml` and fail against two defects: the
-//! `pages` job deploying the PWA without running `npm run check` first, and a
+//! `site` job deploying the PWA without running `npm run check` first, and a
 //! manual (`workflow_dispatch`) run being able to publish. The dry-run promise
-//! is spread across four steps in two jobs, so a later edit can drop one.
+//! is spread across six steps in two jobs, so a later edit can drop one.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,10 +14,17 @@ const RELEASE: &str = ".github/workflows/release.yml";
 /// What every publishing step in the workflow must be guarded by.
 const GUARD: &str = "github.event_name != 'workflow_dispatch'";
 
-/// Steps that reach outside the runner: they create or overwrite a release, or
-/// they put a bundle on the live domain.
-const PUBLISHES: [&str; 4] =
-    ["gh release create", "actions/configure-pages", "actions/upload-pages-artifact", "actions/deploy-pages"];
+/// Steps that reach outside the runner: they create or overwrite a release or
+/// one of its assets, or they put a bundle on the live domain (the rsync to the
+/// server) or on the Pages standby.
+const PUBLISHES: [&str; 6] = [
+    "gh release create",
+    "gh release upload",
+    "rsync",
+    "actions/configure-pages",
+    "actions/upload-pages-artifact",
+    "actions/deploy-pages",
+];
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -81,36 +88,37 @@ fn job(yml: &str, name: &str) -> String {
 
 /// The type check has to run, and it has to run before anything it could stop:
 /// a check after `npm run build` still fails the job, but a check after the
-/// deploy has already handed the bundle to readers.
+/// upload has already handed the bundle to readers.
 #[test]
-fn the_pages_job_type_checks_before_it_builds_or_deploys() {
+fn the_site_job_type_checks_before_it_builds_or_deploys() {
     let yml = code(&read(RELEASE));
-    let pages = job(&yml, "pages");
+    let site = job(&yml, "site");
 
-    let check = pages.find("npm run check").expect(
-        "the `pages` job never runs `npm run check` — a tag can ship a type error that CI \
+    let check = site.find("npm run check").expect(
+        "the `site` job never runs `npm run check` — a tag can ship a type error that CI \
          catches on every push, straight to plumblinebible.org",
     );
-    let build = pages.find("npm run build").expect("the `pages` job no longer builds the web bundle at all");
-    let deploy = pages
-        .find("actions/deploy-pages")
-        .expect("the `pages` job no longer deploys — this test is checking the wrong job");
+    let build = site.find("npm run build").expect("the `site` job no longer builds the web bundle at all");
+    let upload = site
+        .find("rsync")
+        .expect("the `site` job no longer uploads to the server — this test is checking the wrong job");
+    let standby = site.find("actions/deploy-pages").expect("the `site` job no longer deploys the Pages standby");
     assert!(
         check < build,
-        "`npm run check` runs after `npm run build` in the `pages` job; the check belongs \
+        "`npm run check` runs after `npm run build` in the `site` job; the check belongs \
          before the bundle it is meant to stop"
     );
     assert!(
-        check < deploy,
-        "`npm run check` runs after the Pages deploy in the `pages` job, so a type error is \
-         reported only once readers already have the build"
+        check < upload && check < standby,
+        "`npm run check` runs after the `site` job uploads to the server or deploys Pages, so a \
+         type error is reported only once readers already have the build"
     );
 
     // A check whose failure is swallowed is worse than no check: it reads green.
-    let line = pages.lines().find(|l| l.contains("npm run check")).expect("unreachable: found the check above");
-    assert!(!line.contains("||"), "the type check's failure is swallowed in the `pages` job: {}", line.trim());
+    let line = site.lines().find(|l| l.contains("npm run check")).expect("unreachable: found the check above");
+    assert!(!line.contains("||"), "the type check's failure is swallowed in the `site` job: {}", line.trim());
     let step =
-        steps(&pages).into_iter().find(|s| s.contains("npm run check")).expect("unreachable: found the check above");
+        steps(&site).into_iter().find(|s| s.contains("npm run check")).expect("unreachable: found the check above");
     assert!(
         !step.contains("continue-on-error"),
         "the step that type-checks the web shell is advisory (`continue-on-error`), so a tag \
