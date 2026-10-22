@@ -229,6 +229,8 @@ write_files:
     content: |
       # Plain HTTP until there is a hostname: replace `:80` with it, point DNS
       # here, `systemctl reload caddy`, and Caddy fetches the certificate itself.
+      # The live box: `plumblinebible.org, www.plumblinebible.org,
+      # plumblinebible.ch, www.plumblinebible.ch {`.
       :80 {
           root * /srv/plumbline
           encode zstd gzip

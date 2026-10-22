@@ -32,3 +32,8 @@ jobs:
         run: gh release download --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS --dir "$RUNNER_TEMP"
       - name: Check plumblinebible.org
         run: ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
+      # The same box and root under a second name: its DNS, certificates and
+      # files answering. Checked even when the .org fails, so the email names both.
+      - name: Check plumblinebible.ch
+        if: ${{ !cancelled() }}
+        run: ops/hetzner/check-site.sh https://plumblinebible.ch

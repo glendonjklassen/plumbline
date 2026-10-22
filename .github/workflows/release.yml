@@ -214,10 +214,14 @@ jobs:
       # Proves the upload landed rather than assuming it: DNS points at the box,
       # every served file matches the checksums just attached, and the
       # certificate is renewing. The same script runs daily (site-check.yml)
-      # for what changes between releases.
+      # for what changes between releases. plumblinebible.ch is a second name
+      # for the same box and root, so the byte comparison is not repeated for
+      # it: its DNS, certificates and the manifests' files answering are.
       - name: Check plumblinebible.org is serving this release
         if: github.event_name != 'workflow_dispatch' && env.MIRROR_HOST != ''
-        run: ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
+        run: |
+          ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
+          ops/hetzner/check-site.sh https://plumblinebible.ch
 
       # The standby. continue-on-error, so GitHub can neither block nor fail a
       # release that has already reached readers; a failure still shows as a
