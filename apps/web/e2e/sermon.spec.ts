@@ -141,3 +141,34 @@ test("Present walks the outline, and the switch hides the presenter's words", as
   await page.getByRole("button", { name: "Show headings and points" }).click();
   await expect(overview.locator(".entry")).toHaveCount(3);
 });
+
+// Each save comes back from the engine as a fresh thread; rebuilding the draft from
+// it used to mint new block uids, and the list is keyed by uid, so the field being
+// typed in was replaced and lost focus after every save. Fails against that: the
+// textarea holding the cursor is a new element after the save lands, and
+// `toBeFocused` reads the live one. The wait is for the save, observed in the
+// engine's outline, not a guessed delay.
+test("typing in a sermon keeps the cursor through each save", async ({ page }) => {
+  await boot(page);
+  await settleBackground(page);
+  await page.evaluate(() => (window as any).__plumbline.openSermons("preach"));
+  await page.getByRole("button", { name: "New sermon" }).click();
+  const prompt = page.locator('[aria-label="Sermon title"]');
+  await prompt.locator("input, textarea").first().fill("Kept cursor");
+  await prompt.locator("input, textarea").first().press("Enter");
+  const editor = page.locator('[data-surface="sermon editor"]');
+  await expect(editor.locator(".block.heading")).toHaveCount(5);
+
+  await editor.getByRole("button", { name: "Add point" }).first().click();
+  const point = editor.locator(".block.point .text").first();
+  await expect(point).toBeFocused();
+  await page.keyboard.type("first words");
+  await expect
+    .poll(() => outline(page, "Kept cursor"), { timeout: 15_000 })
+    .toContain("point:first words");
+  await expect(point, "the save replaced the field being typed in").toBeFocused();
+  // And typing simply carries on.
+  await page.keyboard.type(", then more");
+  await expect.poll(() => outline(page, "Kept cursor"), { timeout: 15_000 }).toContain("point:first words, then more");
+  await expect(point).toBeFocused();
+});

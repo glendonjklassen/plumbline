@@ -175,6 +175,9 @@ async function fetchFiles(
       // adds no work to the load path.
       const src = { fromDepot: false };
       const t0 = performance.now();
+      // A download is checked against the manifest's hash before it is stored; its
+      // gunzipped bytes come back through `keep`, so they are not decompressed twice.
+      let verified: Uint8Array | undefined;
       const body = await depotBytes(
         url,
         (n) => {
@@ -183,10 +186,11 @@ async function fetchFiles(
         },
         undefined,
         PERF ? src : undefined,
+        verifierFor(f, (raw) => (verified = raw)),
       ).catch((e) => {
         throw new Error(`data pack file ${f.path}: ${e instanceof Error ? e.message : String(e)}`);
       });
-      out.set(f.path, await gunzip(body.buffer as ArrayBuffer));
+      out.set(f.path, verified ?? (await gunzip(body.buffer as ArrayBuffer)));
       if (PERF) {
         packTrace.push({
           path: f.path,
@@ -222,6 +226,28 @@ export async function sha16(raw: Uint8Array): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** A check for `depotBytes` that refuses a download whose bytes do not match the
+ *  hash the manifest claims for `f`, so nothing unverified is ever stored. None
+ *  for a file the manifest carries no hash for. Where `crypto.subtle` is missing
+ *  (a plain-http origin) the bytes pass unverified, as `sha16` documents.
+ *
+ *  `keep` receives the gunzipped bytes, so a caller that needs them does not
+ *  decompress the same download twice. */
+export function verifierFor(
+  f: PackFile,
+  keep?: (raw: Uint8Array) => void,
+): ((gz: Uint8Array) => Promise<void>) | undefined {
+  if (!f.hash) return undefined;
+  return async (gz) => {
+    const raw = await gunzip(gz.slice().buffer as ArrayBuffer);
+    const got = await sha16(raw);
+    if (got !== null && got !== f.hash) {
+      throw new Error(`${f.path} did not match its hash (got ${got}, want ${f.hash}): an incomplete download, or a page that is not the file`);
+    }
+    keep?.(raw);
+  };
 }
 
 /** Check a freshly-stored pack file against the hash the manifest claims, and

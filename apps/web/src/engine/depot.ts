@@ -118,6 +118,12 @@ export async function depotBytes(
    *  storage round trip per file on the path we are making fast, and can
    *  disagree with the read it describes. */
   source?: { fromDepot: boolean },
+  /** Checks downloaded bytes BEFORE they are stored, and throws to refuse them.
+   *  Stored first, a truncated body or a captive portal's page served 200 would
+   *  be read back on every later boot — and the store below is not awaited, so a
+   *  check-then-delete afterwards races it. Not applied to a depot hit: what is
+   *  stored went through this on the way in. */
+  verify?: (bytes: Uint8Array) => Promise<void>,
 ): Promise<Uint8Array> {
   const hit = await depotGet(url);
   if (hit) {
@@ -155,6 +161,7 @@ export async function depotBytes(
     }
   }
 
+  await verify?.(bytes);
   void depotPut(url, bytes, contentType);
   return bytes;
 }

@@ -138,11 +138,6 @@ link. Nothing is registered anywhere: the details ride in the link itself
 (`?church=…`), so you can read exactly what you are sending before you send
 it, and there is no account or server involved on either end.
 
-Sharing from **Present** is the same code with one difference: it opens for
-someone meeting the Bible rather than setting up a study tool, offering just
-*new in the faith* or *curious about the Bible*. Turn that off in Settings if
-you'd rather it behave like an ordinary share.
-
 ## Threads and weaves
 
 **A weave is something you find. A thread is something you make.**

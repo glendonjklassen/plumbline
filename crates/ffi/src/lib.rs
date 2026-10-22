@@ -733,14 +733,17 @@ fn load_study(home: &Option<PathBuf>) -> StudyData {
 }
 
 /// Record deletions for the restore merge (`core::tombstone`), so a backup
-/// restored later cannot bring them back.
+/// restored later cannot bring them back. `after` is the deleted thing's own
+/// latest stamp, where the caller has one (else ""): the record is stamped
+/// strictly after it (`tombstone::stamp_after`), so a delete in the same second
+/// as the last edit still wins.
 ///
 /// Best effort, after the deletion has happened: failing the call over its
 /// record would report an error for a delete that worked. A lost record costs
 /// at most that one item returning on a restore of an older backup.
-pub(crate) fn record_deleted(home: &Option<PathBuf>, keys: Vec<String>) {
+pub(crate) fn record_deleted(home: &Option<PathBuf>, keys: Vec<String>, after: &str) {
     if let Some(home) = home {
-        let _ = tombstone::record(home, &keys, &now_stamp());
+        let _ = tombstone::record(home, &keys, &tombstone::stamp_after(after, &now_stamp()));
     }
 }
 
@@ -749,13 +752,18 @@ fn identity_of(id: Option<&str>, name: &str) -> String {
     tombstone::identity(id, name)
 }
 
-/// The deletion records for the tag(s) answering to `name`, case-insensitively.
-fn tag_keys(tags: &[LoadedTag], name: &str) -> Vec<String> {
+/// The deletion records for the tag(s) answering to `name`, case-insensitively,
+/// and the latest `updated` among them (for [`record_deleted`]'s `after`).
+fn tag_keys(tags: &[LoadedTag], name: &str) -> (Vec<String>, String) {
     let wanted = name.trim().to_lowercase();
-    tags.iter()
-        .filter(|lt| lt.tag.name.trim().to_lowercase() == wanted)
-        .map(|lt| tombstone::tag(&identity_of(lt.tag.id.as_deref(), &lt.tag.name)))
-        .collect()
+    let hits: Vec<&LoadedTag> = tags.iter().filter(|lt| lt.tag.name.trim().to_lowercase() == wanted).collect();
+    let keys = hits.iter().map(|lt| tombstone::tag(&identity_of(lt.tag.id.as_deref(), &lt.tag.name))).collect();
+    (keys, latest(hits.iter().map(|lt| lt.tag.updated.as_deref())))
+}
+
+/// The latest of some optional stamps, "" for none.
+fn latest<'a>(stamps: impl Iterator<Item = Option<&'a str>>) -> String {
+    stamps.flatten().max().unwrap_or("").to_string()
 }
 
 fn file_name_of(path: &std::path::Path) -> String {
@@ -2093,15 +2101,14 @@ pub unsafe extern "C" fn plumbline_engine_thread_remove(
         };
         let mut study = engine.study_write();
         let wanted = name.trim().to_lowercase();
-        let keys: Vec<String> = study
-            .threads
-            .iter()
-            .filter(|lt| lt.thread.name.trim().to_lowercase() == wanted)
-            .map(|lt| tombstone::thread(&identity_of(lt.thread.id.as_deref(), &lt.thread.name)))
-            .collect();
+        let hits: Vec<&LoadedThread> =
+            study.threads.iter().filter(|lt| lt.thread.name.trim().to_lowercase() == wanted).collect();
+        let keys: Vec<String> =
+            hits.iter().map(|lt| tombstone::thread(&identity_of(lt.thread.id.as_deref(), &lt.thread.name))).collect();
+        let after = latest(hits.iter().map(|lt| lt.thread.updated.as_deref()));
         match thread::remove_thread(&study.threads, name) {
             Ok(_) => {
-                record_deleted(&engine.home, keys);
+                record_deleted(&engine.home, keys, &after);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2188,7 +2195,12 @@ pub unsafe extern "C" fn plumbline_engine_tag_remove(
             Some(lt) => match tag::remove_member(&lt, &target, &now_stamp()) {
                 Ok(()) => {
                     let id = identity_of(lt.tag.id.as_deref(), &lt.tag.name);
-                    record_deleted(&engine.home, vec![tombstone::tag_member(&id, &tombstone::member_target(&target))]);
+                    let added = lt.tag.members.iter().find(|m| m.target == target).map(|m| m.added.clone());
+                    record_deleted(
+                        &engine.home,
+                        vec![tombstone::tag_member(&id, &tombstone::member_target(&target))],
+                        added.as_deref().unwrap_or(""),
+                    );
                     *study = load_study(&engine.home);
                     ptr::null_mut()
                 }
@@ -2218,10 +2230,10 @@ pub unsafe extern "C" fn plumbline_engine_tag_delete(engine: *mut PlumblineEngin
             return out_string("null or invalid argument".to_string());
         };
         let mut study = engine.study_write();
-        let keys = tag_keys(&study.tags, name);
+        let (keys, after) = tag_keys(&study.tags, name);
         match tag::remove_tag(&study.tags, name) {
             Ok(_) => {
-                record_deleted(&engine.home, keys);
+                record_deleted(&engine.home, keys, &after);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2262,15 +2274,13 @@ pub unsafe extern "C" fn plumbline_engine_tag_rename(
         // the rename gives it an id, so the old name is recorded as gone, or another
         // device's copy would come back beside it on a restore.
         let wanted = from.trim().to_lowercase();
-        let keys: Vec<String> = study
-            .tags
-            .iter()
-            .filter(|lt| lt.tag.id.is_none() && lt.tag.name.trim().to_lowercase() == wanted)
-            .map(|lt| tombstone::tag(&identity_of(None, &lt.tag.name)))
-            .collect();
+        let hits: Vec<&LoadedTag> =
+            study.tags.iter().filter(|lt| lt.tag.id.is_none() && lt.tag.name.trim().to_lowercase() == wanted).collect();
+        let keys: Vec<String> = hits.iter().map(|lt| tombstone::tag(&identity_of(None, &lt.tag.name))).collect();
+        let after = latest(hits.iter().map(|lt| lt.tag.updated.as_deref()));
         match tag::rename_tag(&home, &study.tags, from, to, &now_stamp()) {
             Ok(_) => {
-                record_deleted(&engine.home, keys);
+                record_deleted(&engine.home, keys, &after);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2342,10 +2352,10 @@ pub unsafe extern "C" fn plumbline_engine_tag_merge(
             return out_string("null or invalid argument".to_string());
         };
         let mut study = engine.study_write();
-        let keys = tag_keys(&study.tags, from);
+        let (keys, after) = tag_keys(&study.tags, from);
         match tag::merge_tags(&study.tags, from, into, &now_stamp()) {
             Ok(_) => {
-                record_deleted(&engine.home, keys);
+                record_deleted(&engine.home, keys, &after);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2502,7 +2512,7 @@ pub unsafe extern "C" fn plumbline_engine_weave_approve(engine: *mut PlumblineEn
         let keys = vec![tombstone::suggested(&file_name_of(&study.weaves[i].file))];
         match weave::approve_weave(&home, &study.weaves[i], &now_stamp()) {
             Ok(_) => {
-                record_deleted(&engine.home, keys);
+                record_deleted(&engine.home, keys, "");
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2532,7 +2542,7 @@ pub unsafe extern "C" fn plumbline_engine_weave_reject(engine: *mut PlumblineEng
         let keys = vec![tombstone::suggested(&file_name_of(&study.weaves[i].file))];
         match weave::reject_weave(&study.weaves[i]) {
             Ok(()) => {
-                record_deleted(&engine.home, keys);
+                record_deleted(&engine.home, keys, "");
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -2566,9 +2576,10 @@ pub unsafe extern "C" fn plumbline_engine_weave_delete(engine: *mut PlumblineEng
         } else {
             tombstone::weave(&identity_of(lw.weave.id.as_deref(), &lw.weave.name))
         }];
+        let after = lw.weave.updated.clone().unwrap_or_default();
         match weave::reject_weave(lw) {
             Ok(()) => {
-                record_deleted(&engine.home, keys);
+                record_deleted(&engine.home, keys, &after);
                 *study = load_study(&engine.home);
                 ptr::null_mut()
             }
@@ -4350,7 +4361,7 @@ pub unsafe extern "C" fn plumbline_engine_memory_remove(
         let keys = vec![tombstone::card(&file_name_of(&memory::card_file(&home, &vref)))];
         match memory::remove_card(&home, &vref) {
             Ok(()) => {
-                record_deleted(&engine.home, keys);
+                record_deleted(&engine.home, keys, "");
                 ptr::null_mut()
             }
             Err(e) => out_string(e.to_string()),

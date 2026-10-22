@@ -89,10 +89,37 @@ pub fn union(a: &BTreeMap<String, String>, b: &BTreeMap<String, String>) -> BTre
     out
 }
 
-/// Whether a thing last touched at `stamp` was deleted afterwards (or at the
-/// same moment). A thing with no stamp at all predates any deletion.
+/// Whether a thing last touched at `stamp` was deleted after it. A tie is NOT a
+/// deletion: stamps have one-second resolution, so a member removed and added
+/// back within the same second must survive. The other order — edited, then
+/// deleted, in one second — is kept right by [`stamp_after`], which every
+/// deletion record goes through. A thing with no stamp predates any deletion.
 pub fn kills(records: &BTreeMap<String, String>, key: &str, stamp: &str) -> bool {
-    records.get(key).is_some_and(|d| d.as_str() >= stamp)
+    records.get(key).is_some_and(|d| d.as_str() > stamp)
+}
+
+/// The stamp to record a deletion at: `now`, or one second after `item` (the
+/// deleted thing's own latest stamp) when `now` is not already later — so a
+/// deletion in the same second as the last edit still outranks it under
+/// [`kills`]. Stamps are the frozen `YYYY-MM-DDThh:mm:ssZ`; a date-only or
+/// unreadable `item` cannot tie a full stamp, and `now` stands.
+pub fn stamp_after(item: &str, now: &str) -> String {
+    if now > item {
+        return now.to_string();
+    }
+    match epoch_secs(item) {
+        Some(secs) => crate::civil::stamp_from_epoch_secs(secs + 1),
+        None => now.to_string(),
+    }
+}
+
+/// `YYYY-MM-DDThh:mm:ssZ` → seconds since the epoch.
+fn epoch_secs(stamp: &str) -> Option<i64> {
+    let (date, time) = stamp.strip_suffix('Z')?.split_once('T')?;
+    let days = crate::civil::date_to_days(date)?;
+    let mut hms = time.split(':').map(|x| x.parse::<i64>().ok());
+    let (h, m, s) = (hms.next()??, hms.next()??, hms.next()??);
+    Some(days * 86_400 + h * 3_600 + m * 60 + s)
 }
 
 // ── keys ─────────────────────────────────────────────────────────────────────
@@ -190,9 +217,25 @@ mod tests {
     fn a_record_kills_what_it_is_newer_than_and_spares_what_came_after() {
         let r = BTreeMap::from([(note("a"), "2026-02-01T00:00:00Z".to_string())]);
         assert!(kills(&r, &note("a"), "2026-01-01T00:00:00Z"));
-        assert!(kills(&r, &note("a"), "2026-02-01T00:00:00Z"), "a tie is the deletion");
+        assert!(!kills(&r, &note("a"), "2026-02-01T00:00:00Z"), "a tie is a re-add within the second, and survives");
         assert!(!kills(&r, &note("a"), "2026-03-01T00:00:00Z"), "re-created after the deletion");
         assert!(!kills(&r, &note("b"), ""), "no record, nothing killed");
+    }
+
+    #[test]
+    fn a_deletion_is_stamped_after_what_it_deletes() {
+        // Edited and deleted within one second: the record must outrank the edit.
+        let edit = "2026-02-01T10:00:00Z";
+        let rec = stamp_after(edit, edit);
+        assert_eq!(rec, "2026-02-01T10:00:01Z");
+        let r = BTreeMap::from([(note("a"), rec)]);
+        assert!(kills(&r, &note("a"), edit));
+        // The clock already past the item: the clock stands.
+        assert_eq!(stamp_after(edit, "2026-02-01T10:00:05Z"), "2026-02-01T10:00:05Z");
+        // Across a day boundary.
+        assert_eq!(stamp_after("2026-02-01T23:59:59Z", "2026-02-01T23:59:59Z"), "2026-02-02T00:00:00Z");
+        // Nothing to compare: now.
+        assert_eq!(stamp_after("", "2026-02-01T10:00:00Z"), "2026-02-01T10:00:00Z");
     }
 
     #[test]

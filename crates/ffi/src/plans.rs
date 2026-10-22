@@ -426,7 +426,7 @@ pub unsafe extern "C" fn plumbline_engine_plan_stop(engine: *mut PlumblineEngine
         match plan::remove_plan(&home, id) {
             Ok(removed) => {
                 if removed {
-                    crate::record_deleted(&engine.home, vec![plumbline_core::tombstone::plan(id)]);
+                    crate::record_deleted(&engine.home, vec![plumbline_core::tombstone::plan(id)], "");
                 }
                 ptr::null_mut()
             }

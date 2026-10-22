@@ -5,11 +5,11 @@
 // the manifest lists against the depot and re-fetches what is missing.
 
 import { depotBytes, depotHas, requestPersistence } from "./depot";
-import { fetchManifest, packFileUrl } from "./pack";
+import { fetchManifest, packFileUrl, verifierFor } from "./pack";
 
 export interface OfflineSurvey {
   /** Pack files not in the offline cache, with their download size. */
-  missing: { url: string; gzBytes: number }[];
+  missing: { url: string; gzBytes: number; verify?: (bytes: Uint8Array) => Promise<void> }[];
   /** Bytes still to fetch for a complete offline copy. */
   missingBytes: number;
   /** Files the manifest lists. */
@@ -26,9 +26,13 @@ export interface OfflineSurvey {
 /** Everything the manifest promises, as depot keys. A straight walk: the manifest
  *  IS the load spec, and `scripts/check-web-pack.mjs` refuses a pack carrying
  *  anything unreachable, so every entry is a file some stage fetches. */
-async function packEntries(): Promise<{ url: string; gzBytes: number }[]> {
+async function packEntries(): Promise<OfflineSurvey["missing"]> {
   const manifest = await fetchManifest();
-  return manifest.files.map((f) => ({ url: packFileUrl(f, manifest.version), gzBytes: f.gzBytes }));
+  return manifest.files.map((f) => ({
+    url: packFileUrl(f, manifest.version),
+    gzBytes: f.gzBytes,
+    verify: verifierFor(f),
+  }));
 }
 
 export async function surveyOffline(): Promise<OfflineSurvey> {
@@ -57,7 +61,7 @@ export async function completeOffline(onProgress: (fraction: number) => void): P
   void requestPersistence();
   for (const m of missing) {
     try {
-      await depotBytes(m.url); // read-through stores it
+      await depotBytes(m.url, undefined, undefined, undefined, m.verify); // read-through stores it, once verified
     } catch {
       /* offline mid-repair: the next run picks up where this left off */
     }

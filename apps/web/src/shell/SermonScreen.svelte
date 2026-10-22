@@ -19,7 +19,7 @@
   import { nowStamp } from "../engine/StudyEngine";
   import { dispatchLink } from "../study/links";
   import { t } from "../lib/i18n.svelte";
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
 
   const s = getSession();
 
@@ -73,7 +73,18 @@
     // A miss while a write lands is not "the thread is gone": the draft stays,
     // or a pending save would write an empty shape over a real one.
     if (!th || gen !== 0) return;
-    draft = fromEngine(th);
+    const next = fromEngine(th);
+    // Every save comes back as a fresh thread, and `fromEngine` mints new uids.
+    // The list is keyed by uid, so taking them as-is replaced every block's DOM —
+    // and with it the field the reader was typing in, which lost focus after each
+    // save (the new point after "Add point", and every pause while writing). A
+    // block in the same place and of the same kind is the same block: it keeps
+    // its uid, and its element.
+    const prev = untrack(() => draft);
+    for (let i = 0; i < next.length && i < prev.length; i++) {
+      if (next[i].kind === prev[i].kind) next[i].uid = prev[i].uid;
+    }
+    draft = next;
   });
 
   function wire(blocks: Block[]): string {

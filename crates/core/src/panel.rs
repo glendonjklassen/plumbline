@@ -101,6 +101,11 @@ fn s(id: &str) -> String {
     crate::i18n::t(crate::i18n::active(), id, &[])
 }
 
+/// [`s`] with placeholders filled.
+fn sa(id: &str, args: &[(&str, &str)]) -> String {
+    crate::i18n::t(crate::i18n::active(), id, args)
+}
+
 /// Whether the active language's dictionary has MACHINE-TRANSLATED definitions, as
 /// opposed to merely being that language's own file: a dictionary ships localized
 /// renderings as soon as the tagged corpus exists but its translated prose only
@@ -872,13 +877,13 @@ fn tier_marks(runs: &mut Vec<Run>, tiers: &[String], research: bool) {
 /// The provenance legend, shown once at the foot of a Full-study card.
 fn legend() -> Block {
     Block::para(vec![
-        Run::new("where this comes from:  ", sz::MARK, Color::Faded),
+        Run::new(format!("{}  ", s("panel.legendIntro")), sz::MARK, Color::Faded),
         Run::new("✝", sz::MARK, Color::TierGod),
-        Run::new(" the text  ·  ", sz::MARK, Color::Faded),
+        Run::new(format!(" {}  ·  ", s("panel.legendText")), sz::MARK, Color::Faded),
         Run::new("†", sz::MARK, Color::TierHuman),
-        Run::new(" curated scholarship  ·  ", sz::MARK, Color::Faded),
+        Run::new(format!(" {}  ·  ", s("panel.legendHuman")), sz::MARK, Color::Faded),
         Run::new("≈", sz::MARK, Color::TierMachine),
-        Run::new(" machine-derived", sz::MARK, Color::Faded),
+        Run::new(format!(" {}", s("panel.legendMachine")), sz::MARK, Color::Faded),
     ])
 }
 
@@ -1038,7 +1043,7 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
     // word's own rendering is bold.
     let rends = if gates.human { src.renderings(code) } else { Vec::new() };
     if !rends.is_empty() {
-        out.push(Block::section_marked("RENDERINGS", "†", Color::TierHuman));
+        out.push(Block::section_marked(s("panel.renderings"), "†", Color::TierHuman));
         let wkey = render_key(word);
         let mut runs = Vec::new();
         for (i, r) in rends.iter().enumerate() {
@@ -1057,7 +1062,11 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
         if !word.is_empty() {
             let others: Vec<String> = src.word_codes(word).into_iter().filter(|c| c != code).collect();
             if !others.is_empty() {
-                let mut runs = vec![Run::new(format!("“{word}” also translates "), sz::FINE, Color::Faded)];
+                let mut runs = vec![Run::new(
+                    format!("{} ", sa("panel.alsoTranslates", &[("word", word)])),
+                    sz::FINE,
+                    Color::Faded,
+                )];
                 for (i, o) in others.iter().enumerate() {
                     if i > 0 {
                         runs.push(Run::new(", ", sz::FINE, Color::Faded));
@@ -1075,7 +1084,7 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
 
     let partners = if gates.human { src.bridge_partners(code) } else { Vec::new() };
     if !partners.is_empty() {
-        out.push(Block::section("SAME ROOT ACROSS TESTAMENTS"));
+        out.push(Block::section(s("panel.sameRootAcross")));
         for p in partners.iter().take(6) {
             let mut runs = concept_chips(src, sz::LIST, std::slice::from_ref(&p.code));
             runs.push(Run::new(format!("   {}", p.sources.join(" + ")), sz::FINE, Color::Faded));
@@ -1090,23 +1099,33 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
 
     if let Some(c) = src.concept(code) {
         if !c.community.is_empty() {
-            out.push(Block::section_marked("APPEARS ALONGSIDE", "≈", Color::TierMachine));
+            out.push(Block::section_marked(s("panel.appearsAlongside"), "≈", Color::TierMachine));
             let take: Vec<String> = c.community.iter().take(8).cloned().collect();
             out.push(Block::para(concept_chips(src, sz::LIST, &take)));
         }
         if !c.top_books.is_empty() {
-            out.push(Block::section_marked("MOST USED IN", "≈", Color::TierMachine));
+            out.push(Block::section_marked(s("panel.mostUsedIn"), "≈", Color::TierMachine));
             let joined = c.top_books.iter().map(|(b, n)| format!("{b} ×{n}")).collect::<Vec<_>>().join(" · ");
             out.push(Block::para(vec![
                 Run::new(joined, sz::SMALL, Color::Ink),
-                Run::new(format!("   (OT {} · NT {})", c.ot, c.nt), sz::CAPTION, Color::Faded),
+                Run::new(
+                    format!("   ({})", sa("panel.otNt", &[("ot", &c.ot.to_string()), ("nt", &c.nt.to_string())])),
+                    sz::CAPTION,
+                    Color::Faded,
+                ),
             ]));
         }
         if let Some(lw) = &c.leitwort {
-            out.push(Block::section_marked("LEITWORT", "≈", Color::TierMachine));
+            out.push(Block::section_marked(s("panel.leitwort"), "≈", Color::TierMachine));
             out.push(Block::para(vec![
                 Run::new(
-                    format!("{} of its {} uses cluster in {} ", lw.win_count, lw.n, lw.label),
+                    format!(
+                        "{} ",
+                        sa(
+                            "panel.leitwortCluster",
+                            &[("win", &lw.win_count.to_string()), ("n", &lw.n.to_string()), ("label", &lw.label)]
+                        )
+                    ),
                     sz::SMALL,
                     Color::Ink,
                 ),

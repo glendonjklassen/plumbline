@@ -189,9 +189,57 @@ fn reading_in_one_book_on_two_devices_adds_up_by_chapter() {
     let after = as_json(&apply(&phone, &merge(&phone, &laptop)));
     let ch = after["reading/gen.json"]["chapters"].as_array().unwrap().clone();
     assert_eq!(ch.iter().map(|c| c["c"].as_u64().unwrap()).collect::<Vec<_>>(), [1, 2, 3]);
+    // The pass under way is the later device's, whole.
     assert_eq!(ch[1]["reached"], 20);
-    assert_eq!(ch[1]["dwell"], 30.0);
+    assert_eq!(ch[1]["dwell"], 10.0);
     assert_eq!(ch[1]["touched"], "2026-01-05");
+}
+
+#[test]
+fn a_completed_pass_is_not_given_back_a_stale_partial_one() {
+    // The laptop finished the chapter (its pass reset to nothing); the phone still
+    // holds an older pass, half done. Maxing them would hand the finished chapter
+    // a half-done pass, and the next short read would count a second completion.
+    let phone =
+        files(&[("reading/gen.json", book(json!([{"c":1,"reached":20,"dwell":100.0,"touched":"2026-01-01"}])))]);
+    let laptop = files(&[("reading/gen.json", book(json!([{"c":1,"lastRead":"2026-01-03","touched":"2026-01-03"}])))]);
+    for (local, incoming) in [(&phone, &laptop), (&laptop, &phone)] {
+        let after = as_json(&apply(local, &merge(local, incoming)));
+        let c = &after["reading/gen.json"]["chapters"][0];
+        assert_eq!(c["lastRead"], "2026-01-03");
+        assert!(c.get("reached").is_none_or(|r| r == 0), "a stale pass was grafted on: {c}");
+        assert!(c.get("dwell").is_none_or(|d| d == 0.0), "a stale pass was grafted on: {c}");
+    }
+}
+
+#[test]
+fn a_backup_never_overwrites_the_newest_copy_of_a_renamed_tag() {
+    // The device holds the tag twice under one id — the renamed file (newest) and a
+    // restored copy of the old name (stale). The backup sits between the two. It must
+    // lose to the newest, not beat the stale copy and land on the newest's file.
+    // The stale copy's path sorts FIRST, which is the order the old pairing took.
+    let stale = tag(A, "amazing grace", "2026-01-01T00:00:00Z", &[("John 3:16", "t1")]);
+    let newest = tag(A, "favour", "2026-03-01T00:00:00Z", &[("John 3:16", "t1"), ("Eph 2:8", "t2")]);
+    let between = tag(A, "favour", "2026-02-01T00:00:00Z", &[("John 3:16", "t1")]);
+    let device = files(&[("tags/amazing-grace.json", stale), ("tags/favour.json", newest)]);
+    let backup = files(&[("tags/favour.json", between)]);
+    let after = as_json(&apply(&device, &merge(&device, &backup)));
+    assert_eq!(after["tags/favour.json"]["updated"], "2026-03-01T00:00:00Z", "the newest copy was written over");
+    assert_eq!(refs(&after["tags/favour.json"]).len(), 2);
+}
+
+#[test]
+fn a_member_removed_and_added_back_in_the_same_second_stays() {
+    // One-second stamps: the record and the re-add tie. A tie is the re-add.
+    let key = tomb::tag_member(A, "verse:John 3:16");
+    let (tp, tv) = tombs(&[(key.as_str(), "2026-04-01T10:00:00Z")]);
+    let device = files(&[
+        ("tags/grace.json", tag(A, "grace", "2026-04-01T10:00:00Z", &[("John 3:16", "2026-04-01T10:00:00Z")])),
+        (tp.as_str(), tv),
+    ]);
+    let backup = files(&[("tags/grace.json", tag(A, "grace", "2026-03-01T00:00:00Z", &[]))]);
+    let after = as_json(&apply(&device, &merge(&device, &backup)));
+    assert_eq!(refs(&after["tags/grace.json"]), BTreeSet::from(["John 3:16".into()]));
 }
 
 #[test]
