@@ -675,12 +675,18 @@ test("switching to a language a stale pin has never heard of still opens its Bib
     await expect
       .poll(
         async () =>
-          page.evaluate(() => {
-            const items = (globalThis as any).__plumblinePaint?.items?.deref() ?? [];
-            const words = items.filter((i: any) => i.kind === "word").map((i: any) => String(i.text));
-            if (!words.length) return "no frame yet";
-            return /[\u0600-\u06FF]/.test(words.join("")) ? "arabic" : `latin: ${words.slice(0, 5).join(" ")}`;
-          }),
+          page
+            .evaluate(() => {
+              const items = (globalThis as any).__plumblinePaint?.items?.deref() ?? [];
+              const words = items.filter((i: any) => i.kind === "word").map((i: any) => String(i.text));
+              if (!words.length) return "no frame yet";
+              return /[\u0600-\u06FF]/.test(words.join("")) ? "arabic" : `latin: ${words.slice(0, 5).join(" ")}`;
+            })
+            // The canvas check above can pass on the OLD document, and a poll tick
+            // landing inside the switch's reload throws "context destroyed", which
+            // fails the poll rather than retrying it. A destroyed context is
+            // "still navigating", not a wrong answer.
+            .catch(() => "navigating"),
         { timeout: 120_000, message: "the switch never produced Arabic scripture" },
       )
       .toBe("arabic");
