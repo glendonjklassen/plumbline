@@ -197,7 +197,7 @@ test("a no-op epoch bump does not re-mint the gutter marks", async ({ page }) =>
   // The note marks, same mechanism, with a note written here so the set is genuinely non-empty.
   const ref = `${target.book} ${target.chapter}:1`;
   expect(
-    await page.evaluate((r) => (window as any).__plumbline.author("userNoteSet", r, "test", "2026-07-29T12:00:00Z"), ref),
+    await page.evaluate((r) => (window as any).__plumbline.author("userNoteAdd", r, "test", "2026-07-29T12:00:00Z"), ref),
     "the note should save",
   ).toBeNull();
   await expect

@@ -35,6 +35,14 @@
 // pinned in `tests.rs`. Nothing compares it yet — it is a record, not a gate.
 #define PLUMBLINE_WIRE_VERSION 2
 
+// Random bytes [`plumbline_backup_encrypt`] needs from the shell's CSPRNG.
+// (A literal, not the core's name: cbindgen cannot evaluate a path, and a test
+// below keeps the two equal.)
+#define PLUMBLINE_BACKUP_ENTROPY_LEN 48
+
+// Random bytes [`plumbline_backup_phrase`] needs from the shell's CSPRNG.
+#define PLUMBLINE_BACKUP_PHRASE_ENTROPY_LEN 8
+
 // One laid-out chapter: the positioned display list a shell paints and
 // hit-tests. Opaque to C; produced by [`plumbline_engine_layout_chapter`], released
 // with [`plumbline_layout_free`].
@@ -933,32 +941,6 @@ char *plumbline_engine_copy_text(const struct PlumblineEngine *engine,
                                  const char *ref_key,
                                  const char *kind);
 
-// The reader's personal note on a verse as JSON (`{verse,display,text,created,
-// updated}`), or null when the verse has no note (or the engine has no home).
-//
-// # Safety
-// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
-char *plumbline_engine_user_note_json(const struct PlumblineEngine *engine, const char *ref_key);
-
-// All the reader's personal notes as JSON (`{notes:[…]}`), in canonical reading order. Never
-// null on a live engine (no notes → empty list).
-//
-// # Safety
-// `engine` is a live engine (or null → null).
-char *plumbline_engine_user_notes_json(const struct PlumblineEngine *engine);
-
-// Set (or clear, with an empty `text`) the reader's personal note on a verse,
-// atomically, then reload. `stamp` is a caller-supplied UTC timestamp. Null on
-// success, else an owned error string.
-//
-// # Safety
-// `engine` is a live engine; the string args are null or valid NUL-terminated
-// UTF-8 for the call.
-char *plumbline_engine_user_note_set(struct PlumblineEngine *engine,
-                                     const char *ref_key,
-                                     const char *text,
-                                     const char *stamp);
-
 // The colour palette for a theme (`light`/`dark`/`night`; unknown → light) as
 // JSON — every semantic role as a `#rrggbb` hex. Engine-independent. Never null.
 //
@@ -1156,6 +1138,68 @@ char *plumbline_panel_guide_blocks_json(void);
 // null.
 char *plumbline_panel_about_blocks_json(void);
 
+// Free a buffer returned by [`plumbline_backup_encrypt`] or
+// [`plumbline_backup_decrypt`]. `len` is the length that call reported. Null is
+// a no-op.
+//
+// # Safety
+// `ptr`/`len` came from one of those calls and are freed once.
+void plumbline_bytes_free(uint8_t *ptr, size_t len);
+
+// Seal `data` under `phrase` as an age file. `entropy` is at least
+// [`PLUMBLINE_BACKUP_ENTROPY_LEN`] bytes from a CSPRNG, fresh for every call.
+// Returns the file, its length in `*out_len`; null with `*out_err` set (JSON,
+// see above) on failure. `out_len` must not be null.
+//
+// # Safety
+// Pointers are valid for the call; `phrase` is NUL-terminated UTF-8.
+uint8_t *plumbline_backup_encrypt(const uint8_t *data,
+                                  size_t len,
+                                  const char *phrase,
+                                  const uint8_t *entropy,
+                                  size_t entropy_len,
+                                  size_t *out_len,
+                                  char **out_err);
+
+// Open an age file sealed with `phrase`. Returns the plaintext, its length in
+// `*out_len`; null with `*out_err` set on failure — `kind: "wrongPhrase"` is
+// the one to ask again on. `out_len` must not be null.
+//
+// # Safety
+// Pointers are valid for the call; `phrase` is NUL-terminated UTF-8.
+uint8_t *plumbline_backup_decrypt(const uint8_t *data,
+                                  size_t len,
+                                  const char *phrase,
+                                  size_t *out_len,
+                                  char **out_err);
+
+// Five words for a new backup phrase, from at least
+// [`PLUMBLINE_BACKUP_PHRASE_ENTROPY_LEN`] bytes of CSPRNG output. Null if the
+// entropy is short. Caller-freed.
+//
+// # Safety
+// `entropy` points at `entropy_len` readable bytes, or is null.
+char *plumbline_backup_phrase(const uint8_t *entropy, size_t entropy_len);
+
+// 1 if `data` is an age file (an encrypted backup), 0 if not (a plain zip, say).
+//
+// # Safety
+// `data` points at `len` readable bytes, or is null.
+int32_t plumbline_backup_is_encrypted(const uint8_t *data, size_t len);
+
+// Merge a backup into this device's study data (`plumbline_core::merge`), so
+// two devices' data add together rather than the backup's copy winning.
+//
+// `request` is `{"local":{path:text}, "incoming":{path:text}}` — home-relative
+// paths (`notes/…`, `tags/…`) and each file's UTF-8 text, the device's and the
+// backup's. Answers `{"write":{path:text}, "delete":[path]}`: what to write over
+// the device and what to remove from it. Null only when `request` is not that
+// JSON.
+//
+// # Safety
+// `request` is null or valid NUL-terminated UTF-8.
+char *plumbline_backup_merge_json(const char *request);
+
 // Every running devotional with its open day, plus the catalogue every picker
 // offers, as `{running:[…], catalogue:[…]}`. Never null on a live engine.
 //
@@ -1254,6 +1298,51 @@ char *plumbline_engine_reading_tick_json(struct PlumblineEngine *engine,
                                          float step_seconds,
                                          bool interacted,
                                          const char *now);
+
+// All the reader's notes as JSON (`{notes:[{id,verse,display,text,created,
+// updated}]}`), in canonical reading order and oldest first on a verse. Never
+// null on a live engine (no notes → empty list).
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *plumbline_engine_user_notes_json(const struct PlumblineEngine *engine);
+
+// One note by id as JSON (`{id,verse,display,text,created,updated}`), or null
+// when there is no such note.
+//
+// # Safety
+// `engine` is a live engine; `id` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_user_note_json(const struct PlumblineEngine *engine, const char *id);
+
+// Add a new note on the verse `ref_key`. `stamp` is a caller-supplied UTC
+// timestamp. Empty text is refused. Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated
+// UTF-8 for the call.
+char *plumbline_engine_user_note_add(struct PlumblineEngine *engine,
+                                     const char *ref_key,
+                                     const char *text,
+                                     const char *stamp);
+
+// Replace the text of note `id`. Empty or whitespace text **deletes** it.
+// `stamp` is a caller-supplied UTC timestamp. Null on success, else an owned
+// error string.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated
+// UTF-8 for the call.
+char *plumbline_engine_user_note_edit(struct PlumblineEngine *engine,
+                                      const char *id,
+                                      const char *text,
+                                      const char *stamp);
+
+// Delete note `id`. A missing note is a success. Null on success, else an
+// owned error string.
+//
+// # Safety
+// `engine` is a live engine; `id` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_user_note_delete(struct PlumblineEngine *engine, const char *id);
 
 // Every running plan with derived state, plus the builtin catalogue for the
 // picker, as `{running:[…], builtins:[…]}`. Never null on a live engine.

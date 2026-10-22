@@ -67,6 +67,7 @@ const DIALOGS: { name: string; open: string; sel: string }[] = [
   { name: "the passage navigator", open: `s.bookNavFor = 0`, sel: `[aria-label="Go to a passage"]` },
   { name: "history", open: `s.showHistory = true`, sel: `[data-surface="history"]` },
   { name: "settings", open: `s.showSettings = true`, sel: `[data-surface="settings"]` },
+  { name: "backup", open: `s.showBackup = true`, sel: `[data-surface="backup"]` },
   { name: "mark chapter read", open: `s.markReadFor = { book: "Gen", chapter: 1 }`, sel: `[data-surface="mark read"]` },
   { name: "the tag picker", open: `s.tagPickFor = "John 3:16"`, sel: `[data-surface="tag picker"]` },
   { name: "the thread picker", open: `s.threadPickFor = "John 3:16"`, sel: `[data-surface="thread picker"]` },

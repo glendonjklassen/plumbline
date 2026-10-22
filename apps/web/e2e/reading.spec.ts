@@ -220,6 +220,11 @@ test("finishing a chapter updates the map without a relaunch", async ({ page }) 
 
 test("invalidateOnly drops only what it is told to", async ({ page }) => {
   await boot(page);
+  // A background stage that lands after the priming below clears the WHOLE cache
+  // (session `onWarmReady`), which reads exactly like the bug: "threads" gone. Settled
+  // first, the only invalidation in the window is the one under test. It cannot hide
+  // the bug: an `invalidateOnly` that drops everything still drops "threads".
+  await settleBackground(page);
 
   // A dwell report lands every 30 seconds while somebody reads, so it must drop the reading map
   // without throwing away the open word study or the threads and tags on screen — which is what

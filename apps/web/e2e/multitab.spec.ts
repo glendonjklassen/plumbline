@@ -75,7 +75,7 @@ test("a write in one tab neither clobbers another tab's edits nor resurrects its
   await boot(page);
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    await s.engine.userNoteSet("Gen 1:1", "first draft", "2026-07-29T00:00:00Z");
+    await s.engine.userNoteAdd("Gen 1:1", "first draft", "2026-07-29T00:00:00Z");
     await s.engine.memoryAdd("Gen 2:5", "2026-07-29T00:00:00Z");
   });
   await expect
@@ -89,7 +89,8 @@ test("a write in one tab neither clobbers another tab's edits nor resurrects its
   await boot(two);
   await two.evaluate(async () => {
     const s = (window as any).__plumbline;
-    await s.engine.userNoteSet("Gen 1:1", "edited in tab two", "2026-07-29T01:00:00Z");
+    const id = ((await s.engine.userNotes()).notes as any[]).find((n) => n.verse === "Gen 1:1").id;
+    await s.engine.userNoteEdit(id, "edited in tab two", "2026-07-29T01:00:00Z");
     await s.engine.memoryRemove("Gen 2:5");
   });
   await expect
@@ -101,7 +102,7 @@ test("a write in one tab neither clobbers another tab's edits nor resurrects its
   // authors something unrelated. Its persist must carry only that.
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    await s.engine.userNoteSet("John 3:16", "note from tab one", "2026-07-29T02:00:00Z");
+    await s.engine.userNoteAdd("John 3:16", "note from tab one", "2026-07-29T02:00:00Z");
   });
   await expect
     .poll(() => userValuesContaining(page, "note from tab one"), { timeout: 20_000 })
@@ -119,12 +120,12 @@ test("a write in one tab neither clobbers another tab's edits nor resurrects its
   const state = await three.evaluate(async () => {
     const s = (window as any).__plumbline;
     return {
-      gen: (await s.engine.userNote("Gen 1:1"))?.text,
-      john: (await s.engine.userNote("John 3:16"))?.text,
+      gen: ((await s.engine.userNotes()).notes as any[]).filter((n) => n.verse === "Gen 1:1").map((n) => n.text),
+      john: ((await s.engine.userNotes()).notes as any[]).filter((n) => n.verse === "John 3:16").map((n) => n.text),
       card: await s.engine.memoryCard("Gen 2:5"),
     };
   });
-  expect(state.gen).toBe("edited in tab two");
-  expect(state.john).toBe("note from tab one");
+  expect(state.gen, "one note, edited — not a second one beside it").toEqual(["edited in tab two"]);
+  expect(state.john).toEqual(["note from tab one"]);
   expect(state.card).toBeNull();
 });

@@ -36,6 +36,7 @@ const SURFACES: { name: string; open: string }[] = [
   { name: "tag picker", open: `s.tagPickFor = "John 3:16"` },
   { name: "study panel", open: `s.panel = { kind: "guide" }` },
   { name: "settings", open: `s.showSettings = true` },
+  { name: "backup", open: `s.showBackup = true` },
   { name: "history", open: `s.showHistory = true` },
   { name: "mark read", open: `s.markReadFor = { book: "Gen", chapter: 1 }` },
   { name: "passage picker", open: `s.memorizePassageFrom = "John 3:16"` },

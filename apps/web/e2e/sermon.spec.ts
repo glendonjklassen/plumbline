@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { settleBackground } from "./settle";
 
 // The sermon editor: a thread written top to bottom. A new sermon is born with
 // the five seeded headings; points and passages go under them and move by
@@ -26,6 +27,11 @@ async function outline(page: Page, name: string): Promise<string[]> {
 // not reaching the engine the reload step restores the pre-move order.
 test("a sermon is shaped, ordered by buttons, and keeps its order across a reload", async ({ page }) => {
   await boot(page);
+  // The outline is read from the cached thread list, which a background stage
+  // landing mid-test clears and refetches — under a loaded run, slower than the
+  // polls below allow. Settled first, only the sermon's own writes move it. It
+  // cannot hide the bug: an outline that never reaches the engine never appears.
+  await settleBackground(page);
   await page.evaluate(() => (window as any).__plumbline.openSermons("preach"));
   await expect(page.locator('[data-surface="sermons"]')).toBeVisible();
 

@@ -278,10 +278,23 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       if (notes !== null) report(s, s.author("weaveSetNotes", weave.name, notes));
       break;
     }
+    case "addNote": {
+      const text = await s.askText(t("notes.on", { passage: link.refKey }), "", true);
+      if (text === null || text.trim() === "") break;
+      report(s, s.author("userNoteAdd", link.refKey, text, nowStamp()));
+      break;
+    }
     case "editNote": {
-      const existing = await s.fetchQ("userNote", link.refKey);
-      const text = await s.askText(`Your note — ${link.refKey}`, existing?.text ?? "", true);
-      if (text === null) break;
+      const existing = await s.fetchQ("userNote", link.id);
+      if (!existing) break;
+      const passage = existing.display ?? existing.verse;
+      const answer = await s.askTextOrDelete(t("notes.on", { passage }), existing.text ?? "", t("common.delete"));
+      if (answer === null) break;
+      if (answer === "delete") {
+        await deleteNote(s, link.id, passage);
+        break;
+      }
+      const text = answer.text;
       // Saving an EMPTIED editor deletes the note (usernote.rs's contract), so
       // it asks exactly like the browser's ✕ — whether an action asks is a
       // property of the action, not of which button reached it. Same wording
@@ -289,7 +302,7 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       if (text.trim() === "" && (existing?.text ?? "").trim() !== "") {
         if (
           !(await s.askConfirm(
-            t("notes.deleteAsk", { passage: link.refKey }),
+            t("notes.deleteAsk", { passage }),
             t("notes.deleteBody"),
             t("notes.deleteVerb"),
           ))
@@ -297,7 +310,7 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
           break;
         }
       }
-      report(s, s.author("userNoteSet", link.refKey, text, nowStamp()));
+      report(s, s.author("userNoteEdit", link.id, text, nowStamp()));
       break;
     }
     default:
@@ -305,22 +318,22 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
   }
 }
 
-/** Delete one note outright — the notes browser's ✕, so deleting does not mean
- *  opening the note and emptying it. Confirms with the SAME wording as the
- *  emptied-editor path in `editNote` above, then writes empty text: the core's
- *  `set_note` removes the file (usernote.rs), the engine reloads study data,
- *  and the browser re-fetches — nothing else about the verse is touched. */
-export async function deleteNote(s: Session, refKey: string, display?: string): Promise<void> {
+/** Delete one note outright, by id — the notes browser's ✕, so deleting does
+ *  not mean opening the note and emptying it. Confirms with the SAME wording as
+ *  the emptied-editor path in `editNote` above. The engine removes that note's
+ *  file, records the deletion for the restore merge (core `tombstone`), and
+ *  reloads; the verse's other notes are untouched. */
+export async function deleteNote(s: Session, id: string, display: string): Promise<void> {
   if (
     !(await s.askConfirm(
-      t("notes.deleteAsk", { passage: display ?? refKey }),
+      t("notes.deleteAsk", { passage: display }),
       t("notes.deleteBody"),
       t("notes.deleteVerb"),
     ))
   ) {
     return;
   }
-  report(s, s.author("userNoteSet", refKey, "", nowStamp()));
+  report(s, s.author("userNoteDelete", id));
 }
 
 /** Authoring endpoints resolve null on success, else an error string. */

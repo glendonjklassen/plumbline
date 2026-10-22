@@ -23,7 +23,10 @@ test("a backup that cannot be written tells the reader instead of doing nothing"
 }) => {
   // Installed before the first navigation. `export` is the only op held back, and
   // `createObjectURL` has one caller in the shell, so nothing else changes behaviour.
+  // The device already has its backup phrase, so no phrase dialog sits between the
+  // click and the export (encrypted-backup.spec.ts covers that dialog).
   await page.addInitScript(() => {
+    localStorage.setItem("plumbline:backupPhrase", "harbor pencil olive drum acid");
     const post = Worker.prototype.postMessage;
     Worker.prototype.postMessage = function (this: Worker, ...args: unknown[]) {
       const msg = args[0] as { op?: string } | null;
@@ -45,11 +48,10 @@ test("a backup that cannot be written tells the reader instead of doing nothing"
   page.on("download", (d) => saved.push(d.suggestedFilename()));
 
   await boot(page);
-  await page.evaluate(() => ((window as any).__plumbline.showSettings = true));
-  const settings = page.locator('[data-surface="settings"]');
-  await expect(settings).toBeVisible();
-  // Backup sits with the everyday settings; there is no Advanced disclosure to open.
-  const backUp = settings.getByRole("button", { name: "Back up (.zip)" });
+  await page.evaluate(() => ((window as any).__plumbline.showBackup = true));
+  const surface = page.locator('[data-surface="backup"]');
+  await expect(surface).toBeVisible();
+  const backUp = surface.getByRole("button", { name: "Secure backup" });
 
   // The export refuses: the first await in backup().
   await page.evaluate(() => ((window as any).__failExport = true));
@@ -80,7 +82,7 @@ test("a backup that cannot be written tells the reader instead of doing nothing"
   // And with nothing refusing, a backup still happens.
   await page.evaluate(() => ((window as any).__failSave = false));
   const [download] = await Promise.all([page.waitForEvent("download"), backUp.click()]);
-  expect(download.suggestedFilename()).toMatch(/^plumbline-backup-\d{4}-\d\d-\d\d\.zip$/);
+  expect(download.suggestedFilename()).toMatch(/^plumbline-backup-\d{4}-\d\d-\d\d\.age$/);
   await expect(
     page.locator(".toast", { hasText: download.suggestedFilename() }),
     "a backup that worked must say so, and name the file it wrote",

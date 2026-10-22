@@ -177,7 +177,7 @@ test("clearing a chapter's reading history asks", async ({ page }) => {
 test("deleting a note from the browser asks, clears the gutter mark, and Cancel keeps it", async ({ page }) => {
   await boot(page);
   await page.evaluate(() =>
-    (window as any).__plumbline.author("userNoteSet", "John 3:16", "Doomed note", new Date().toISOString()),
+    (window as any).__plumbline.author("userNoteAdd", "John 3:16", "Doomed note", new Date().toISOString()),
   );
   const notes = async () =>
     ((await page.evaluate(() => (window as any).__plumbline.rpc.call("userNotes"))) as any).notes.map(
@@ -207,6 +207,40 @@ test("deleting a note from the browser asks, clears the gutter mark, and Cancel 
   await expect.poll(marked, { timeout: 15_000 }).not.toContain(16);
 });
 
+// The editor has its own Delete, so a reader does not have to know that emptying
+// the text deletes. It asks like every other door to the same delete, and Cancel
+// keeps the note. Fails without the button (it is not found), and against a Delete
+// that skipped the confirmation (the confirm never shows; the note is gone at once).
+test("the note editor's Delete asks, and only then deletes that one note", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.author("userNoteAdd", "John 3:16", "Doomed note", "2026-10-01T00:00:00Z");
+    await s.author("userNoteAdd", "John 3:16", "Keeper", "2026-10-02T00:00:00Z");
+  });
+  const texts = async () =>
+    ((await page.evaluate(() => (window as any).__plumbline.rpc.call("userNotes"))) as any).notes
+      .map((n: any) => n.text)
+      .sort();
+  await expect.poll(texts, { timeout: 15_000 }).toEqual(["Doomed note", "Keeper"]);
+
+  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "notesBrowser" }));
+  const doomed = page.locator(".nb-note", { hasText: "Doomed note" });
+  const editor = page.locator('[role="dialog"]', { has: page.locator("textarea") });
+
+  await doomed.locator(".nb-edit").click();
+  await expect(editor).toBeVisible();
+  await editor.getByRole("button", { name: "Delete" }).click();
+  await expect(confirm(page), "Delete in the editor must ask first").toBeVisible();
+  await confirm(page).getByRole("button", { name: "Cancel" }).click();
+  expect(await texts(), "Cancel must not delete").toEqual(["Doomed note", "Keeper"]);
+
+  await doomed.locator(".nb-edit").click();
+  await editor.getByRole("button", { name: "Delete" }).click();
+  await confirm(page).getByRole("button", { name: "Delete note" }).click();
+  await expect.poll(texts, { timeout: 15_000 }).toEqual(["Keeper"]);
+});
+
 // Mutation: in study/links.ts `editNote`, drop the empty-text askConfirm →
 //   'Error: emptying the editor must ask before it deletes' (the confirm
 //   surface never appears). A test that covered only the ✕ would PASS against
@@ -214,7 +248,7 @@ test("deleting a note from the browser asks, clears the gutter mark, and Cancel 
 test("emptying the note editor asks too — it is the same delete", async ({ page }) => {
   await boot(page);
   await page.evaluate(() =>
-    (window as any).__plumbline.author("userNoteSet", "John 3:16", "Doomed note", new Date().toISOString()),
+    (window as any).__plumbline.author("userNoteAdd", "John 3:16", "Doomed note", new Date().toISOString()),
   );
   const notes = async () =>
     ((await page.evaluate(() => (window as any).__plumbline.rpc.call("userNotes"))) as any).notes.map(

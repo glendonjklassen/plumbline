@@ -3,6 +3,7 @@
 // reactive read-through cache lives in session.svelte.ts — this only moves messages.
 
 import { DEFAULT_FONT } from "./fonts.generated";
+import type { BackupResult } from "./backupCrypto";
 import type { PackFileTrace } from "./pack";
 
 export interface BootInfo {
@@ -368,6 +369,24 @@ export class EngineRpc {
   }
   freeze(): Promise<void> {
     return this.#send({ op: "freeze" });
+  }
+  /** Seal a backup zip under the phrase (an age file), or say why not. */
+  backupSeal(zip: Uint8Array, phrase: string): Promise<BackupResult> {
+    return this.#send({ op: "backupSeal", zip, phrase });
+  }
+  /** Open an encrypted backup with the phrase: the zip inside, or why not —
+   *  `error.kind === "wrongPhrase"` is the one to ask again on. */
+  backupOpen(file: Uint8Array, phrase: string): Promise<BackupResult> {
+    return this.#send({ op: "backupOpen", file, phrase });
+  }
+  /** Five words for a new backup phrase. */
+  backupPhrase(): Promise<string> {
+    return this.#send({ op: "backupPhrase" });
+  }
+  /** Merge a backup's files into this device's (core `merge`): what to write
+   *  over the device's stored study data, and what to remove from it. */
+  backupMerge(incoming: [string, Uint8Array][]): Promise<{ write: [string, Uint8Array][]; delete: string[] }> {
+    return this.#send({ op: "backupMerge", incoming });
   }
   setBundled(on: boolean): Promise<void> {
     return this.#send({ op: "setBundled", on });

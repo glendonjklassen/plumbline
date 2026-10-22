@@ -84,7 +84,9 @@
   function note(): void {
     const ref = menu!.refKey;
     close();
-    void dispatchLink(s, `editnote:${ref}`);
+    // A verse holds any number of notes, so "Note…" always adds one; the
+    // existing ones are edited from the study panel or the notes list.
+    void dispatchLink(s, `addnote:${ref}`);
   }
 
   function tagPick(): void {

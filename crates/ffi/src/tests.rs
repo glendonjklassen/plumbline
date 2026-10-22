@@ -1273,9 +1273,12 @@ fn route_link_via_abi() {
         assert_eq!(edit["entry"], 4);
 
         // The new Tier-0 verbs route too.
-        let note = route("editnote:John 3:16").unwrap();
+        let add = route("addnote:John 3:16").unwrap();
+        assert_eq!(add["verb"], "addNote");
+        assert_eq!(add["refKey"], "John 3:16");
+        let note = route("editnote:0123abcd").unwrap();
         assert_eq!(note["verb"], "editNote");
-        assert_eq!(note["refKey"], "John 3:16");
+        assert_eq!(note["id"], "0123abcd");
         assert_eq!(route("guide").unwrap()["verb"], "guide");
         assert_eq!(route("about").unwrap()["verb"], "about");
 
@@ -1330,17 +1333,102 @@ fn tier0_endpoints_via_abi() {
         assert!(refd.ends_with("— John 3:16 (KJV)"));
         assert!(plumbline_engine_copy_text(e, c("John 3:16").as_ptr(), c("bogus").as_ptr()).is_null());
 
-        // Personal note: absent → null, set → readable, cleared → null again.
-        assert!(plumbline_engine_user_note_json(e, c("John 3:16").as_ptr()).is_null());
-        assert!(plumbline_engine_user_note_set(e, c("John 3:16").as_ptr(), c("golden text").as_ptr(), stamp.as_ptr())
+        // Personal notes: two on one verse, each read, edited and deleted by id,
+        // and every deletion recorded for the restore merge.
+        use crate::notes_abi::*;
+        let all = || -> Value { serde_json::from_str(&take(plumbline_engine_user_notes_json(e)).unwrap()).unwrap() };
+        assert!(all()["notes"].as_array().unwrap().is_empty());
+        assert!(plumbline_engine_user_note_add(e, c("John 3:16").as_ptr(), c("golden text").as_ptr(), stamp.as_ptr())
             .is_null());
-        let note: Value =
-            serde_json::from_str(&take(plumbline_engine_user_note_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
-        assert_eq!(note["text"], "golden text");
-        let all: Value = serde_json::from_str(&take(plumbline_engine_user_notes_json(e)).unwrap()).unwrap();
-        assert_eq!(all["notes"].as_array().unwrap().len(), 1);
-        assert!(plumbline_engine_user_note_set(e, c("John 3:16").as_ptr(), c("").as_ptr(), stamp.as_ptr()).is_null());
-        assert!(plumbline_engine_user_note_json(e, c("John 3:16").as_ptr()).is_null());
+        assert!(
+            plumbline_engine_user_note_add(e, c("John 3:16").as_ptr(), c("Easter").as_ptr(), stamp.as_ptr()).is_null()
+        );
+        let notes = all()["notes"].as_array().unwrap().clone();
+        assert_eq!(notes.len(), 2, "a verse holds more than one note");
+        let id = notes[0]["id"].as_str().unwrap().to_string();
+        assert_eq!(id.len(), 32);
+        let one: Value =
+            serde_json::from_str(&take(plumbline_engine_user_note_json(e, c(&id).as_ptr())).unwrap()).unwrap();
+        assert_eq!(one["verse"], "John 3:16");
+        let edited = c("2026-01-02T00:00:00Z");
+        assert!(plumbline_engine_user_note_edit(e, c(&id).as_ptr(), c("golden text, again").as_ptr(), edited.as_ptr())
+            .is_null());
+        let one: Value =
+            serde_json::from_str(&take(plumbline_engine_user_note_json(e, c(&id).as_ptr())).unwrap()).unwrap();
+        assert_eq!(one["text"], "golden text, again");
+        assert_eq!(all()["notes"].as_array().unwrap().len(), 2, "an edit touches one note");
+        // Emptying one deletes it; deleting the other by id empties the verse.
+        assert!(plumbline_engine_user_note_edit(e, c(&id).as_ptr(), c("").as_ptr(), edited.as_ptr()).is_null());
+        assert!(plumbline_engine_user_note_json(e, c(&id).as_ptr()).is_null());
+        let other = all()["notes"][0]["id"].as_str().unwrap().to_string();
+        assert!(plumbline_engine_user_note_delete(e, c(&other).as_ptr()).is_null());
+        assert!(all()["notes"].as_array().unwrap().is_empty());
+        let records = plumbline_core::tombstone::load(&home);
+        assert!(records.contains_key(&plumbline_core::tombstone::note(&id)), "the emptied note was not recorded");
+        assert!(records.contains_key(&plumbline_core::tombstone::note(&other)), "the deleted note was not recorded");
+        assert!(
+            take(plumbline_engine_user_note_add(e, c("John 3:16").as_ptr(), c("  ").as_ptr(), stamp.as_ptr()))
+                .is_some(),
+            "an empty note is refused"
+        );
+
+        // Every other deletion records itself too, keyed as the merge reads it: a
+        // tag member, a whole tag, a whole thread. Without these a restore of an
+        // older backup puts them straight back.
+        {
+            let tomb = |k: &str| plumbline_core::tombstone::load(&home).contains_key(k);
+            assert!(plumbline_engine_tag_add(
+                e,
+                c("grace").as_ptr(),
+                c("verse").as_ptr(),
+                c("John 3:16").as_ptr(),
+                ptr::null(),
+                stamp.as_ptr()
+            )
+            .is_null());
+            assert!(plumbline_engine_tag_add(
+                e,
+                c("grace").as_ptr(),
+                c("verse").as_ptr(),
+                c("John 3:18").as_ptr(),
+                ptr::null(),
+                stamp.as_ptr()
+            )
+            .is_null());
+            // The wire carries no ids, so read the one the file holds.
+            let id =
+                plumbline_core::tag::load_tags(&home).0.into_iter().find(|t| t.tag.name == "grace").unwrap().tag.id;
+            let ident = plumbline_core::tombstone::identity(id.as_deref(), "grace");
+            assert!(plumbline_engine_tag_remove(e, c("grace").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr())
+                .is_null());
+            assert!(
+                tomb(&plumbline_core::tombstone::tag_member(&ident, "verse:John 3:16")),
+                "removing a member left no record"
+            );
+            assert!(plumbline_engine_tag_delete(e, c("grace").as_ptr()).is_null());
+            assert!(tomb(&plumbline_core::tombstone::tag(&ident)), "deleting a tag left no record");
+
+            assert!(plumbline_engine_thread_add(
+                e,
+                c("walk").as_ptr(),
+                c("John 3:16").as_ptr(),
+                ptr::null(),
+                stamp.as_ptr()
+            )
+            .is_null());
+            let tid = plumbline_core::thread::load_threads(&home)
+                .0
+                .into_iter()
+                .find(|t| t.thread.name == "walk")
+                .unwrap()
+                .thread
+                .id;
+            assert!(plumbline_engine_thread_remove(e, c("walk").as_ptr()).is_null());
+            assert!(
+                tomb(&plumbline_core::tombstone::thread(&plumbline_core::tombstone::identity(tid.as_deref(), "walk"))),
+                "deleting a thread left no record"
+            );
+        }
 
         // Memorization (Tier 2 #15): grade → card, drill, recall, coverage, activity.
         assert!(plumbline_engine_memory_grade(e, c("John 3:16").as_ptr(), c("good").as_ptr(), stamp.as_ptr()).is_null());
@@ -2244,6 +2332,7 @@ fn link_verb(l: &crate::wire::WirePanelLink) -> &'static str {
         L::EditEntryNote { .. } => "editEntryNote",
         L::MoveEntry { .. } => "moveEntry",
         L::RemoveEntry { .. } => "removeEntry",
+        L::AddNote { .. } => "addNote",
         L::EditNote { .. } => "editNote",
         L::Guide => "guide",
         L::About => "about",
@@ -2279,7 +2368,8 @@ fn wire_panel_link_keys_are_golden() {
         ("editthreadnotes:0", "editThreadNotes", &["index", "verb"]),
         ("editweavenotes:0", "editWeaveNotes", &["index", "verb"]),
         ("editentrynote:1:4", "editEntryNote", &["entry", "thread", "verb"]),
-        ("editnote:John 3:16", "editNote", &["refKey", "verb"]),
+        ("addnote:John 3:16", "addNote", &["refKey", "verb"]),
+        ("editnote:0123abcd", "editNote", &["id", "verb"]),
         ("guide", "guide", &["verb"]),
         ("about", "about", &["verb"]),
     ];

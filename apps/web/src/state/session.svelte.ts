@@ -292,6 +292,8 @@ export class Session {
   showHistory = $state(false);
   /** The one Settings dialog. */
   showSettings = $state(false);
+  /** Backup and restore (BackupDialog), raised from the ≡ menu. */
+  showBackup = $state(false);
   /** The ≡ utilities menu (History · Guide & about · shortcuts · Settings).
    *  Session state, not Shell-local, so every destination's ScreenBar can raise
    *  the same menu — Settings must not cost a trip back to Read. */
@@ -447,6 +449,9 @@ export class Session {
    *  room for two: an unfolded Pixel Fold is ~840px, which three panes cut into
    *  280px columns — before the 380px study sidebar beside them. */
   roomy = $state(matchMedia("(min-width: 1100px)").matches);
+  /** The backup phrase on show (rendered by PhraseDialog); resolves whether the
+   *  reader went on with it — false from Escape, the backdrop or Back. */
+  phraseReq = $state<{ phrase: string; resolve: (ok: boolean) => void } | null>(null);
   /** Active text prompt (rendered by PromptDialog); resolves null on cancel. */
   promptReq = $state<{
     title: string;
@@ -456,6 +461,9 @@ export class Session {
      *  phone's numpad. Still a text field — `type="number"` brings spinners and
      *  the browser's own validation UI to a dialog that has an OK button. */
     numeric?: boolean;
+    /** Offer a Delete button too, labelled this; `onDelete` is what it does. */
+    deleteLabel?: string;
+    onDelete?: () => void;
     resolve: (v: string | null) => void;
   } | null>(null);
 
@@ -489,6 +497,7 @@ export class Session {
     ["bookNavFor", null],
     ["showHistory", false],
     ["showSettings", false],
+    ["showBackup", false],
     ["showShortcuts", false],
     ["showPresent", false],
     ["menuOpen", false],
@@ -532,6 +541,7 @@ export class Session {
     if (this.menuOpen) this.menuOpen = false;
     else if (this.promptReq) this.cancelPrompt();
     else if (this.confirmReq) this.cancelConfirm();
+    else if (this.phraseReq) this.cancelPhrase();
     // cancelPrompt is also the pick's cancel — the two share it (one question
     // at a time, so they are never open together).
     else if (this.pickReq) this.cancelPrompt();
@@ -544,6 +554,7 @@ export class Session {
     else if (this.tagWeaveFor !== null) this.tagWeaveFor = null;
     else if (this.memorizePassageFrom) this.memorizePassageFrom = null;
     else if (this.showSettings) this.showSettings = false;
+    else if (this.showBackup) this.showBackup = false;
     else if (this.showHistory) this.showHistory = false;
     else if (this.showShortcuts) this.showShortcuts = false;
     else if (this.hymnSinging) this.hymnSinging = false;
@@ -575,7 +586,7 @@ export class Session {
   /** Whether anything [[dismissTransient]] would close is on screen — the
    *  question the phone's Back button asks (see [[installRouter]]). */
   get transientOpen(): boolean {
-    if (this.promptReq || this.confirmReq || this.pickReq) return true;
+    if (this.promptReq || this.confirmReq || this.pickReq || this.phraseReq) return true;
     return Session.TRANSIENT.some(
       ([field, closed]) => (this as unknown as Record<string, unknown>)[field] !== closed,
     );
@@ -642,10 +653,44 @@ export class Session {
     this.pickReq = null;
   }
 
+  /** Show the backup phrase and wait: true when the reader goes on with it. */
+  askPhrase(phrase: string): Promise<boolean> {
+    this.phraseReq?.resolve(false);
+    return new Promise((resolve) => {
+      this.phraseReq = { phrase, resolve };
+    });
+  }
+
+  /** Dismiss the phrase dialog as a "no", so its asker does not hang. */
+  cancelPhrase(): void {
+    this.phraseReq?.resolve(false);
+    this.phraseReq = null;
+  }
+
   /** Ask the user for text. */
   askText(title: string, initial = "", multiline = false): Promise<string | null> {
     return new Promise((resolve) => {
       this.promptReq = { title, initial, multiline, resolve };
+    });
+  }
+
+  /** Ask for text in an editor that can also delete what it edits: resolves
+   *  the text, null on cancel, or `"delete"` when the reader chose Delete.
+   *  Whatever deleting means, and whether it asks first, is the caller's. */
+  askTextOrDelete(
+    title: string,
+    initial: string,
+    deleteLabel: string,
+  ): Promise<{ text: string } | "delete" | null> {
+    return new Promise((resolve) => {
+      this.promptReq = {
+        title,
+        initial,
+        multiline: true,
+        deleteLabel,
+        onDelete: () => resolve("delete"),
+        resolve: (v) => resolve(v === null ? null : { text: v }),
+      };
     });
   }
 

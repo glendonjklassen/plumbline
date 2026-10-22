@@ -4,6 +4,7 @@
   import ReaderPane from "../reader/ReaderPane.svelte";
   import StudyPanel from "../study/StudyPanel.svelte";
   import PromptDialog from "./PromptDialog.svelte";
+  import PhraseDialog from "./PhraseDialog.svelte";
   import Shortcuts from "./Shortcuts.svelte";
   import BookNav from "./BookNav.svelte";
   import ExploreScreen from "./ExploreScreen.svelte";
@@ -23,6 +24,7 @@
   import { fade } from "svelte/transition";
   import HistorySheet from "./HistorySheet.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
+  import BackupDialog from "./BackupDialog.svelte";
   import MemorizeHost from "../memorize/MemorizeHost.svelte";
   import PassagePicker from "../memorize/PassagePicker.svelte";
   import PresentHost from "../present/PresentHost.svelte";
@@ -442,6 +444,7 @@
     <button onclick={go(() => (s.showHistory = true))}>{t("shell.history")}</button>
     <button onclick={go(() => (s.panel = { kind: "guide" }))}>{t("shell.guideAndAbout")}</button>
     <button onclick={go(() => (s.showShortcuts = true))}>{t("shell.shortcuts")}</button>
+    <button onclick={go(() => (s.showBackup = true))}>{t("shell.backup")}</button>
     <button onclick={go(() => (s.showSettings = true))}>{t("shell.settings")}</button>
   </div>
 {/if}
@@ -485,6 +488,7 @@
   </div>
 {/if}
 <PromptDialog />
+<PhraseDialog />
 <Shortcuts />
 <MapsHost />
 <ContextMenu />
@@ -494,6 +498,7 @@
 <HistorySheet />
 <PresentHost />
 <SettingsDialog />
+<BackupDialog />
 <BookNav />
 <MarkReadDialog />
 <ThreadPicker />

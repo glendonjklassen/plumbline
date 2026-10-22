@@ -1162,7 +1162,8 @@ pub enum WirePanelLink {
     EditEntryNote { thread: usize, entry: usize },
     MoveEntry { thread: usize, entry: usize, delta: i32 },
     RemoveEntry { thread: usize, entry: usize },
-    EditNote { ref_key: String },
+    AddNote { ref_key: String },
+    EditNote { id: String },
     Guide,
     About,
 }
@@ -1197,7 +1198,8 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::EditEntryNote { thread, entry } => WirePanelLink::EditEntryNote { thread, entry },
         PanelLink::MoveEntry { thread, entry, delta } => WirePanelLink::MoveEntry { thread, entry, delta },
         PanelLink::RemoveEntry { thread, entry } => WirePanelLink::RemoveEntry { thread, entry },
-        PanelLink::EditNote { refkey } => WirePanelLink::EditNote { ref_key: refkey },
+        PanelLink::AddNote { refkey } => WirePanelLink::AddNote { ref_key: refkey },
+        PanelLink::EditNote { id } => WirePanelLink::EditNote { id },
         PanelLink::Guide => WirePanelLink::Guide,
         PanelLink::About => WirePanelLink::About,
     }
@@ -1604,6 +1606,8 @@ pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WireUserNote {
+    /// The note's identity: edit and delete name it, and a restore merges by it.
+    pub id: String,
     pub verse: String,
     pub display: String,
     pub text: String,

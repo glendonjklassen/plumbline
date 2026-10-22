@@ -27,7 +27,7 @@ struct Fake {
     study_xrefs: HashMap<String, Vec<StudyXrefView>>,
     verse_tags: HashMap<String, Vec<(usize, String)>>,
     notes: HashMap<String, Vec<String>>,
-    user_notes: HashMap<String, String>,
+    user_notes: HashMap<String, Vec<(String, String)>>,
     threads: Vec<ThreadView>,
     tags: Vec<TagView>,
     weaves: Vec<WeaveView>,
@@ -106,8 +106,8 @@ impl PanelSource for Fake {
     fn verse_notes(&self, verse: &str) -> Vec<String> {
         self.notes.get(verse).cloned().unwrap_or_default()
     }
-    fn user_note(&self, verse: &str) -> Option<String> {
-        self.user_notes.get(verse).cloned()
+    fn user_notes(&self, verse: &str) -> Vec<(String, String)> {
+        self.user_notes.get(verse).cloned().unwrap_or_default()
     }
     fn threads(&self) -> Vec<ThreadView> {
         self.threads.clone()
@@ -231,7 +231,8 @@ fn parse_link_round_trips_the_producer_uris() {
     assert_eq!(parse_link("editentrynote:2:4"), Some(PanelLink::EditEntryNote { thread: 2, entry: 4 }));
 
     // Personal note + help verbs.
-    assert_eq!(parse_link("editnote:John 3:16"), Some(PanelLink::EditNote { refkey: "John 3:16".into() }));
+    assert_eq!(parse_link("addnote:John 3:16"), Some(PanelLink::AddNote { refkey: "John 3:16".into() }));
+    assert_eq!(parse_link("editnote:abc123"), Some(PanelLink::EditNote { id: "abc123".into() }));
     assert_eq!(parse_link("guide"), Some(PanelLink::Guide));
     assert_eq!(parse_link("about"), Some(PanelLink::About));
 
@@ -269,7 +270,7 @@ fn simple_word_study_is_just_display_word_and_dictionary() {
     // The occurrence + note links are pre-baked; author actions are ungated.
     let u = uris(&blocks);
     assert!(u.contains(&"occ:G2316".to_string()));
-    assert!(u.contains(&"editnote:John 3:16".to_string()));
+    assert!(u.contains(&"addnote:John 3:16".to_string()));
     assert!(u.contains(&"addtag:John 3:16".to_string()));
     // No analysis sections with every gate off.
     assert!(section_titles(&blocks).is_empty());
@@ -947,19 +948,29 @@ fn word_study_shows_personal_note_and_edit_link_in_both_modes() {
     f.displays.insert("John 3:16".into(), "John 3:16".into());
     f.words.insert(("John 3:16".into(), 1), "God".into());
     f.entries.insert("G2316".into(), StrongsView { lemma: Some("θεός".into()), ..Default::default() });
-    f.user_notes.insert("John 3:16".into(), "the whole gospel in one verse".into());
+    f.user_notes.insert(
+        "John 3:16".into(),
+        vec![("n1".into(), "the whole gospel in one verse".into()), ("n2".into(), "preached, Easter".into())],
+    );
 
     // Simple mode still surfaces the personal note + an edit link.
     let sb = word_study(&f, false, "John 3:16", 1, &["G2316".to_string()]);
-    assert!(uris(&sb).contains(&"editnote:John 3:16".to_string()));
-    assert!(sb.iter().any(|b| text_of(b) == "the whole gospel in one verse"));
-    let row = sb.iter().map(text_of).find(|t| t.contains("edit")).expect("the note row");
+    // An add link on the header, and an edit link on EACH note, by its id.
+    assert!(uris(&sb).contains(&"addnote:John 3:16".to_string()));
+    assert!(uris(&sb).contains(&"editnote:n1".to_string()));
+    assert!(uris(&sb).contains(&"editnote:n2".to_string()));
+    assert!(sb.iter().any(|b| text_of(b).starts_with("the whole gospel in one verse")));
+    assert!(sb.iter().any(|b| text_of(b).starts_with("preached, Easter")));
+    let row = sb.iter().map(text_of).find(|t| t.starts_with('✎')).expect("the note header row");
     // ONE pencil on the row, not two. The label IS the glyph and the verb used to
-    // carry a second — "✎   ✎ edit" (maintainer, 2026-08-26). Counting rather
+    // carry a second — "✎   ✎ add" (maintainer, 2026-08-26). Counting rather
     // than matching a literal, because the gap between them is three spaces and a
-    // `contains("✎ edit")` would pass again the moment either side changes width.
+    // `contains("✎ add")` would pass again the moment either side changes width.
     assert_eq!(row.matches('✎').count(), 1, "two pencils on the note row: {row:?}");
-    assert!(row.contains("edit"));
+    assert!(row.contains("add"), "the header adds a note: {row:?}");
+    // The notes themselves carry the edit verb, and no pencil of their own.
+    let note_row = sb.iter().map(text_of).find(|t| t.starts_with("the whole gospel")).unwrap();
+    assert!(note_row.ends_with("edit") && !note_row.contains('✎'), "{note_row:?}");
 
     // With no note, the link says "add" — and still just the one pencil.
     let mut g = Fake::default();
@@ -1312,14 +1323,15 @@ fn word_usage_card_notes_are_a_section_with_a_plus() {
     let f = Fake {
         word_usage: Some(usage_view()),
         displays: HashMap::from([("Gen 1:1".to_string(), "Genesis 1:1".to_string())]),
-        user_notes: HashMap::from([("Gen 1:1".to_string(), "steadfast love".to_string())]),
+        user_notes: HashMap::from([("Gen 1:1".to_string(), vec![("n1".to_string(), "steadfast love".to_string())])]),
         ..Default::default()
     };
     let q = UsageQuery { word: "mercy", lens: None, scope: "all", page: 0, origin: Some(("Gen 1:1", 2)), codes: &[] };
     let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
     let runs = flat_runs(&blocks);
     assert!(runs.iter().any(|(t, u, bold)| t == "Notes" && u.is_none() && *bold));
-    assert!(runs.iter().any(|(t, u, _)| t == "＋" && u.as_deref() == Some("editnote:Gen 1:1")));
+    assert!(runs.iter().any(|(t, u, _)| t == "＋" && u.as_deref() == Some("addnote:Gen 1:1")));
+    assert!(runs.iter().any(|(_, u, _)| u.as_deref() == Some("editnote:n1")), "each note carries its own edit link");
     assert!(runs.iter().any(|(t, _, _)| t == "steadfast love"));
     // And no stray pencil: the glyph row this replaced is gone.
     assert!(!runs.iter().any(|(t, _, _)| t.contains('✎')));

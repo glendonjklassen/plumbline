@@ -499,45 +499,53 @@ test("opening a weave splits to its passages; verse clicks stay responsive (free
   }
 });
 
-test("backup round-trips through a zip", async ({ page }, testInfo) => {
+test("backup round-trips through a zip", async ({ page, browser }, testInfo) => {
   await boot(page);
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    await s.engine.userNoteSet("John 3:16", "backup probe", "2026-07-25T00:00:00Z");
+    await s.engine.userNoteAdd("John 3:16", "backup probe", "2026-07-25T00:00:00Z");
   });
+  // Backup is its own item in the ≡ menu. This test is about the plain zip,
+  // which is "Backup"; encrypted-backup.spec.ts covers the other.
   await page.getByLabel("Menu").click();
-  await page.getByRole("button", { name: "Settings" }).click();
-  // Backup sits with the everyday settings, not under Advanced.
+  await page.getByRole("button", { name: "Backup", exact: true }).click();
+  await page.locator('[data-surface="backup"]').getByRole("button", { name: "Backup", exact: true }).click();
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: "Back up (.zip)" }).click(),
+    page.locator('[data-surface="confirm"]').getByRole("button", { name: "Back up", exact: true }).click(),
   ]);
   const zipPath = testInfo.outputPath("backup.zip");
   await download.saveAs(zipPath);
 
-  await page.evaluate(async () => {
-    const s = (window as any).__plumbline;
-    await s.engine.userNoteSet("John 3:16", "damaged", "2026-07-25T01:00:00Z");
-  });
+  // Restore merges into a device, so it is restored onto ANOTHER one: a fresh
+  // context with storage of its own and no notes.
+  const ctx = await browser.newContext({ baseURL: (testInfo.project.use as any).baseURL });
+  const other = await ctx.newPage();
+  await boot(other);
+  await other.getByLabel("Menu").click();
+  await other.getByRole("button", { name: "Backup", exact: true }).click();
   // Mark the current document, then wait until the restore's reload has
   // actually replaced it (waitForLoadState resolves against the old page).
-  await page.evaluate(() => ((window as any).__preRestore = true));
-  await page.locator('input[type="file"]').setInputFiles(zipPath);
+  await other.evaluate(() => ((window as any).__preRestore = true));
+  await other.locator('input[type="file"]').setInputFiles(zipPath);
   await expect
     // A poll tick landing inside the reload throws "context destroyed" and fails
     // the poll rather than retrying it.
     .poll(
-      async () => page.evaluate(() => (window as any).__preRestore ?? null).catch(() => "navigating"),
+      async () => other.evaluate(() => (window as any).__preRestore ?? null).catch(() => "navigating"),
       {
         timeout: 30_000,
       },
     )
     .toBeNull();
-  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
-  const text = await page.evaluate(
-    async () => (await (window as any).__plumbline.engine.userNote("John 3:16"))?.text,
+  await expect(other.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
+  const texts = await other.evaluate(async () =>
+    (((await (window as any).__plumbline.engine.userNotes())?.notes ?? []) as any[])
+      .filter((n) => n.verse === "John 3:16")
+      .map((n) => n.text),
   );
-  expect(text).toBe("backup probe");
+  expect(texts).toEqual(["backup probe"]);
+  await ctx.close();
 });
 
 // ── boot resilience ───────────────────────────────────────────────────────────
@@ -654,11 +662,11 @@ test("read pack files are freed, and the reader can still author afterwards", as
     const s = (window as any).__plumbline;
     // Authoring makes load_study rebuild all study data from the home — the moment
     // an over-eager eviction shows up.
-    await s.engine.userNoteSet("Gen 1:1", "eviction probe", "2026-07-28T00:00:00Z");
+    await s.engine.userNoteAdd("Gen 1:1", "eviction probe", "2026-07-28T00:00:00Z");
     const [weaves, threads, mine, margin] = await Promise.all([
       s.engine.weaves(),
       s.engine.threads(),
-      s.engine.userNote("Gen 1:1"),
+      s.engine.userNotes(),
       // The margin notes come from data/kjv-notes.jsonl, which eviction must never
       // touch. Gen 1:4 has one.
       s.engine.verseNotes("Gen 1:4"),

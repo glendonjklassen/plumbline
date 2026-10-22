@@ -61,6 +61,12 @@ async function openSettings(page: Page): Promise<void> {
   await expect(page.locator('[data-surface="settings"]')).toBeVisible();
 }
 
+async function openBackup(page: Page): Promise<void> {
+  await page.getByLabel("Menu").click();
+  await page.getByRole("button", { name: "Backup", exact: true }).click();
+  await expect(page.locator('[data-surface="backup"]')).toBeVisible();
+}
+
 /** Hand the zip to the Restore row and wait for the reload it triggers. `waitForLoadState`
  *  resolves against the document we already have, so the marker is what tells us the new one
  *  is up. */
@@ -96,7 +102,7 @@ test("a backup written before the rename restores the reader's settings, not the
   expect(before.bodySize, "fixture: the live text size must differ from the backup's").not.toBe(33);
   expect(before.theme, "fixture: the live theme must differ from the backup's").not.toBe("night");
 
-  await openSettings(page);
+  await openBackup(page);
   await restore(page, legacyBackup());
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 
@@ -110,7 +116,8 @@ test("a backup written before the rename restores the reader's settings, not the
       copyStyle: s.config.copyStyle ?? "verseRef",
       pane: `${s.panes[0].book} ${s.panes[0].chapter}`,
       paper: getComputedStyle(document.documentElement).getPropertyValue("--paper").trim(),
-      note: (await s.engine.userNote("John 3:16"))?.text ?? null,
+      note:
+        (((await s.engine.userNotes())?.notes ?? []) as any[]).find((n) => n.verse === "John 3:16")?.text ?? null,
     };
   });
 
@@ -133,7 +140,7 @@ test("a backup written before the rename restores the reader's settings, not the
   // Settings shows the restored size back to the reader: the Aa preview is rendered at it, so the
   // same number is arrived at through the DOM.
   await openSettings(page);
-  const aa = await page.locator(".dialog .aa").evaluate((el) => getComputedStyle(el).fontSize);
+  const aa = await page.locator('[data-surface="settings"] .aa').evaluate((el) => getComputedStyle(el).fontSize);
   expect(aa, "Settings is not showing the restored text size").toBe("33px");
 
   // The modern-named entries in the same zip are untouched by the shim.
@@ -149,7 +156,7 @@ test("the legacy prefix is remapped under .config only, not wherever it appears"
   // the vetting never approved. Asserted through the reload rather than through
   // the toast, so it stays true whatever the copy says.
   await boot(page);
-  await openSettings(page);
+  await openBackup(page);
   await page.evaluate(() => ((window as any).__preRestore = true));
   await page.locator('input[type="file"]').setInputFiles({
     name: "plumbline-backup-rootlevel.zip",

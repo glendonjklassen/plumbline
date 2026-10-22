@@ -59,6 +59,19 @@
       <input data-modal-focus bind:value />
     {/if}
     <div class="actions">
+      {#if s.promptReq.deleteLabel}
+        <!-- Apart from Cancel/OK, on the far side: the one button here that
+             destroys something. It only says what the reader chose; asking
+             "are you sure" is the caller's, as every delete in the app asks. -->
+        <button
+          class="danger"
+          onclick={() => {
+            const r = s.promptReq;
+            s.promptReq = null;
+            r?.onDelete?.();
+          }}>{s.promptReq.deleteLabel}</button
+        >
+      {/if}
       <button onclick={() => finish(null)}>{t("common.cancel")}</button>
       <button class="primary" onclick={() => finish(value)}>{t("common.ok")}</button>
     </div>
@@ -118,6 +131,13 @@
     padding: 5px 14px;
     border-radius: 6px;
     border: 1px solid var(--rule, #d8cba8);
+  }
+  /* ConfirmDialog's danger button, so a destructive action looks one way. */
+  .actions .danger {
+    margin-right: auto;
+    border-color: var(--tierResearch, #b04a3a);
+    color: var(--tierResearch, #b04a3a);
+    font-weight: 600;
   }
   .actions .primary {
     background: var(--gold, #9e7d38);

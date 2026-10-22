@@ -56,8 +56,8 @@ test("a note on a numbered book opens its verse from the notes browser", async (
   await boot(page);
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    const err = await s.author("userNoteSet", "2Chr 7:14", "If my people shall humble themselves…", new Date().toISOString());
-    if (err) throw new Error(`userNoteSet: ${err}`);
+    const err = await s.author("userNoteAdd", "2Chr 7:14", "If my people shall humble themselves…", new Date().toISOString());
+    if (err) throw new Error(`userNoteAdd: ${err}`);
     s.panel = { kind: "notesBrowser" };
   });
   const ref = page.locator(".nb-ref");

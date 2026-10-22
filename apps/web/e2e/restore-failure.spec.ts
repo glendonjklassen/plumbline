@@ -90,9 +90,9 @@ test("a restore that fails leaves a session that can still save", async ({ page 
     })
     .toBe(true);
 
-  await page.evaluate(() => ((window as any).__plumbline.showSettings = true));
-  const settings = page.locator('[data-surface="settings"]');
-  await expect(settings).toBeVisible();
+  await page.evaluate(() => ((window as any).__plumbline.showBackup = true));
+  const surface = page.locator('[data-surface="backup"]');
+  await expect(surface).toBeVisible();
 
   // A window marker only a real document navigation can clear, so "it reloaded" is asserted rather
   // than assumed (sessionStorage would survive; this cannot).
@@ -100,7 +100,7 @@ test("a restore that fails leaves a session that can still save", async ({ page 
     (window as any).__beforeRestore = true;
     (window as any).__failUserWrites = true;
   });
-  await settings.locator('input[type="file"]').setInputFiles({
+  await surface.locator('input[type="file"]').setInputFiles({
     name: "plumbline-backup-2026-07-29.zip",
     mimeType: "application/zip",
     buffer: backupZip(),
