@@ -210,7 +210,12 @@ orthography is modernized — `dass` for `daß`), so the merge aligns **each boo
 as one token stream** in reading order, with an orthography fold and handling
 for joined words and contractions. ~98.3% of the source's ~350k tags transfer;
 words the alignment cannot confidently pair stay untagged — a missing tag is
-honest, a guessed one is not. `check-luther.py`'s seventh claim guards the
+honest, a guessed one is not. After the merge, every tag the KJV verse at the
+same address does not carry is dropped (about 1.6%): both texts render the same
+Hebrew and Greek, so a code absent from the KJV's verse is a source error or a
+slid alignment, and left in it bolded the wrong German word in the word study's
+original-word lens. `merge-strongs.py --prune` runs that pass alone over the
+shipped file. `check-luther.py`'s seventh claim guards the
 result: every code resolves in `data/strongs.json`, Hebrew only in the OT and
 Greek only in the NT, and the count is high enough to prove the merge ran.
 

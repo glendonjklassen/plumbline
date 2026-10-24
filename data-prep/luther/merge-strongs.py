@@ -37,7 +37,17 @@ FLOOR, because a big drop means one of the editions changed under us.
 
 The source tags carry their own imperfections (an occasional tag lands on a
 neighbouring function word where Luther's German restructures the sentence).
-They are transferred as-is; the tagging is the source's claim, not ours.
+Those are transferred as-is; the tagging is the source's claim, not ours.
+
+ONE CLASS OF TAG IS DROPPED, after the merge: a code the KJV verse at the same
+address does not carry at all. Both texts render the same Hebrew and Greek, so
+a Strong's number that is nowhere in the KJV's verse cannot be in Luther's
+either — it is a source error (Ezra 2:7 tagged "Elam" with H1254, which is the
+verse's "a thousand two hundred fifty and four" read as a code) or a
+book-stream alignment that slid a word. Left in, the original-word lens of the
+word study bolded "Elam" under bara', "create" (maintainer, 2026-10-24). About
+1.6% of the transferred tags. `--prune` runs this pass alone over the shipped
+file, for a corpus merged before the rule existed.
 """
 
 import json
@@ -162,6 +172,52 @@ def align_book(our_words: list[str], zef):
     return out, transferred, tagged
 
 
+def kjv_codes() -> dict[tuple[str, int, int], set[str]]:
+    """Verse address → the KJV's own code set: the ground truth a transferred
+    tag has to sit inside."""
+    codes: dict[tuple[str, int, int], set[str]] = {}
+    with (ROOT / "data" / "kjv.jsonl").open(encoding="utf-8") as f:
+        next(f)
+        for line in f:
+            r = json.loads(line)
+            codes[(r["b"], r["c"], r["v"])] = {c for t in r["t"] for c in t[3]}
+    return codes
+
+
+def prune_foreign(rows, codes) -> int:
+    """Drop every tag the KJV verse at the same address does not carry (see the
+    module doc). Returns how many were dropped. Tokens, flags and the tags that
+    belong are untouched."""
+    dropped = 0
+    for r in rows:
+        allowed = codes.get((r["b"], r["c"], r["v"]), set())
+        for t in r["t"]:
+            if t[3]:
+                keep = [c for c in t[3] if c in allowed]
+                dropped += len(t[3]) - len(keep)
+                t[3] = keep
+    return dropped
+
+
+def write_rows(header, rows) -> None:
+    lines = [json.dumps(header, ensure_ascii=False, separators=(",", ":"))]
+    for r in rows:
+        lines.append(
+            json.dumps({"b": r["b"], "c": r["c"], "v": r["v"], "t": r["t"]}, ensure_ascii=False, separators=(",", ":"))
+        )
+    LUTHER.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def prune_only() -> int:
+    with LUTHER.open(encoding="utf-8") as f:
+        header = json.loads(next(f))
+        rows = [json.loads(l) for l in f if l.strip()]
+    dropped = prune_foreign(rows, kjv_codes())
+    write_rows(header, rows)
+    print(f"dropped {dropped} tag(s) the KJV verse does not carry")
+    return 0
+
+
 def main(src: str) -> int:
     order = osis_order()
     zef = zefania_streams(Path(src), order)
@@ -202,14 +258,13 @@ def main(src: str) -> int:
         print(f"transfer rate {rate:.1%} below floor {FLOOR:.0%} — the editions have diverged; not writing", file=sys.stderr)
         return 1
 
+    dropped = prune_foreign(rows, kjv_codes())
     header["source"] = SOURCE
-    lines = [json.dumps(header, ensure_ascii=False, separators=(",", ":"))]
-    for r in rows:
-        lines.append(
-            json.dumps({"b": r["b"], "c": r["c"], "v": r["v"], "t": r["t"]}, ensure_ascii=False, separators=(",", ":"))
-        )
-    LUTHER.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"tagged {total_transferred} of {total_tagged} source tags ({rate:.1%}) across {len(rows)} verses")
+    write_rows(header, rows)
+    print(
+        f"tagged {total_transferred} of {total_tagged} source tags ({rate:.1%}) across {len(rows)} verses; "
+        f"dropped {dropped} the KJV verse does not carry"
+    )
     return 0
 
 
@@ -217,4 +272,4 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print(__doc__, file=sys.stderr)
         raise SystemExit(2)
-    raise SystemExit(main(sys.argv[1]))
+    raise SystemExit(prune_only() if sys.argv[1] == "--prune" else main(sys.argv[1]))

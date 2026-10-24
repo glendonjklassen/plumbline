@@ -57,6 +57,7 @@ use plumbline_rnd::{bridge, burst, concept, morph};
 pub mod backup;
 pub mod devotionals;
 pub mod dwell;
+pub mod memory_today;
 pub mod notes_abi;
 pub mod plans;
 pub mod reading_map;
@@ -3288,13 +3289,16 @@ impl PanelSource for PlumblineEngine {
         // the whole card, and this runs over every token of every verse painted.
         Some(usage_over(&self.corpus, &all, scope, page, folded, &move |t| group.contains(&search::fold_word(&t.word))))
     }
-    fn code_usage(&self, code: &str, scope: &str, page: u32) -> Option<panel::WordUsageView> {
+    fn code_usage(&self, code: &str, scope: &str, page: u32, family: bool) -> Option<panel::WordUsageView> {
         let ix = self.search_ix_ready()?;
-        // The whole derivation family, not the one code: the surface lens answers
-        // "rulers" with "ruler", and the original-word lens owes the same — δαίμων
-        // and "possessed with devils" (δαιμονίζομαι) beside δαιμόνιον. The card's
-        // same-root row names what was folded in; `code_family` and this must agree.
-        let family = panel::PanelSource::code_family(self, code);
+        // The ONE code unless the reader widened the lens: the family fold used to
+        // be the only answer, and it bolded "beloved" (ἀγαπητός) and "charity"
+        // (ἀγάπη) under a card headed ἀγαπάω, which read as the wrong words
+        // (maintainer, 2026-10-24). Widened, it is the whole derivation family —
+        // δαίμων and "possessed with devils" (δαιμονίζομαι) beside δαιμόνιον — and
+        // the card's same-root row names what was folded in; `code_family` and
+        // this must agree.
+        let family = if family { panel::PanelSource::code_family(self, code) } else { vec![code.to_string()] };
         let all: Vec<usize> = if family.len() == 1 {
             ix.lemma_verses(code).to_vec()
         } else {

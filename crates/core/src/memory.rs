@@ -433,6 +433,41 @@ pub fn due_queue(cards: &HashMap<VRef, Card>, now: &str) -> Vec<VRef> {
     due.into_iter().cloned().collect()
 }
 
+/// Today's memorization work, as the plans surface schedules it: the due cards
+/// a daily cap still has room for, beside what the cap is and how much of it
+/// is already spent.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TodayQueue {
+    /// The cards to review now, most overdue first (reading order within a
+    /// day), cut to what the cap leaves. Empty when the day's work is done.
+    pub refs: Vec<VRef>,
+    /// Every due card, capped or not — so a tile can say "3 of 12 today".
+    pub due_total: usize,
+    /// Cards reviewed on `now`'s calendar day, which is what the cap counts.
+    pub reviewed_today: usize,
+    /// The cap as given; `0` means no limit.
+    pub cap: u32,
+}
+
+/// [`due_queue`] under a daily cap (`0` = unlimited): a reader who set "ten
+/// verses a day" and has reviewed four gets at most six, the most overdue
+/// first so a card never starves behind a later book. A card graded today
+/// counts against the cap whatever the grade, so a lapse does not reopen the
+/// day — it is due again tomorrow anyway (`review`).
+pub fn today_queue(cards: &HashMap<VRef, Card>, now: &str, cap: u32) -> TodayQueue {
+    let today = now.get(..10).unwrap_or(now);
+    let reviewed_today = cards.values().filter(|c| c.reviews.iter().any(|r| r.at.starts_with(today))).count();
+    let mut due: Vec<&Card> = cards.values().filter(|c| is_due(c, now)).collect();
+    due.sort_by_key(|c| (date_to_days(&c.due).unwrap_or(i64::MIN), c.verse.reading_key()));
+    let room = if cap == 0 { usize::MAX } else { (cap as usize).saturating_sub(reviewed_today) };
+    TodayQueue {
+        refs: due.iter().take(room).map(|c| c.verse.clone()).collect(),
+        due_total: due.len(),
+        reviewed_today,
+        cap,
+    }
+}
+
 // ── drills (pure text over a verse's words) ──────────────────────────────────
 
 /// First-letter prompt: each word reduced to its first letter (leading/trailing
@@ -706,6 +741,48 @@ mod tests {
     use super::*;
 
     const T0: &str = "2026-01-01T00:00:00Z";
+
+    #[test]
+    fn today_queue_caps_the_day_and_counts_what_was_reviewed() {
+        let now = "2026-01-10T12:00:00Z";
+        let mut cards = HashMap::new();
+        // Three due cards: one overdue since the 8th, two new today — and one
+        // not due until next week, which never shows.
+        let mut late = Card::new(VRef::new("Rom", 8, 28), "kjv1769-tok2", T0);
+        late.due = "2026-01-08".to_string();
+        cards.insert(late.verse.clone(), late);
+        for v in [VRef::new("Gen", 1, 1), VRef::new("John", 3, 16)] {
+            cards.insert(v.clone(), Card::new(v, "kjv1769-tok2", now));
+        }
+        let mut later = Card::new(VRef::new("Ps", 23, 1), "kjv1769-tok2", T0);
+        later.due = "2026-01-17".to_string();
+        cards.insert(later.verse.clone(), later);
+
+        // Cap 2 of 3 due: the overdue card leads, then reading order.
+        let q = today_queue(&cards, now, 2);
+        assert_eq!(q.due_total, 3);
+        assert_eq!(q.reviewed_today, 0);
+        assert_eq!(q.refs, [VRef::new("Rom", 8, 28), VRef::new("Gen", 1, 1)]);
+
+        // No cap: all three, same order.
+        assert_eq!(today_queue(&cards, now, 0).refs.len(), 3);
+
+        // A review today spends one of the cap's two, whatever the grade: an
+        // `Again` leaves the card for tomorrow and still counts as today's work.
+        let rom = VRef::new("Rom", 8, 28);
+        review(cards.get_mut(&rom).unwrap(), Grade::Again, now);
+        let q = today_queue(&cards, now, 2);
+        assert_eq!((q.due_total, q.reviewed_today), (2, 1));
+        assert_eq!(q.refs, [VRef::new("Gen", 1, 1)]);
+
+        // Cap spent: nothing to do, though cards are still due.
+        review(cards.get_mut(&VRef::new("Gen", 1, 1)).unwrap(), Grade::Good, now);
+        let q = today_queue(&cards, now, 2);
+        assert_eq!((q.due_total, q.reviewed_today), (1, 2));
+        assert!(q.refs.is_empty());
+        // Yesterday's reviews are not today's.
+        assert_eq!(today_queue(&cards, "2026-01-11T12:00:00Z", 2).reviewed_today, 0);
+    }
 
     #[test]
     fn sm2_interval_progression_on_good() {

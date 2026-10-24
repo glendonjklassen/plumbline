@@ -464,8 +464,10 @@ pub trait PanelSource {
 
     /// The usage card's original-word lens: the same view shape, but every verse
     /// tagged with `code`, emphasizing the tokens carrying it whatever the surface
-    /// rendering. Same `None` semantics as [`PanelSource::word_usage`].
-    fn code_usage(&self, _code: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
+    /// rendering. `family` widens that to every code in
+    /// [`PanelSource::code_family`]; off, only `code` itself is evidence. Same
+    /// `None` semantics as [`PanelSource::word_usage`].
+    fn code_usage(&self, _code: &str, _scope: &str, _page: u32, _family: bool) -> Option<WordUsageView> {
         None
     }
 
@@ -556,14 +558,18 @@ pub enum PanelLink {
         scope: String,
         page: u32,
     },
-    /// `lusage:PAGE:CODE:WORD:SCOPE` — the usage card in its original-word lens:
+    /// `lusage:PAGE:CODE[+]:WORD:SCOPE` — the usage card in its original-word lens:
     /// `code`'s occurrences, `word` kept so the surface chip can switch back. Same
-    /// trailing-SCOPE layout as `wusage:`.
+    /// trailing-SCOPE layout as `wusage:`. A `+` after the code widens the lens to
+    /// the code's whole derivation family (`family`); without it the lens is the
+    /// one word, which is what the reader tapped (maintainer, 2026-10-24: the
+    /// family fold bolded "beloved" under ἀγαπάω and read as a wrong answer).
     CodeUsage {
         code: String,
         word: String,
         scope: String,
         page: u32,
+        family: bool,
     },
     /// `threadedit:I:0|1` — leave/enter the thread detail's edit mode.
     ThreadEditMode {
@@ -713,6 +719,10 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
             let (page, rest) = rest.split_once(':')?;
             let (code, rest) = rest.split_once(':')?;
             let (word, scope) = rest.split_once(':').unwrap_or((rest, "all"));
+            let (code, family) = match code.strip_suffix('+') {
+                Some(c) => (c, true),
+                None => (code, false),
+            };
             if code.is_empty() {
                 return None;
             }
@@ -721,6 +731,7 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
                 word: word.to_string(),
                 scope: scope.to_string(),
                 page: page.parse().ok()?,
+                family,
             }
         }
         "threadedit" => {
@@ -1138,7 +1149,18 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
 /// The per-verse extras after a word's code blocks: author actions, weave + TSK
 /// cross-references, tags, and margin notes. Author actions and the verse's tags are
 /// the reader's own data and are never gated.
+/// Everything a verse carries below a word study: the reader's own rows, then
+/// the references. One fetch of the weave partners serves both halves.
 fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<Block>) {
+    let xrefs = src.verse_xrefs(verse);
+    verse_own(src, verse, &xrefs, out);
+    verse_refs(src, verse, gates, &xrefs, out);
+}
+
+/// The verse's OWN rows: tag / add-to-thread, the weaves it is in, its tags.
+/// What the reader reaches for first, so the usage card places it before the
+/// evidence; `verse_refs` is the tail.
+fn verse_own(src: &dyn PanelSource, verse: &str, xrefs: &[XrefView], out: &mut Vec<Block>) {
     out.push(Block::Para {
         runs: vec![
             Run::new(s("panel.tagVerse"), sz::LIST, Color::Gold).link(format!("addtag:{verse}")),
@@ -1150,8 +1172,6 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
         drag: None,
     });
 
-    let xrefs = src.verse_xrefs(verse);
-
     // Which weaves this verse is IN, before the partner list and separate from it —
     // "what is this part of" is a different question from "what does it connect to".
     // Derived from the partners rather than fetched: a weave is a graph of
@@ -1159,7 +1179,7 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
     // and the distinct weaves ARE the membership. First-seen (canon) order is kept,
     // and the dedupe is by NAME because that is what identifies a weave to a reader.
     let mut in_weaves: Vec<(&str, Option<usize>)> = Vec::new();
-    for x in &xrefs {
+    for x in xrefs {
         if !in_weaves.iter().any(|(name, _)| *name == x.weave) {
             in_weaves.push((&x.weave, x.weave_index));
         }
@@ -1175,6 +1195,22 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
         }
     }
 
+    let tags = src.verse_tags(verse);
+    if !tags.is_empty() {
+        out.push(Block::para(vec![Run::new(s("panel.tags"), sz::LABEL, Color::Ink).bold()]));
+        for (i, name) in &tags {
+            out.push(Block::para(vec![
+                Run::new(name, sz::LIST, Color::Gold).link(format!("tag:{i}")),
+                Run::new("  ", sz::LIST, Color::Ink),
+                Run::new("✕", sz::LIST, Color::Faded).link(format!("untag:{i}:{verse}")),
+            ]));
+        }
+    }
+}
+
+/// The verse's references: weave partners, the TSK study cross-references
+/// (gated), and the translators' margin notes.
+fn verse_refs(src: &dyn PanelSource, verse: &str, gates: Gates, xrefs: &[XrefView], out: &mut Vec<Block>) {
     if !xrefs.is_empty() {
         out.push(Block::para(vec![Run::new(sn("panel.xrefs", xrefs.len()), sz::LABEL, Color::Ink).bold()]));
         for p in xrefs.iter().take(40) {
@@ -1211,18 +1247,6 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
                     Run::new(sn("panel.more", sx.len() - 40), sz::CAPTION, Color::Faded).italic()
                 ]));
             }
-        }
-    }
-
-    let tags = src.verse_tags(verse);
-    if !tags.is_empty() {
-        out.push(Block::para(vec![Run::new(s("panel.tags"), sz::LABEL, Color::Ink).bold()]));
-        for (i, name) in &tags {
-            out.push(Block::para(vec![
-                Run::new(name, sz::LIST, Color::Gold).link(format!("tag:{i}")),
-                Run::new("  ", sz::LIST, Color::Ink),
-                Run::new("✕", sz::LIST, Color::Faded).link(format!("untag:{i}:{verse}")),
-            ]));
         }
     }
 
@@ -1315,7 +1339,7 @@ pub fn code_study_card_gated(src: &dyn PanelSource, gates: Gates, code: &str, wo
 // ── the word-usage card (word-first study candidate) ──────────────────────────
 
 /// Occurrence lines per page of the usage card.
-pub const USAGE_PAGE_LINES: usize = 20;
+pub const USAGE_PAGE_LINES: usize = 8;
 
 /// TODO(i18n): the usage card's few labels ship hardcoded English while the
 /// language push owns the catalogues — `every_shipped_string_is_translated` is
@@ -1325,8 +1349,9 @@ fn wusage_uri(word: &str, scope: &str, page: u32) -> String {
     format!("wusage:{page}:{word}:{scope}")
 }
 
-fn lusage_uri(code: &str, word: &str, scope: &str, page: u32) -> String {
-    format!("lusage:{page}:{code}:{word}:{scope}")
+fn lusage_uri(code: &str, word: &str, scope: &str, page: u32, family: bool) -> String {
+    let plus = if family { "+" } else { "" };
+    format!("lusage:{page}:{code}{plus}:{word}:{scope}")
 }
 
 /// What the usage card is asked to show.
@@ -1337,6 +1362,9 @@ pub struct UsageQuery<'a> {
     /// occurrence of that Strong's-tagged original word, whatever the surface
     /// rendering; `None` follows the surface word itself.
     pub lens: Option<&'a str>,
+    /// With the lens on: widen it to the code's whole derivation family
+    /// ([`PanelSource::code_family`]). Off, the lens is the one word.
+    pub family: bool,
     /// A [`crate::search::SearchScope::token`] string; empty means `all`.
     pub scope: &'a str,
     pub page: u32,
@@ -1358,6 +1386,9 @@ pub struct UsageQuery<'a> {
 pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> Vec<Block> {
     let mut out = Vec::new();
     let scope = if q.scope.is_empty() { "all" } else { q.scope };
+    // The tapped verse's weave partners, fetched once: its own rows (above the
+    // evidence) and its references (below) both read them.
+    let xrefs = q.origin.map(|(verse, _)| src.verse_xrefs(verse)).unwrap_or_default();
 
     if let Some((verse, token)) = q.origin {
         let display = src.verse_display(verse).unwrap_or_else(|| verse.to_string());
@@ -1397,7 +1428,7 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
             runs.push(if q.lens == Some(code.as_str()) {
                 Run::new(lemma, sz::LABEL, Color::Ink).bold()
             } else {
-                Run::new(lemma, sz::LABEL, Color::Gold).link(lusage_uri(code, q.word, scope, 0))
+                Run::new(lemma, sz::LABEL, Color::Gold).link(lusage_uri(code, q.word, scope, 0, false))
             });
             // The transliteration beside the chip too, so the row reads before
             // it is tapped.
@@ -1414,6 +1445,7 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
                 lemma_line(&e, &mut out);
             }
             same_root_row(src, code, &mut out);
+            family_toggle_row(src, q, scope, &mut out);
         }
     }
 
@@ -1431,11 +1463,16 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
             drag: None,
         });
         note_rows(src, verse, &mut out);
+        // The reader's own rows next — tag, thread, what the verse is already
+        // in — before the evidence, which for a common word runs to pages. They
+        // used to trail the whole card (maintainer, 2026-10-24: "I have to
+        // scroll way down to get to threads").
+        verse_own(src, verse, &xrefs, &mut out);
     }
 
     let view = match q.lens {
         None => src.word_usage(q.word, scope, q.page),
-        Some(code) => src.code_usage(code, scope, q.page),
+        Some(code) => src.code_usage(code, scope, q.page, q.family),
     };
     match view {
         None => out.push(Block::para(vec![Run::new(s("panel.loading"), sz::BODY, Color::Faded).italic()])),
@@ -1453,7 +1490,7 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
         out.push(Block::para(runs));
     }
     if let Some((verse, _)) = q.origin {
-        verse_extras(src, verse, gates, &mut out);
+        verse_refs(src, verse, gates, &xrefs, &mut out);
     }
     out
 }
@@ -1461,9 +1498,32 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
 /// The uri that re-opens the card in its CURRENT lens at another scope/page.
 fn usage_uri(q: &UsageQuery, scope: &str, page: u32) -> String {
     match q.lens {
-        Some(code) => lusage_uri(code, q.word, scope, page),
+        Some(code) => lusage_uri(code, q.word, scope, page, q.family),
         None => wusage_uri(q.word, scope, page),
     }
+}
+
+/// With the lens on a code that has relatives: the choice between the one word
+/// and its whole family, as two chips — the active one inert ink, the other a
+/// link that re-opens the card at page 0 of the same scope. Nothing for a code
+/// standing alone, where the two would be the same list.
+fn family_toggle_row(src: &dyn PanelSource, q: &UsageQuery, scope: &str, out: &mut Vec<Block>) {
+    let Some(code) = q.lens else { return };
+    if src.code_family(code).len() < 2 {
+        return;
+    }
+    let chip = |label: String, on: bool, family: bool| {
+        if on {
+            Run::new(label, sz::SMALL, Color::Ink).bold()
+        } else {
+            Run::new(label, sz::SMALL, Color::Gold).link(lusage_uri(code, q.word, scope, 0, family))
+        }
+    };
+    out.push(Block::para(vec![
+        chip(s("panel.familyOff"), !q.family, false),
+        Run::new("  ·  ", sz::SMALL, Color::Faded),
+        chip(s("panel.familyOn"), q.family, true),
+    ]));
 }
 
 /// The usage evidence itself: count, scope chips, distribution, lines, paging.
@@ -1495,28 +1555,6 @@ fn usage_body(u: &WordUsageView, q: &UsageQuery, scope: &str, out: &mut Vec<Bloc
     }
     out.push(Block::para(runs));
 
-    // Distribution — canon order, counts as plain numbers. Book names link to
-    // that book's scope: the reader chooses where to look, nothing is ranked.
-    if u.books.len() > 1 {
-        out.push(Block::section(s("panel.byBook")));
-        let mut runs = Vec::new();
-        for (i, (id, label, n)) in u.books.iter().enumerate() {
-            if i > 0 {
-                runs.push(Run::new("  ·  ", sz::LIST, Color::Faded));
-            }
-            runs.push(Run::new(label, sz::LIST, Color::Gold).link(usage_uri(q, &format!("book:{id}"), 0)));
-            runs.push(Run::new(format!(" {n}"), sz::LIST, Color::Faded));
-        }
-        out.push(Block::para(runs));
-        if u.ot > 0 && u.nt > 0 {
-            out.push(Block::para(vec![Run::new(
-                format!("{} {} · {} {}", s("search.scopeOT"), u.ot, s("search.scopeNT"), u.nt),
-                sz::SMALL,
-                Color::Faded,
-            )]));
-        }
-    }
-
     // The lines: reference on its own row, then the verse verbatim — the
     // studied word's own tokens emphasized, no other text among the segments.
     out.push(Block::Rule);
@@ -1544,6 +1582,30 @@ fn usage_body(u: &WordUsageView, q: &UsageQuery, scope: &str, out: &mut Vec<Bloc
             runs.push(Run::new("›", sz::BODY, Color::Gold).link(usage_uri(q, scope, u.page + 1)));
         }
         out.push(Block::Para { runs, indent: false, top_gap: true, drag: None });
+    }
+
+    // Distribution — canon order, counts as plain numbers — AFTER the lines and
+    // their paging: for a common word it is a paragraph naming sixty books, and
+    // the lines are what the card was opened for. Book names link to
+    // that book's scope: the reader chooses where to look, nothing is ranked.
+    if u.books.len() > 1 {
+        out.push(Block::section(s("panel.byBook")));
+        let mut runs = Vec::new();
+        for (i, (id, label, n)) in u.books.iter().enumerate() {
+            if i > 0 {
+                runs.push(Run::new("  ·  ", sz::LIST, Color::Faded));
+            }
+            runs.push(Run::new(label, sz::LIST, Color::Gold).link(usage_uri(q, &format!("book:{id}"), 0)));
+            runs.push(Run::new(format!(" {n}"), sz::LIST, Color::Faded));
+        }
+        out.push(Block::para(runs));
+        if u.ot > 0 && u.nt > 0 {
+            out.push(Block::para(vec![Run::new(
+                format!("{} {} · {} {}", s("search.scopeOT"), u.ot, s("search.scopeNT"), u.nt),
+                sz::SMALL,
+                Color::Faded,
+            )]));
+        }
     }
 }
 

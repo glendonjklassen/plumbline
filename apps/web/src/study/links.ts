@@ -66,6 +66,8 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
         kind: "wordUsage",
         word: link.word,
         code: link.verb === "codeUsage" ? link.code : undefined,
+        // The `+` on an lusage: link — the lens widened to the derivation family.
+        family: link.verb === "codeUsage" && link.family === true,
         refKey: cur?.refKey,
         tokenIndex: cur?.tokenIndex,
         scope: link.scope,

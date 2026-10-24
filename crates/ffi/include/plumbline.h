@@ -1299,6 +1299,17 @@ char *plumbline_engine_reading_tick_json(struct PlumblineEngine *engine,
                                          bool interacted,
                                          const char *now);
 
+// Today's memorization queue under a daily `cap` (`0` = no limit), as
+// `{refs, dueTotal, reviewedToday, cap}` — [`memory::today_queue`] over the
+// home's cards at `now` (RFC3339 UTC; the shell passes its day stamp). An
+// engine with no home answers an empty queue. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_memory_today_json(const struct PlumblineEngine *engine,
+                                         const char *now,
+                                         uint32_t cap);
+
 // All the reader's notes as JSON (`{notes:[{id,verse,display,text,created,
 // updated}]}`), in canonical reading order and oldest first on a verse. Never
 // null on a live engine (no notes → empty list).

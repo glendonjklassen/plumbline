@@ -10,7 +10,7 @@
   import { getSession } from "../state/session.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
   import { dispatchLink } from "../study/links";
-  import { dateLocale, lang, t } from "../lib/i18n.svelte";
+  import { dateLocale, lang, plural, t } from "../lib/i18n.svelte";
   import { localDay } from "../engine/StudyEngine";
 
   const s = getSession();
@@ -44,6 +44,30 @@
     const running = new Set(runningDevotionals.map((r) => r.id));
     return (((devotionals?.catalogue ?? []) as any[]) ?? []).filter((b) => !running.has(b.id));
   });
+
+  /** Today's memorization under the daily cap (maintainer, 2026-10-24: "a
+   *  memory tile there for scheduled memorization … a maximum per day").
+   *  HELD through a refetch for the reason PlanChip holds its plans: a grade
+   *  or a cap change re-asks, and the card must not blink empty meanwhile. */
+  let heldToday: any = null;
+  const today = $derived.by(() => {
+    const q = s.memoryToday();
+    if (q == null) return heldToday;
+    return (heldToday = q);
+  });
+  const todayRefs = $derived((today?.refs ?? []) as string[]);
+  const reviewedToday = $derived(Number(today?.reviewedToday ?? 0));
+  const dueTotal = $derived(Number(today?.dueTotal ?? 0));
+
+  function reviewToday(): void {
+    if (todayRefs.length === 0) return;
+    s.memorize = { view: "review", queue: todayRefs };
+    s.screen = "memorize";
+  }
+
+  function onPerDay(e: Event): void {
+    s.setMemorizePerDay(Number((e.currentTarget as HTMLInputElement).value));
+  }
 
   let conceptStudyTag = $state("");
   async function launchConceptStudy(): Promise<void> {
@@ -187,6 +211,36 @@
         </div>
       {/each}
 
+      <h3 class="sub">{t("memorize.title")}</h3>
+      <!-- One card, always: the cap is set here, so the card has to exist even
+           with nothing memorized yet. -->
+      <div class="plan-card" data-surface="memory-today">
+        <div class="plan-head">
+          <span class="plan-name">{t("memorize.title")}</span>
+          <span class="plan-prog">
+            {s.memorizePerDay > 0
+              ? t("memorize.todayProgress", { done: reviewedToday, cap: s.memorizePerDay })
+              : t("memorize.todayReviewed", { done: reviewedToday })}
+          </span>
+        </div>
+        {#if todayRefs.length > 0}
+          <button class="plan-today" onclick={reviewToday}>
+            {plural("memorize.todayDue.one", "memorize.todayDue.other", todayRefs.length)}
+          </button>
+        {:else if dueTotal > 0 || reviewedToday > 0}
+          <!-- Cards still due but the cap is spent, or the day's work is done:
+               either way the tile asks nothing more today. -->
+          <p class="plan-done">{t("memorize.todayDone")}</p>
+        {:else}
+          <p class="plan-done">{t("memorize.nothingDue")}</p>
+        {/if}
+        <label class="per-day">
+          <span>{t("memorize.perDay")}</span>
+          <input type="number" min="0" max="500" step="1" value={s.memorizePerDay} onchange={onPerDay} />
+          {#if s.memorizePerDay === 0}<span class="per-day-note">{t("memorize.noLimit")}</span>{/if}
+        </label>
+      </div>
+
       <h3 class="sub">{t("plans.conceptStudyHeading")}</h3>
       <p class="hint">{t("plans.conceptStudyHint")}</p>
       {#each conceptStudies as p (p.id)}
@@ -323,6 +377,26 @@
   .plan-actions {
     display: flex;
     gap: 10px;
+  }
+  .per-day {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--faded, #8a8276);
+    font-size: calc(13.5px * var(--uiScale, 1));
+  }
+  .per-day input {
+    width: 5em;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    padding: 6px 10px;
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+  .per-day-note {
+    font-size: calc(12.5px * var(--uiScale, 1));
   }
   .plan-actions button,
   .concept-study-launch button,

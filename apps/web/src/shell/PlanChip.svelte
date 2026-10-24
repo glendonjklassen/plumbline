@@ -73,6 +73,8 @@
     ...SEATING_ICONS,
     // flag — a running reading plan
     plan: "M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z",
+    // school — today's memorization
+    memory: "M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z",
     // auto_stories — a running devotional, the booklet it is
     devotional:
       "M19 1l-5 5v11l5-4.5V1zM1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5V6c-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6zm22 13.5V6c-.6-.45-1.25-.75-2-1v13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5v2c1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5v-1.1z",
@@ -142,6 +144,18 @@
    *  local midnight — which is exactly what `today.available` answers, computed
    *  in the core against the reader's OWN local date. A paused booklet asks
    *  nothing, and a finished one has no `today` at all. */
+  /** The memory chip: today's capped review queue, gone once the day's cap
+   *  is spent or nothing is due — the devotional's retirement rule, for the
+   *  same reason (a day's worth, then quiet). Held through a refetch like the
+   *  plans above. */
+  let heldMemory: { n: number; refs: string[] } | null = null;
+  const memoryTile = $derived.by(() => {
+    const q = s.memoryToday();
+    if (q == null) return heldMemory;
+    const refs = (q.refs ?? []) as string[];
+    return (heldMemory = refs.length > 0 ? { n: refs.length, refs } : null);
+  });
+
   const devotionalTiles = $derived(
     (((s.devotionals()?.running ?? []) as any[]) ?? []).flatMap((r: any) => {
       if (r.paused || !r.today?.available) return [];
@@ -172,6 +186,12 @@
     s.navigate(s.activePane, tile.target.book, tile.target.chapter);
   }
 
+  function goMemory(tile: { refs: string[] }): void {
+    s.showToast(t("bookmarks.going", { name: t("memorize.title") }));
+    s.memorize = { view: "review", queue: tile.refs };
+    s.screen = "memorize";
+  }
+
   function goDevotional(tile: (typeof devotionalTiles)[number]): void {
     s.showToast(t("bookmarks.going", { name: tile.name }));
     s.openDevotional(tile.id, tile.day);
@@ -186,7 +206,7 @@
   }
 </script>
 
-{#if (planTiles.length > 0 || devotionalTiles.length > 0 || slotTiles.length > 0) && !s.inConceptStudy}
+{#if (planTiles.length > 0 || devotionalTiles.length > 0 || slotTiles.length > 0 || memoryTile) && !s.inConceptStudy}
   <div class="plan-chip-row">
     <div class="tiles">
       {#each planTiles as p (p.key)}
@@ -207,6 +227,18 @@
           <span class="ref">{t("devotional.chip", { day: d.day })}</span>
         </button>
       {/each}
+      {#if memoryTile}
+        <button
+          class="plan-chip"
+          data-memory={memoryTile.n}
+          aria-label="{t('memorize.title')} · {t('memorize.chip', { n: memoryTile.n })}"
+          title="{t('memorize.title')} · {t('memorize.chip', { n: memoryTile.n })}"
+          onclick={() => goMemory(memoryTile)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.memory} /></svg>
+          <span class="ref">{t("memorize.chip", { n: memoryTile.n })}</span>
+        </button>
+      {/if}
       {#each slotTiles as tile (tile.token)}
         <button
           class="bm-tile"

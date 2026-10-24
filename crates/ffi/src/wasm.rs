@@ -113,7 +113,8 @@ pub unsafe extern "C" fn plumbline_engine_load_rnd_step(engine: *const Plumbline
 /// link) or `ref_key` + `token_index` (a tap — the word and its Strong's codes
 /// then come from the token itself). A non-empty `code` opens the card in its
 /// original-word lens (`lusage:` links): that code's occurrences instead of
-/// the surface word's. `scope` is a
+/// the surface word's, and `family != 0` widens that lens to the code's whole
+/// derivation family (the `+` on an `lusage:` link). `scope` is a
 /// [`SearchScope::token`](plumbline_core::search::SearchScope::token) string
 /// (`all`, `ot`, `nt`, `book:Gen`, …); null or empty means `all`. While the
 /// search index is still warming the card carries its loading line and the
@@ -135,6 +136,7 @@ pub unsafe extern "C" fn plumbline_engine_word_usage_blocks_json(
     scope: *const c_char,
     page: u32,
     gates: u32,
+    family: u32,
 ) -> *mut c_char {
     guard(std::ptr::null_mut(), || {
         let Some(e) = (unsafe { engine.as_ref() }) else {
@@ -167,7 +169,15 @@ pub unsafe extern "C" fn plumbline_engine_word_usage_blocks_json(
                 codes.push(c.to_string());
             }
         }
-        let q = plumbline_core::panel::UsageQuery { word: &word, lens, scope, page, origin, codes: &codes };
+        let q = plumbline_core::panel::UsageQuery {
+            word: &word,
+            lens,
+            family: lens.is_some() && family != 0,
+            scope,
+            page,
+            origin,
+            codes: &codes,
+        };
         crate::out_json(&crate::wire::blocks_to_wire(plumbline_core::panel::word_usage_card(
             e,
             plumbline_core::panel::Gates::from_bits(gates),

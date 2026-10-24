@@ -45,6 +45,7 @@
           p.scope,
           p.page,
           s.gates,
+          p.family === true,
         )?.blocks;
       case "codeStudy":
         return s.qIn(p.lang, "codeStudyBlocks", p.code, p.word, s.gates)?.blocks;

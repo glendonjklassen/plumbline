@@ -139,6 +139,10 @@ pub struct Config {
     /// The plain-English overlay (the AKJV delta) on the reader. Reader-only:
     /// memorize, Present, copy and share stay KJV (see [`crate::akjv`]).
     pub akjv_overlay: bool,
+    /// How many memory cards the plans surface schedules a day
+    /// ([`crate::memory::today_queue`]); `0` is no limit. The hub's own
+    /// "Review due" ignores it: the cap paces the tile, not the reader.
+    pub memorize_per_day: u32,
     /// The reader's language ([`crate::i18n::Lang::code`]). Empty = follow the
     /// device, not English: storing "en" on the first resolve would freeze a
     /// German reader into English. Only an explicit choice is written.
@@ -281,6 +285,7 @@ impl Default for Config {
             church: Church::default(),
             sunday_service: None,
             akjv_overlay: false,
+            memorize_per_day: 10,
             localized_lexicon_off: false,
             language: String::new(),
             concept_study: String::new(),
@@ -368,6 +373,8 @@ struct ConfigWire {
     localized_lexicon_off: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     akjv_overlay: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    memorize_per_day: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     language: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -532,6 +539,7 @@ impl Config {
             machine_analysis: w.machine_analysis.unwrap_or(true),
             localized_lexicon_off: w.localized_lexicon_off.unwrap_or(false),
             akjv_overlay: w.akjv_overlay.unwrap_or(false),
+            memorize_per_day: w.memorize_per_day.unwrap_or(Config::default().memorize_per_day),
             // A language this build does not ship reads as "follow the device",
             // not English.
             language: match w.language.as_deref() {
@@ -620,6 +628,7 @@ impl Config {
             machine_analysis: Some(self.machine_analysis),
             localized_lexicon_off: Some(self.localized_lexicon_off),
             akjv_overlay: Some(self.akjv_overlay),
+            memorize_per_day: Some(self.memorize_per_day),
             language: (!self.language.is_empty()).then(|| self.language.clone()),
             concept_study: (!self.concept_study.is_empty()).then(|| self.concept_study.clone()),
             gospel_thread: (!self.gospel_thread.is_empty()).then(|| self.gospel_thread.clone()),
@@ -856,6 +865,7 @@ mod tests {
             human_analysis: true,
             machine_analysis: false,
             akjv_overlay: true,
+            memorize_per_day: 25,
             language: "de".to_string(),
             concept_study: "run-grace".to_string(),
             gospel_thread: "My Gospel Walk".to_string(),
@@ -1140,7 +1150,8 @@ mod tests {
   "humanAnalysis": true,
   "machineAnalysis": true,
   "localizedLexiconOff": false,
-  "akjvOverlay": false
+  "akjvOverlay": false,
+  "memorizePerDay": 10
 }
 "#
         );
