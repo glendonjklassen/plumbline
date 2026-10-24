@@ -1341,6 +1341,14 @@ pub fn code_study_card_gated(src: &dyn PanelSource, gates: Gates, code: &str, wo
 /// Occurrence lines per page of the usage card.
 pub const USAGE_PAGE_LINES: usize = 8;
 
+/// Original-word chips the usage card shows for a word, most frequent first.
+/// A tapped token carries one to three codes; the fallback for an untagged
+/// token is every code the WORD has ever rendered, and for "the" that is most
+/// of the Greek vocabulary — a screen of chips (maintainer, 2026-10-24). Past
+/// the cap the row says how many more there are, and the lens's own code is
+/// always among the shown.
+pub const USAGE_LENS_CAP: usize = 6;
+
 /// TODO(i18n): the usage card's few labels ship hardcoded English while the
 /// language push owns the catalogues — `every_shipped_string_is_translated` is
 /// all-or-nothing, so a key added here would block every language until each
@@ -1414,16 +1422,17 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
     // lens re-reads the same card over that word's occurrences, so "everywhere
     // this Greek word appears" gets the same in-context treatment as the
     // English word, and the varying renderings show themselves in the lines.
-    if !q.codes.is_empty() {
+    let codes = lens_codes(q);
+    if !codes.is_empty() {
         let mut runs = Vec::new();
         runs.push(if q.lens.is_none() {
             Run::new(q.word, sz::LABEL, Color::Ink).bold()
         } else {
             Run::new(q.word, sz::LABEL, Color::Gold).link(wusage_uri(q.word, scope, 0))
         });
-        for code in q.codes {
+        for code in &codes {
             let e = src.strongs(code);
-            let lemma = e.as_ref().and_then(|e| e.lemma.clone()).unwrap_or_else(|| code.clone());
+            let lemma = e.as_ref().and_then(|e| e.lemma.clone()).unwrap_or_else(|| (*code).clone());
             runs.push(Run::new("  ·  ", sz::LABEL, Color::Faded));
             runs.push(if q.lens == Some(code.as_str()) {
                 Run::new(lemma, sz::LABEL, Color::Ink).bold()
@@ -1435,6 +1444,13 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
             if let Some(x) = e.and_then(|e| e.xlit) {
                 runs.push(Run::new(format!(" {x}"), sz::SMALL, Color::Faded).italic());
             }
+        }
+        if q.codes.len() > codes.len() {
+            runs.push(Run::new(
+                format!("   {}", sn("panel.more", q.codes.len() - codes.len())),
+                sz::SMALL,
+                Color::Faded,
+            ));
         }
         out.push(Block::para(runs));
         // In the lens, name the original word properly — lemma large with the
@@ -1479,13 +1495,14 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
         Some(u) => usage_body(&u, q, scope, &mut out),
     }
 
-    // The dictionary is the footer, not the front door.
-    if !q.codes.is_empty() {
+    // The dictionary is the footer, not the front door — the same capped set
+    // as the chips, so the two rows name the same words.
+    if !codes.is_empty() {
         out.push(Block::Rule);
         let mut runs = vec![Run::new(s("panel.strongs"), sz::CAPTION, Color::Faded)];
-        for code in q.codes {
+        for code in &codes {
             runs.push(Run::new("   ", sz::CAPTION, Color::Ink));
-            runs.push(Run::new(code, sz::CAPTION, Color::Gold).link(format!("code:{code}:{}", q.word)));
+            runs.push(Run::new(*code, sz::CAPTION, Color::Gold).link(format!("code:{code}:{}", q.word)));
         }
         out.push(Block::para(runs));
     }
@@ -1493,6 +1510,22 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
         verse_refs(src, verse, gates, &xrefs, &mut out);
     }
     out
+}
+
+/// The codes the card shows chips for: the first [`USAGE_LENS_CAP`] of the
+/// query's (most frequent first, as the source orders them), plus the lens's
+/// own code if it fell past the cap — a stale or hand-written link must still
+/// show what it is looking at.
+fn lens_codes<'a>(q: &'a UsageQuery) -> Vec<&'a String> {
+    let mut shown: Vec<&String> = q.codes.iter().take(USAGE_LENS_CAP).collect();
+    if let Some(code) = q.lens {
+        if !shown.iter().any(|c| c.as_str() == code) {
+            if let Some(own) = q.codes.iter().find(|c| c.as_str() == code) {
+                shown.push(own);
+            }
+        }
+    }
+    shown
 }
 
 /// The uri that re-opens the card in its CURRENT lens at another scope/page.

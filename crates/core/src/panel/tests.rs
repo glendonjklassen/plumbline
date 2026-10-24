@@ -1402,6 +1402,41 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
 }
 
 #[test]
+fn word_usage_card_caps_the_original_word_chips() {
+    // "the" on an untagged token falls back to every code the word has ever
+    // rendered — hundreds. The row shows the first USAGE_LENS_CAP (the source
+    // hands them most frequent first) and says how many more; the Strong's
+    // footer names the same set; and a lens on a code past the cap is still
+    // shown, so the card can say what it is looking at.
+    let codes: Vec<String> = (1..=10).map(|i| format!("G{i}")).collect();
+    let f = Fake { word_usage: Some(usage_view()), code_usage: Some(usage_view()), ..Default::default() };
+    let blocks = word_usage_card(&f, Gates::from_bits(0), &usage_query("the", "all", 0, &codes));
+    let runs = flat_runs(&blocks);
+    let chips: Vec<&str> = runs
+        .iter()
+        .filter(|(_, u, _)| u.as_deref().is_some_and(|u| u.starts_with("lusage:")))
+        .map(|(t, _, _)| t.as_str())
+        .collect();
+    assert_eq!(chips, ["G1", "G2", "G3", "G4", "G5", "G6"]);
+    assert!(runs.iter().any(|(t, _, _)| t.trim() == "… 4 more"), "{runs:?}");
+    let footer: Vec<&str> = runs
+        .iter()
+        .filter(|(_, u, _)| u.as_deref().is_some_and(|u| u.starts_with("code:")))
+        .map(|(t, _, _)| t.as_str())
+        .collect();
+    assert_eq!(footer, ["G1", "G2", "G3", "G4", "G5", "G6"]);
+
+    let q =
+        UsageQuery { word: "the", lens: Some("G9"), family: false, scope: "all", page: 0, origin: None, codes: &codes };
+    let runs = flat_runs(&word_usage_card(&f, Gates::from_bits(0), &q));
+    assert!(
+        runs.iter().any(|(t, u, bold)| t == "G9" && u.is_none() && *bold),
+        "the lensed code is shown past the cap (and counted as shown)"
+    );
+    assert!(runs.iter().any(|(t, _, _)| t.trim() == "… 3 more"));
+}
+
+#[test]
 fn word_usage_card_notes_are_a_section_with_a_plus() {
     // The reader's note slot: a "Notes" header with a ＋, then what they wrote
     // (the old row read "✎  add" — maintainer, 2026-08-30).
