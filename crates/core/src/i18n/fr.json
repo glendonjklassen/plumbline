@@ -1,6 +1,5 @@
 {
   "about.addresses": "Adresses web : {hosts}",
-  "about.archive": "Télécharger le site pour le conserver ou l'héberger ({size} Mo)",
   "about.covenant.p1": "Pour toujours à vous : aucun compte, aucune publicité, aucun suivi, rien n'est envoyé nulle part. Votre bibliothèque — notes, étiquettes, fils — est enregistrée sous forme de fichiers ordinaires sur votre appareil, que vous pouvez sauvegarder ou emporter. L'application est gratuite.",
   "about.covenant.title": "L'ENGAGEMENT",
   "about.heading": "À propos de Plumbline",
@@ -757,6 +756,7 @@
   "settings.rndDownloading": "Téléchargement du pack d'analyse — {percent} %",
   "settings.rndNow": "Télécharger maintenant",
   "settings.rndPreparing": "Préparation de l'analyse…",
+  "settings.siteArchive": "Télécharger le site pour le conserver ou l'héberger ({size} Mo)",
   "settings.suggested": "Tissages suggérés",
   "settings.suggestedInstalled": "Installés. Ils se trouvent sous Suggestions dans la bibliothèque de tissages, où vous pouvez garder ou rejeter chacun d'eux.",
   "settings.suggestedOffer": "Un grand ensemble de liens de versets proposés, à relire pour garder ou rejeter. Téléchargement unique de {kb} Ko.",

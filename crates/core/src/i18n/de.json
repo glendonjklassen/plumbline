@@ -1,6 +1,5 @@
 {
   "about.addresses": "Webadressen: {hosts}",
-  "about.archive": "Website herunterladen, zum Aufbewahren oder selbst Hosten ({size} MB)",
   "about.covenant.p1": "Gehört Ihnen, für immer: kein Konto, keine Werbung, keine Nachverfolgung, nichts wird irgendwohin gesendet. Ihre Sammlung — Notizen, Schlagwörter, Fäden — liegt als ganz normale Dateien auf Ihrem Gerät, die Sie sichern oder mitnehmen können. Die App ist kostenlos.",
   "about.covenant.title": "DAS VERSPRECHEN",
   "about.heading": "Über Plumbline",
@@ -757,6 +756,7 @@
   "settings.rndDownloading": "Analysepaket wird geladen — {percent} %",
   "settings.rndNow": "Jetzt herunterladen",
   "settings.rndPreparing": "Die Analyse wird vorbereitet…",
+  "settings.siteArchive": "Website herunterladen, zum Aufbewahren oder selbst Hosten ({size} MB)",
   "settings.suggested": "Vorgeschlagene Verknüpfungen",
   "settings.suggestedInstalled": "Installiert. Sie stehen unter „Vorschläge“ in der Verknüpfungsbibliothek, wo Sie jede einzelne behalten oder verwerfen können.",
   "settings.suggestedOffer": "Eine große Sammlung vorgeschlagener Versverbindungen zum Prüfen, Behalten oder Verwerfen. Einmaliger Download von {kb} KB.",

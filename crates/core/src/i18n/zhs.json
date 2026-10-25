@@ -1,6 +1,5 @@
 {
   "about.addresses": "网址：{hosts}",
-  "about.archive": "下载整个网站，自行保存或托管（{size} MB）",
   "about.covenant.p1": "永远属于您：不需要账号，没有广告，不追踪，任何内容都不会被发送出去。您的资料——笔记、标签、经文串——都以普通文件的形式保存在设备上，您可以自行备份或转移。本应用完全免费。",
   "about.covenant.title": "承诺",
   "about.heading": "关于Plumbline",
@@ -757,6 +756,7 @@
   "settings.rndDownloading": "正在下载分析包——{percent}%",
   "settings.rndNow": "立即下载",
   "settings.rndPreparing": "正在准备分析数据…",
+  "settings.siteArchive": "下载整个网站，自行保存或托管（{size} MB）",
   "settings.suggested": "建议串珠",
   "settings.suggestedInstalled": "已安装。它们会显示在串珠库的“建议”分类下，您可以逐一保留或拒绝。",
   "settings.suggestedOffer": "一大批建议的经文串珠，供您审核后保留或拒绝。需一次性下载{kb}KB。",

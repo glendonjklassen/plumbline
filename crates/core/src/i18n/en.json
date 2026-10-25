@@ -1,6 +1,5 @@
 {
   "about.addresses": "Web addresses: {hosts}",
-  "about.archive": "Download the site to keep or host yourself ({size} MB)",
   "about.covenant.p1": "Yours forever: no account, no ads, no tracking, nothing sent anywhere. Your library — notes, tags, threads — is saved as ordinary files on your device that you can back up or move. The app is free.",
   "about.covenant.title": "THE COVENANT",
   "about.heading": "About Plumbline",
@@ -691,6 +690,7 @@
   "settings.rndDownloading": "Downloading the analysis pack — {percent}%",
   "settings.rndNow": "Download now",
   "settings.rndPreparing": "Preparing the analysis…",
+  "settings.siteArchive": "Download the site to keep or host yourself ({size} MB)",
   "settings.suggested": "Suggested weaves",
   "settings.suggestedInstalled": "Installed. They sit under Suggested in the weave library, where you can keep or reject each one.",
   "settings.suggestedOffer": "A large set of proposed verse links to review and keep or reject. One-time {kb} KB download.",
