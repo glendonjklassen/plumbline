@@ -1,5 +1,10 @@
 # Adding box two, step by step
 
+[box-two.sh](box-two.sh) does these steps interactively: it asks for the two
+values, explains each step, shows the command, runs it on a yes and checks the
+result; `--from N` resumes after the console and DNS work. This file is the
+same steps for reading or doing by hand.
+
 Everything here is copy-paste. Two values are yours to fill in once the box
 exists: `B2V4` (box two's IPv4) and `B2V6` (its IPv6). Nothing else is a
 placeholder: `<other box IPv4>` below is literal text inside cloud-init.yaml

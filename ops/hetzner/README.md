@@ -59,7 +59,8 @@ the real hostnames, through the other box's forward.
 
 ## Two boxes
 
-Adding the second box, as copy-paste steps: [BOX-TWO.md](BOX-TWO.md). Two
+Adding the second box: [box-two.sh](box-two.sh) walks it interactively, and
+[BOX-TWO.md](BOX-TWO.md) is the same steps written out. Two
 things need saying about it that one box never needed.
 
 **Certificates.** Each box fetches its own, and a certificate challenge
