@@ -3254,8 +3254,15 @@ impl PanelSource for PlumblineEngine {
         // The SOLE renderings, not the whole reverse index: a tap on an untagged
         // "the" was offered υἱός, βασιλεία and five hundred more, every noun the
         // article ever stood before in a tagged run (maintainer, 2026-10-24).
+        // And only those seen in two verses or more: on the shipped KJV, "the"
+        // stands alone for ὁ in fifteen verses and for δέ, εἰς, μέν, πνεῦμα and
+        // הוּא in one each — single-verse tagging strays, not words the reader
+        // should be offered. A genuinely tagged token never comes through here;
+        // this is the fallback for an UNTAGGED one.
         self.renderings_ready()
-            .map(|rx| rx.word_sole_codes(word).into_iter().map(|(c, _)| c.to_string()).collect())
+            .map(|rx| {
+                rx.word_sole_codes(word).into_iter().filter(|(_, n)| *n >= 2).map(|(c, _)| c.to_string()).collect()
+            })
             .unwrap_or_default()
     }
     fn occurrences(&self, code: &str) -> panel::OccurrencesView {
