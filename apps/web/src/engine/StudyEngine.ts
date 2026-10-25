@@ -389,6 +389,9 @@ export class StudyEngine {
     scope: string,
     page: number,
     gates: number,
+    family = false,
+    books = false,
+    allCodes = false,
   ): any {
     const s = this.#call(
       (w, c, r, sc) =>
@@ -402,6 +405,7 @@ export class StudyEngine {
             sc,
             page,
             gates,
+            (family ? 1 : 0) | (books ? 2 : 0) | (allCodes ? 4 : 0),
           ) as number,
         ),
       [word, code, refKey, scope],
@@ -638,6 +642,17 @@ export class StudyEngine {
   }
   memoryDue(now: string): any {
     return this.#json("plumbline_engine_memory_due_json", now);
+  }
+  /** Today's capped queue (`cap` 0 = no limit): `{refs, dueTotal, reviewedToday, cap}`. */
+  memoryToday(now: string, cap: number): any {
+    const s = this.#call(
+      (n) =>
+        this.#w.takeStr(
+          (this.#w.exports.plumbline_engine_memory_today_json as Function)(this.#engine, n, cap) as number,
+        ),
+      [now],
+    );
+    return s === null ? null : JSON.parse(s);
   }
   memoryCoverage(now: string): any {
     return this.#json("plumbline_engine_memory_coverage_json", now);

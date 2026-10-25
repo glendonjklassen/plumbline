@@ -1139,8 +1139,8 @@ pub enum WirePanelLink {
     Occurrences { code: String },
     Rendering { code: String, rendering: String },
     CodeStudy { code: String, word: String },
-    WordUsage { word: String, scope: String, page: u32 },
-    CodeUsage { code: String, word: String, scope: String, page: u32 },
+    WordUsage { word: String, scope: String, page: u32, books: bool, all_codes: bool },
+    CodeUsage { code: String, word: String, scope: String, page: u32, family: bool, books: bool, all_codes: bool },
     ThreadEditMode { index: usize, edit: bool },
     Thread { index: usize },
     Tag { index: usize },
@@ -1175,8 +1175,12 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::Occurrences { code } => WirePanelLink::Occurrences { code },
         PanelLink::Rendering { code, rendering } => WirePanelLink::Rendering { code, rendering },
         PanelLink::CodeStudy { code, word } => WirePanelLink::CodeStudy { code, word },
-        PanelLink::WordUsage { word, scope, page } => WirePanelLink::WordUsage { word, scope, page },
-        PanelLink::CodeUsage { code, word, scope, page } => WirePanelLink::CodeUsage { code, word, scope, page },
+        PanelLink::WordUsage { word, scope, page, books, all_codes } => {
+            WirePanelLink::WordUsage { word, scope, page, books, all_codes }
+        }
+        PanelLink::CodeUsage { code, word, scope, page, family, books, all_codes } => {
+            WirePanelLink::CodeUsage { code, word, scope, page, family, books, all_codes }
+        }
         PanelLink::ThreadEditMode { index, edit } => WirePanelLink::ThreadEditMode { index, edit },
         PanelLink::Thread { index } => WirePanelLink::Thread { index },
         PanelLink::Tag { index } => WirePanelLink::Tag { index },
@@ -1319,6 +1323,10 @@ pub struct WireConfigState {
     /// Absent → off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub akjv_overlay: Option<bool>,
+    /// Memory cards scheduled a day on the plans surface (additive); `0` is no
+    /// limit. Absent → the core's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memorize_per_day: Option<u32>,
     /// The reader's chosen language (additive). Absent means "follow the
     /// device": the shell passes its locale to `plumbline_i18n_catalog_json` and
     /// the core resolves it, so a German phone opens in German untouched.
@@ -1332,6 +1340,10 @@ pub struct WireConfigState {
     /// The thread "share the gospel" opens; absent = the stock Romans Road.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gospel_thread: Option<String>,
+    /// Which of the app's addresses share links name; absent = the first
+    /// (`church::MIRRORS`). The core keeps only one of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share_origin: Option<String>,
     /// The reader's saved share-link presets. A LIST, not an `Option`: absent and
     /// empty both mean "none saved", and the core normalizes what arrives
     /// (`config::clean_presets`) so a shell cannot write a nameless or duplicate
@@ -1477,9 +1489,11 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         human_analysis: Some(cfg.human_analysis),
         machine_analysis: Some(cfg.machine_analysis),
         akjv_overlay: Some(cfg.akjv_overlay),
+        memorize_per_day: Some(cfg.memorize_per_day),
         language: (!cfg.language.is_empty()).then(|| cfg.language.clone()),
         concept_study: (!cfg.concept_study.is_empty()).then(|| cfg.concept_study.clone()),
         gospel_thread: (!cfg.gospel_thread.is_empty()).then(|| cfg.gospel_thread.clone()),
+        share_origin: (!cfg.share_origin.is_empty()).then(|| cfg.share_origin.clone()),
         share_presets: cfg.share_presets.clone(),
         localized_lexicon_off: Some(cfg.localized_lexicon_off),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
@@ -1560,6 +1574,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         machine_analysis: w.machine_analysis.unwrap_or(false),
         // Absent = off (core::config::from_wire): the KJV is the text.
         akjv_overlay: w.akjv_overlay.unwrap_or(false),
+        memorize_per_day: w.memorize_per_day.unwrap_or(Config::default().memorize_per_day),
         // Empty means "follow the device", and so does a language this build does not
         // ship — never English by fiat. Validated here, where a shell's value becomes
         // the core's, rather than trusted.
@@ -1571,6 +1586,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         // there, so nothing validates it away here.
         concept_study: w.concept_study.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
         gospel_thread: w.gospel_thread.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
+        share_origin: plumbline_core::church::clean_share_origin(w.share_origin.as_deref().unwrap_or("")),
         // Normalized here as well as on load: the shell is the other untrusted
         // writer, and a save must not be able to store what a load would refuse.
         share_presets: plumbline_core::config::clean_presets(&w.share_presets),

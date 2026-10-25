@@ -93,7 +93,10 @@
     const v = view;
     if (v?.view !== "review") return;
     untrack(() => {
-      queue = v.only ? [v.only] : [...dueRefs];
+      // A queue handed over (the plans tile / bookmark chip: today's capped
+      // slice) is walked as given; one card from the hub's drill button; else
+      // everything due.
+      queue = v.queue ? [...v.queue] : v.only ? [v.only] : [...dueRefs];
       qi = 0;
       mode = "first";
       typed = "";

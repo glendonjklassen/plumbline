@@ -56,8 +56,15 @@ impl PanelSource for Fake {
     fn word_usage(&self, _word: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
         self.word_usage.clone()
     }
-    fn code_usage(&self, _code: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
-        self.code_usage.clone()
+    fn code_usage(&self, _code: &str, _scope: &str, _page: u32, family: bool) -> Option<WordUsageView> {
+        // The family fold is a different answer: the Fake hands back a view whose
+        // count says which was asked for, so a card test can tell them apart.
+        self.code_usage.clone().map(|mut v| {
+            if family {
+                v.total += 1000;
+            }
+            v
+        })
     }
     fn code_family(&self, code: &str) -> Vec<String> {
         self.families.get(code).cloned().unwrap_or_else(|| vec![code.to_string()])
@@ -1160,19 +1167,31 @@ fn flat_runs(blocks: &[Block]) -> Vec<(String, Option<String>, bool)> {
 }
 
 fn usage_query<'a>(word: &'a str, scope: &'a str, page: u32, codes: &'a [String]) -> UsageQuery<'a> {
-    UsageQuery { word, lens: None, scope, page, origin: None, codes }
+    UsageQuery { word, lens: None, family: false, books: false, all_codes: false, scope, page, origin: None, codes }
 }
 
 #[test]
 fn wusage_link_round_trips() {
     assert_eq!(
         parse_link("wusage:2:mercy:book:Gen"),
-        Some(PanelLink::WordUsage { word: "mercy".into(), scope: "book:Gen".into(), page: 2 })
+        Some(PanelLink::WordUsage {
+            word: "mercy".into(),
+            scope: "book:Gen".into(),
+            page: 2,
+            books: false,
+            all_codes: false
+        })
     );
     // Scope omitted → "all".
     assert_eq!(
         parse_link("wusage:0:mercy"),
-        Some(PanelLink::WordUsage { word: "mercy".into(), scope: "all".into(), page: 0 })
+        Some(PanelLink::WordUsage {
+            word: "mercy".into(),
+            scope: "all".into(),
+            page: 0,
+            books: false,
+            all_codes: false
+        })
     );
     assert_eq!(parse_link("wusage:0::ot"), None); // word missing
     assert_eq!(parse_link("wusage:x:mercy:all"), None); // page not a number
@@ -1180,7 +1199,15 @@ fn wusage_link_round_trips() {
     // The lens verb: page, code, word, then the scope remainder.
     assert_eq!(
         parse_link("lusage:1:H2617:mercy:book:Gen"),
-        Some(PanelLink::CodeUsage { code: "H2617".into(), word: "mercy".into(), scope: "book:Gen".into(), page: 1 })
+        Some(PanelLink::CodeUsage {
+            code: "H2617".into(),
+            word: "mercy".into(),
+            scope: "book:Gen".into(),
+            page: 1,
+            family: false,
+            books: false,
+            all_codes: false
+        })
     );
     assert_eq!(parse_link("lusage:0::mercy:all"), None); // code missing
 
@@ -1191,13 +1218,68 @@ fn wusage_link_round_trips() {
 
     // What the producer bakes parses back unchanged.
     assert_eq!(
-        parse_link(&wusage_uri("mercy", "book:Gen", 1)),
-        Some(PanelLink::WordUsage { word: "mercy".into(), scope: "book:Gen".into(), page: 1 })
+        parse_link(&wusage_uri("mercy", "book:Gen", 1, false, false)),
+        Some(PanelLink::WordUsage {
+            word: "mercy".into(),
+            scope: "book:Gen".into(),
+            page: 1,
+            books: false,
+            all_codes: false
+        })
     );
     assert_eq!(
-        parse_link(&lusage_uri("H2617", "mercy", "ot", 2)),
-        Some(PanelLink::CodeUsage { code: "H2617".into(), word: "mercy".into(), scope: "ot".into(), page: 2 })
+        parse_link(&lusage_uri("H2617", "mercy", "ot", 2, false, false, false)),
+        Some(PanelLink::CodeUsage {
+            code: "H2617".into(),
+            word: "mercy".into(),
+            scope: "ot".into(),
+            page: 2,
+            family: false,
+            books: false,
+            all_codes: false
+        })
     );
+    // The family fold rides as a `+` on the code, so an old link without it
+    // still parses and means the one word.
+    assert_eq!(
+        parse_link(&lusage_uri("H2617", "mercy", "ot", 2, true, false, false)),
+        Some(PanelLink::CodeUsage {
+            code: "H2617".into(),
+            word: "mercy".into(),
+            scope: "ot".into(),
+            page: 2,
+            family: true,
+            books: false,
+            all_codes: false
+        })
+    );
+    assert_eq!(parse_link("lusage:0:+:mercy:all"), None);
+    // The by-book flag rides the page segment, on both verbs.
+    assert_eq!(
+        parse_link(&wusage_uri("mercy", "all", 3, true, false)),
+        Some(PanelLink::WordUsage {
+            word: "mercy".into(),
+            scope: "all".into(),
+            page: 3,
+            books: true,
+            all_codes: false
+        })
+    );
+    assert_eq!(
+        parse_link(&lusage_uri("H2617", "mercy", "ot", 2, true, true, true)),
+        Some(PanelLink::CodeUsage {
+            code: "H2617".into(),
+            word: "mercy".into(),
+            scope: "ot".into(),
+            page: 2,
+            family: true,
+            books: true,
+            all_codes: true
+        })
+    );
+    assert_eq!(usage_page("2cb"), Some((2, true, true)));
+    assert_eq!(parse_link("wusage:x:mercy:all"), None);
+    assert_eq!(parse_link("wusage:2z:mercy:all"), None);
 }
 
 #[test]
@@ -1257,7 +1339,17 @@ fn word_usage_card_lens_switches_to_the_original_word() {
         StrongsView { lemma: Some("חֶסֶד".into()), xlit: Some("chesed".into()), ..Default::default() },
     );
 
-    let q = UsageQuery { word: "mercy", lens: Some("H2617"), scope: "all", page: 1, origin: None, codes: &codes };
+    let q = UsageQuery {
+        word: "mercy",
+        lens: Some("H2617"),
+        family: false,
+        books: false,
+        all_codes: false,
+        scope: "all",
+        page: 1,
+        origin: None,
+        codes: &codes,
+    };
     let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
     let runs = flat_runs(&blocks);
     // First LINKED run with this text — the headline repeats the word inertly.
@@ -1293,7 +1385,17 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
     f.entries.insert("G1139".into(), StrongsView { lemma: Some("δαιμονίζομαι".into()), ..Default::default() });
     f.families.insert("G1140".into(), vec!["G1139".into(), "G1140".into(), "G1142".into()]);
 
-    let q = UsageQuery { word: "devils", lens: Some("G1140"), scope: "all", page: 0, origin: None, codes: &codes };
+    let q = UsageQuery {
+        word: "devils",
+        lens: Some("G1140"),
+        family: false,
+        books: false,
+        all_codes: false,
+        scope: "all",
+        page: 0,
+        origin: None,
+        codes: &codes,
+    };
     let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
     let runs = flat_runs(&blocks);
 
@@ -1301,19 +1403,167 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
     let header = blocks.iter().find(|b| text_of(b).starts_with("δαιμόνιον")).expect("the lens header");
     assert_eq!(text_of(header), "δαιμόνιον  daimónion");
     // The relatives, each a door to its own card; the lensed code is not listed as its own relative.
-    let row = blocks.iter().find(|b| text_of(b).starts_with("Same root:")).expect("the same-root row");
-    assert_eq!(text_of(row), "Same root:  δαιμονίζομαι  ·  δαίμων daímōn");
+    let row = blocks.iter().find(|b| text_of(b).starts_with("Same root (Strong’s):")).expect("the same-root row");
+    assert_eq!(text_of(row), "Same root (Strong’s):  δαιμονίζομαι  ·  δαίμων daímōn");
     let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
     assert_eq!(uri_of("δαίμων"), Some("code:G1142".into()));
     assert_eq!(uri_of("δαιμονίζομαι"), Some("code:G1139".into()));
 
-    // Alone in its family: no row at all.
+    // The toggle beside the relatives: the one word is active (inert ink), the
+    // family is a link that re-opens the lens widened at page 0 — and the
+    // evidence asked for is the ONE word's (the Fake marks a family answer).
+    let only = runs.iter().find(|(t, _, _)| t == "Only this word").expect("the one-word chip");
+    assert!(only.1.is_none() && only.2);
+    assert_eq!(uri_of("Include same root"), Some("lusage:0:G1140+:devils:all".into()));
+    assert!(runs.iter().any(|(t, _, _)| t == "1 occurrence" || t.ends_with(" occurrences")));
+    assert!(!runs.iter().any(|(t, _, _)| t.starts_with("100")), "a one-word lens must not fetch the family: {runs:?}");
+
+    // Widened: the chips swap roles, every scope/page verb keeps the `+`, and
+    // the family's evidence is what is fetched.
+    let q = UsageQuery {
+        word: "devils",
+        lens: Some("G1140"),
+        family: true,
+        books: false,
+        all_codes: false,
+        scope: "all",
+        page: 0,
+        origin: None,
+        codes: &codes,
+    };
+    let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
+    let runs = flat_runs(&blocks);
+    let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
+    assert_eq!(uri_of("Only this word"), Some("lusage:0:G1140:devils:all".into()));
+    assert!(runs.iter().any(|(t, u, bold)| t == "Include same root" && u.is_none() && *bold));
+    assert_eq!(uri_of("Old Testament"), Some("lusage:0:G1140+:devils:ot".into()));
+    assert!(runs.iter().any(|(t, _, _)| t.starts_with("100") && t.ends_with("occurrences")), "{runs:?}");
+
+    // Alone in its family: no row at all, and no toggle either.
     let solo = vec!["G2316".to_string()];
     let mut g = Fake { code_usage: Some(usage_view()), ..Default::default() };
     g.entries.insert("G2316".into(), StrongsView { lemma: Some("θεός".into()), ..Default::default() });
-    let q = UsageQuery { word: "God", lens: Some("G2316"), scope: "all", page: 0, origin: None, codes: &solo };
+    let q = UsageQuery {
+        word: "God",
+        lens: Some("G2316"),
+        family: false,
+        books: false,
+        all_codes: false,
+        scope: "all",
+        page: 0,
+        origin: None,
+        codes: &solo,
+    };
     let blocks = word_usage_card(&g, Gates::from_bits(0), &q);
-    assert!(!blocks.iter().any(|b| text_of(b).starts_with("Same root:")));
+    assert!(!blocks.iter().any(|b| text_of(b).starts_with("Same root (Strong’s):")));
+    assert!(!flat_runs(&blocks).iter().any(|(t, _, _)| t == "Only this word"));
+}
+
+#[test]
+fn word_usage_card_hides_a_long_by_book_list_until_asked() {
+    // Two books (the fixture): listed outright, no toggle. Sixty-six: the
+    // testament totals stand, the list is behind "Show by book", and asking
+    // for it re-opens the same page with the `b` flag and a "Hide by book".
+    let f = Fake { word_usage: Some(usage_view()), ..Default::default() };
+    let runs = flat_runs(&word_usage_card(&f, Gates::from_bits(0), &usage_query("mercy", "all", 1, &[])));
+    assert!(runs.iter().any(|(t, _, _)| t == "Genesis"));
+    assert!(!runs.iter().any(|(t, _, _)| t == "Show by book" || t == "Hide by book"));
+
+    let mut wide = usage_view();
+    wide.books = (1..=66).map(|i| (format!("B{i}"), format!("Book {i}"), 1)).collect();
+    let g = Fake { word_usage: Some(wide), ..Default::default() };
+    let runs = flat_runs(&word_usage_card(&g, Gates::from_bits(0), &usage_query("the", "all", 1, &[])));
+    let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
+    assert!(!runs.iter().any(|(t, _, _)| t == "Book 1"), "a long list is hidden by default");
+    assert_eq!(uri_of("Show by book"), Some("wusage:1b:the:all".into()));
+    assert!(runs.iter().any(|(t, _, _)| t.starts_with("Old Testament ") && t.contains("New Testament ")));
+
+    let q = UsageQuery {
+        word: "the",
+        lens: None,
+        family: false,
+        books: true,
+        all_codes: false,
+        scope: "all",
+        page: 1,
+        origin: None,
+        codes: &[],
+    };
+    let runs = flat_runs(&word_usage_card(&g, Gates::from_bits(0), &q));
+    let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
+    assert!(runs.iter().any(|(t, _, _)| t == "Book 66"));
+    assert_eq!(uri_of("Hide by book"), Some("wusage:1:the:all".into()));
+    // The flag travels with every other verb on the card.
+    assert_eq!(uri_of("Old Testament"), Some("wusage:0b:the:ot".into()));
+    assert_eq!(uri_of("›"), Some("wusage:2b:the:all".into()));
+}
+
+#[test]
+fn word_usage_card_caps_the_original_word_chips() {
+    // "the" on an untagged token falls back to every code the word has ever
+    // rendered — hundreds. The row shows the first USAGE_LENS_CAP (the source
+    // hands them most frequent first) and says how many more; the Strong's
+    // footer names the same set; and a lens on a code past the cap is still
+    // shown, so the card can say what it is looking at.
+    let codes: Vec<String> = (1..=10).map(|i| format!("G{i}")).collect();
+    let f = Fake { word_usage: Some(usage_view()), code_usage: Some(usage_view()), ..Default::default() };
+    let blocks = word_usage_card(&f, Gates::from_bits(0), &usage_query("the", "all", 0, &codes));
+    let runs = flat_runs(&blocks);
+    let chips: Vec<&str> = runs
+        .iter()
+        .filter(|(_, u, _)| u.as_deref().is_some_and(|u| u.starts_with("lusage:")))
+        .map(|(t, _, _)| t.as_str())
+        .collect();
+    assert_eq!(chips, ["G1", "G2", "G3", "G4", "G5", "G6"]);
+    let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
+    assert_eq!(uri_of("… 4 more"), Some("wusage:0c:the:all".into()), "the rest is one tap away");
+    let footer: Vec<&str> = runs
+        .iter()
+        .filter(|(_, u, _)| u.as_deref().is_some_and(|u| u.starts_with("code:")))
+        .map(|(t, _, _)| t.as_str())
+        .collect();
+    assert_eq!(footer, ["G1", "G2", "G3", "G4", "G5", "G6"]);
+
+    let q = UsageQuery {
+        word: "the",
+        lens: Some("G9"),
+        family: false,
+        books: false,
+        all_codes: false,
+        scope: "all",
+        page: 0,
+        origin: None,
+        codes: &codes,
+    };
+    let runs = flat_runs(&word_usage_card(&f, Gates::from_bits(0), &q));
+    assert!(
+        runs.iter().any(|(t, u, bold)| t == "G9" && u.is_none() && *bold),
+        "the lensed code is shown past the cap (and counted as shown)"
+    );
+    assert!(runs.iter().any(|(t, _, _)| t == "… 3 more"));
+
+    // Opened: all ten, and the way back.
+    let q = UsageQuery {
+        word: "the",
+        lens: None,
+        family: false,
+        books: false,
+        all_codes: true,
+        scope: "all",
+        page: 0,
+        origin: None,
+        codes: &codes,
+    };
+    let runs = flat_runs(&word_usage_card(&f, Gates::from_bits(0), &q));
+    let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
+    let chips: Vec<&str> = runs
+        .iter()
+        .filter(|(_, u, _)| u.as_deref().is_some_and(|u| u.starts_with("lusage:")))
+        .map(|(t, _, _)| t.as_str())
+        .collect();
+    assert_eq!(chips.len(), 10);
+    assert_eq!(uri_of("Show fewer"), Some("wusage:0:the:all".into()));
+    assert_eq!(uri_of("G10"), Some("lusage:0c:G10:the:all".into()), "every link on the card keeps the fold open");
 }
 
 #[test]
@@ -1326,7 +1576,17 @@ fn word_usage_card_notes_are_a_section_with_a_plus() {
         user_notes: HashMap::from([("Gen 1:1".to_string(), vec![("n1".to_string(), "steadfast love".to_string())])]),
         ..Default::default()
     };
-    let q = UsageQuery { word: "mercy", lens: None, scope: "all", page: 0, origin: Some(("Gen 1:1", 2)), codes: &[] };
+    let q = UsageQuery {
+        word: "mercy",
+        lens: None,
+        family: false,
+        books: false,
+        all_codes: false,
+        scope: "all",
+        page: 0,
+        origin: Some(("Gen 1:1", 2)),
+        codes: &[],
+    };
     let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
     let runs = flat_runs(&blocks);
     assert!(runs.iter().any(|(t, u, bold)| t == "Notes" && u.is_none() && *bold));

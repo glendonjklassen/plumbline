@@ -1,25 +1,30 @@
-# The server
+# The servers
 
-plumblinebible.org is a Hetzner Cloud box in Helsinki, serving
-`apps/web/dist` with Caddy, so the app sits under EU jurisdiction and no single
-US company's decision can take it down. `plumblinebible.org` and
-`www.plumblinebible.org` both point at it (A and AAAA), and so do
-`plumblinebible.ch` and `www.plumblinebible.ch` (registered and DNS-hosted at
-Infomaniak since 2026-10), a second way in served from the same root. Each
-name is its own browser origin, so a reader's notes and settings on one do not
-appear on the other; share links and QR codes always name the .org. Nothing on it is
-private: the box holds the public bundle and the public data pack, and the
-release workflow rebuilds both from source.
+plumblinebible.org is two boxes serving `apps/web/dist` with Caddy: one at
+Hetzner Cloud in Helsinki, one at Infomaniak Public Cloud in Switzerland. Both
+names carry both boxes' addresses (A and AAAA), so a browser that one box
+refuses retries the other on its own, and no one company's outage or decision
+takes the site down. `plumblinebible.org` is registered and DNS-hosted at
+Cloudflare (DNS only, never proxied: Caddy on the boxes terminates TLS);
+`plumblinebible.ch` at Infomaniak (since 2026-10), a second way in served from
+the same root, under a different registry, registrar and DNS host, so a name
+survives what takes the other. Each name is its own browser origin, so a
+reader's notes and settings on one do not appear on the other; share links and
+QR codes name the .org unless the reader picked the .ch on the Share screen,
+and About lists both. Nothing on a box is private: it holds the public bundle
+and the public data pack, and the release workflow rebuilds both from source.
 
 GitHub Pages hosted the site until 2026-10 and is still deployed on every
 release as a standby (see [Falling back to Pages](#falling-back-to-pages)).
 
 ## The box
 
-One small shared-vCPU server (CPX02, 1 GB is plenty: Caddy serving static
-files), Debian 13, public IPv4 + IPv6, a Hetzner firewall allowing inbound TCP
-22/80/443 only, built from [cloud-init.yaml](cloud-init.yaml) pasted into the
-console's "Cloud config" field. What that gives:
+Both boxes are the same build: one small shared-vCPU server (a Hetzner CPX02,
+the smallest Infomaniak flavour; 1 GB is plenty: Caddy serving static files),
+Debian 13, public IPv4 + IPv6, the provider's firewall or security group
+allowing inbound TCP 22/80/443 only, built from
+[cloud-init.yaml](cloud-init.yaml) pasted into the console's cloud-config /
+user-data field. What that gives:
 
 - a `deploy` user (the maintainer, sudo) and a `release` user (owns the web
   root, no sudo), both key-only; root locked, passwords off, forwarding off,
@@ -42,27 +47,63 @@ console's "Cloud config" field. What that gives:
   that allows the app's own origin and nothing else (see
   [The headers](#the-headers))
 
-Replace the two keys under `ssh_authorized_keys` when rebuilding. A rebuilt box
-gets a new IP, so update the DNS records (the .org's and, at Infomaniak, the
-.ch's), the `MIRROR_HOST` and
-`MIRROR_KNOWN_HOSTS` secrets, and `expect_addrs` in
-[check-site.sh](check-site.sh); Caddy fetches new certificates once DNS points
-at it.
+Replace the two keys under `ssh_authorized_keys` and the `<other box IPv4>`
+in the Caddyfile when rebuilding. A rebuilt box gets new addresses, so: take
+the old ones out of both zones (Cloudflare for the .org, Infomaniak for the
+.ch) and put the new ones in, update that box's host secret (`MIRROR_HOST` or
+`MIRROR2_HOST`) and its lines in `MIRROR_KNOWN_HOSTS`, update `expect_addrs`
+in [check-site.sh](check-site.sh), and update the forward address in the
+OTHER box's Caddyfile. Then copy the live site onto it before it goes into
+DNS (below); Caddy fetches its certificates as soon as it is reloaded with
+the real hostnames, through the other box's forward.
+
+## Two boxes
+
+Adding the second box: [box-two.sh](box-two.sh) walks it interactively, and
+[BOX-TWO.md](BOX-TWO.md) is the same steps written out. Two
+things need saying about it that one box never needed.
+
+**Certificates.** Each box fetches its own, and a certificate challenge
+arrives at whichever box DNS hands out. Caddy answers its own challenge tokens
+on port 80 before any route, and the Caddyfile's plain-HTTP block forwards
+the tokens it does not know to the other box, which does. So each box names
+the other's IPv4 there, and a box can get its certificates before DNS names
+it at all: every challenge lands on the box DNS does name and is forwarded.
+`journalctl -u caddy -f` shows the four names being obtained.
+
+**The first copy.** A box in DNS with nothing in `/srv/plumbline` serves 404s
+to half the readers, so a new box is filled before its records go in, by hand
+from the live one (the release user cannot read the site back, so this goes
+through `deploy` both ways):
+
+```sh
+rsync -az deploy@<live box>:/srv/plumbline/ /tmp/site/
+rsync -az --rsync-path="sudo -u release rsync" /tmp/site/ deploy@<new box>:/srv/plumbline/
+BACKEND=<new box IPv4> ops/hetzner/check-site.sh https://plumblinebible.org
+```
+
+After that the release keeps both boxes identical: it uploads to every box
+before checking any (a reader round-robined between a new shell and an old
+box's assets is a broken boot), and both uploads must succeed. A box that is
+gone comes out of both zones by hand and the job is re-run; the TTL on the
+address records is 60 s on both zones for that reason.
 
 ## Releases land here on their own
 
 `.github/workflows/release.yml` checksums every file in `dist` and attaches
-the list to the GitHub Release as `SHA256SUMS`, rsyncs `dist` to the box, runs
-[check-site.sh](check-site.sh) to prove the site is serving exactly those
-bytes, then deploys the Pages standby. It needs three repository secrets;
-without them the upload and check are skipped, so a fork publishes to Pages
-alone. The `MIRROR_` names date from when this box was a mirror.
+the list to the GitHub Release as `SHA256SUMS`, rsyncs `dist` to every box,
+runs [check-site.sh](check-site.sh) once per box, pinned to its address, to
+prove each is serving exactly those bytes, then deploys the Pages standby. It
+needs the repository secrets below; without them the upload and check are
+skipped, so a fork publishes to Pages alone. The `MIRROR_` names date from
+when the first box was a mirror.
 
 | Secret | What |
 |---|---|
-| `MIRROR_HOST` | the box's hostname or IP |
-| `MIRROR_SSH_KEY` | the PRIVATE half of a key made for this and nothing else, whose public half is in `/home/release/.ssh/authorized_keys`, bound to rrsync as below |
-| `MIRROR_KNOWN_HOSTS` | the box's host keys, so the workflow talks only to it: `ssh-keyscan -H <host> 2>/dev/null` |
+| `MIRROR_HOST` | the first box's hostname or IP |
+| `MIRROR2_HOST` | the second box's; empty means one box |
+| `MIRROR_SSH_KEY` | the PRIVATE half of one key made for this and nothing else, whose public half is in `/home/release/.ssh/authorized_keys` on every box, bound to rrsync as below |
+| `MIRROR_KNOWN_HOSTS` | every box's host keys, so the workflow talks only to them: `ssh-keyscan -H <host> 2>/dev/null` for each, concatenated |
 
 To mint the deploy key: `ssh-keygen -t ed25519 -f mirror-ci -N "" -C "plumbline release"`,
 put `mirror-ci.pub` on one line of `/home/release/.ssh/authorized_keys` with
@@ -110,6 +151,19 @@ By hand, with your own (unrestricted) key, the same upload is
 rsync -az --delete --exclude CNAME --rsync-path="sudo -u release rsync" -e "ssh -i ~/.ssh/<your key>" apps/web/dist/ deploy@<host>:/srv/plumbline/
 ```
 
+## The archive
+
+Every release puts the whole served site in one file beside it,
+`plumbline-site.tar.gz`, linked from About ("Download the site to keep or
+host yourself"), for anyone who wants Plumbline with or without us: the served
+files, a `README.txt` saying how to serve them (any static server over HTTPS,
+or `python3 -m http.server` on localhost), and their own `SHA256SUMS`. The
+release builds it reproducibly from `dist` (see release.yml) and lists it in
+the release's SHA256SUMS like every other file, so the daily check proves the
+archive intact; `archive.json` beside it carries its size for the About line,
+and About hides the line where no release built one (a local build). The
+service worker never caches it. Nothing in it points at GitHub.
+
 ## The headers
 
 The Caddyfile in [cloud-init.yaml](cloud-init.yaml) is the source for the
@@ -126,25 +180,27 @@ So changing a header is: edit cloud-init.yaml, make the suite pass, then put
 the new Caddyfile on the box before merging, or the next daily check fails:
 
 ```sh
-ssh deploy@<host> 'sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak && sudo tee /etc/caddy/Caddyfile >/dev/null && sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy' < Caddyfile
-ops/hetzner/check-site.sh https://plumblinebible.org   # headers, DNS, availability
+ops/hetzner/caddyfile.sh <other box IPv4> | ssh deploy@<host> 'sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak && sudo tee /etc/caddy/Caddyfile >/dev/null && sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy'
+BACKEND=<host> ops/hetzner/check-site.sh https://plumblinebible.org   # headers, DNS, availability
 ```
 
-where `Caddyfile` is the `content:` block of cloud-init.yaml with `:80` replaced
-by the four hostnames. The inline scripts in `apps/web/index.html` (the
+on each box. [caddyfile.sh](caddyfile.sh) prints the `content:` block of
+cloud-init.yaml with `:80` replaced by the four hostnames and the challenge
+forward pointed at the other box, which is exactly what a live box runs. The
+inline scripts in `apps/web/index.html` (the
 theme) and `apps/web/public/404.html` (the redirect) are the two hashes in the
 policy; edit either and its hash must follow (the spec prints the new one).
 
 ## Knowing it is up
 
 `.github/workflows/site-check.yml` runs the same check every morning (07:17
-UTC, after the box's unattended upgrade) and can be run by hand from the
-Actions tab. GitHub emails a failure. It checks the .org only: the .ch is the
-same box and files under another name, so the .org passing covers it. It fails
-when:
+UTC, after the boxes' unattended upgrade), once per box, and can be run by
+hand from the Actions tab. GitHub emails a failure. It checks the .org only:
+the .ch is the same boxes and files under another name, so the .org passing
+covers it. It fails when:
 
-- either name stops resolving to exactly the box's two addresses (a hijacked
-  DNS record, with the box untouched)
+- either name stops resolving to exactly the boxes' four addresses (a hijacked
+  DNS record, with the boxes untouched)
 - any served file differs from the latest release's `SHA256SUMS`, or is
   missing; the list lives on GitHub, so whoever controls the box cannot
   rewrite it to match

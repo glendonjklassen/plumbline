@@ -2349,8 +2349,12 @@ fn wire_panel_link_keys_are_golden() {
         ("occ:G25", "occurrences", &["code", "verb"]),
         ("rend:G25:loved", "rendering", &["code", "rendering", "verb"]),
         ("code:G25:loved", "codeStudy", &["code", "verb", "word"]),
-        ("wusage:0:loved:book:Gen", "wordUsage", &["page", "scope", "verb", "word"]),
-        ("lusage:0:G25:loved:book:Gen", "codeUsage", &["code", "page", "scope", "verb", "word"]),
+        ("wusage:0:loved:book:Gen", "wordUsage", &["allCodes", "books", "page", "scope", "verb", "word"]),
+        (
+            "lusage:0:G25:loved:book:Gen",
+            "codeUsage",
+            &["allCodes", "books", "code", "family", "page", "scope", "verb", "word"],
+        ),
         ("threadedit:0:1", "threadEditMode", &["edit", "index", "verb"]),
         ("thread:0", "thread", &["index", "verb"]),
         ("tag:0", "tag", &["index", "verb"]),
@@ -2386,6 +2390,12 @@ fn wire_panel_link_keys_are_golden() {
     }
     // One row per variant, so `link_verb`'s exhaustive match is a real tripwire.
     assert_eq!(verbs.len(), golden.len(), "each verb wants exactly one golden row");
+    // The `+` that widens an original-word lens to its family crosses as a flag,
+    // not as part of the code: the shell re-asks for the card by code.
+    let wide = crate::wire::link_to_wire(plumbline_core::panel::parse_link("lusage:0bc:G25+:loved:all").unwrap());
+    let v = serde_json::to_value(&wide).unwrap();
+    assert_eq!((v["code"].as_str(), v["family"].as_bool()), (Some("G25"), Some(true)));
+    assert_eq!((v["page"].as_u64(), v["books"].as_bool(), v["allCodes"].as_bool()), (Some(0), Some(true), Some(true)));
 }
 
 /// A search answer's `kind` token — exhaustive on purpose, like [`block_kind`].
@@ -3361,6 +3371,60 @@ fn picking_a_language_downloads_no_scripture() {
     );
 }
 
+/// Today's memorization queue over the ABI: the due cards a daily cap leaves
+/// room for, with the cap's bookkeeping beside them, from a temp home exactly
+/// as the plans surface reads it. The queue logic itself is proved in
+/// `core::memory`; this holds the wire shape and that a grade spends the cap.
+#[test]
+fn memory_today_via_abi() {
+    use crate::memory_today::plumbline_engine_memory_today_json;
+    unsafe {
+        let c = |s: &str| CString::new(s).unwrap();
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-memtoday-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null());
+        let stamp = c("2026-01-01T12:00:00Z");
+
+        // Nothing memorized: an empty queue, not null.
+        let q: Value =
+            serde_json::from_str(&take(plumbline_engine_memory_today_json(e, stamp.as_ptr(), 2)).unwrap()).unwrap();
+        assert_eq!(q["refs"].as_array().unwrap().len(), 0);
+        assert_eq!(
+            (q["dueTotal"].as_u64(), q["reviewedToday"].as_u64(), q["cap"].as_u64()),
+            (Some(0), Some(0), Some(2))
+        );
+
+        // Two new cards are both due; a cap of 1 hands over one, in reading order.
+        assert!(plumbline_engine_memory_add(e, c("John 3:18").as_ptr(), stamp.as_ptr()).is_null());
+        assert!(plumbline_engine_memory_add(e, c("John 3:16").as_ptr(), stamp.as_ptr()).is_null());
+        let q: Value =
+            serde_json::from_str(&take(plumbline_engine_memory_today_json(e, stamp.as_ptr(), 1)).unwrap()).unwrap();
+        assert_eq!(q["refs"], serde_json::json!(["John 3:16"]));
+        assert_eq!(q["dueTotal"], 2);
+        // No cap: both.
+        let q: Value =
+            serde_json::from_str(&take(plumbline_engine_memory_today_json(e, stamp.as_ptr(), 0)).unwrap()).unwrap();
+        assert_eq!(q["refs"].as_array().unwrap().len(), 2);
+
+        // A grade today spends the cap: with cap 1 the day is done, and the
+        // other card waits for tomorrow's tile.
+        assert!(plumbline_engine_memory_grade(e, c("John 3:16").as_ptr(), c("good").as_ptr(), stamp.as_ptr()).is_null());
+        let q: Value =
+            serde_json::from_str(&take(plumbline_engine_memory_today_json(e, stamp.as_ptr(), 1)).unwrap()).unwrap();
+        assert_eq!(q["refs"].as_array().unwrap().len(), 0);
+        assert_eq!((q["dueTotal"].as_u64(), q["reviewedToday"].as_u64()), (Some(1), Some(1)));
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
 /// The word-usage view over a real engine: exact postings, canon counts, verbatim
 /// segments. The native twin of `plumbline_engine_word_usage_blocks_json`, which
 /// is cfg-gated to wasm32; both drive the same `PanelSource::word_usage`.
@@ -3398,7 +3462,7 @@ fn word_usage_reads_the_real_index() {
 
         // The original-word lens over the same engine: G25's occurrences, the
         // hit being whatever surface word carries the tag — "loved" here.
-        let lens = panel::PanelSource::code_usage(eng, "G25", "all", 0).unwrap();
+        let lens = panel::PanelSource::code_usage(eng, "G25", "all", 0, false).unwrap();
         assert_eq!(lens.total, 1);
         let line = &lens.lines[0];
         assert_eq!(line.refkey, "John 3:16");
@@ -3411,12 +3475,14 @@ fn word_usage_reads_the_real_index() {
     }
 }
 
-/// The original-word lens answers for the whole derivation family, the way the
-/// surface lens answers "ruler" for "rulers": ἀγάπη (G26, "from G25") rides with
-/// ἀγαπάω, so a reader who tapped "loved" sees "love" the noun in the same evidence
-/// — and `code_family` names the fold, so the card can say so.
+/// The original-word lens answers for the ONE code by default — a reader who
+/// tapped "loved" and chose ἀγαπάω gets ἀγαπάω's verses, with "love" the noun
+/// (ἀγάπη, G26, "from G25") left out — and for the whole derivation family only
+/// when asked (`family`), where `code_family` names the fold so the card can say
+/// so. The default was the fold until 2026-10-24: "beloved" bolded under ἀγαπάω
+/// read as a wrong answer.
 #[test]
-fn code_usage_folds_in_the_derivation_family() {
+fn code_usage_folds_in_the_derivation_family_only_when_asked() {
     const KJV2: &str = concat!(
         r#"{"format":"x","tokenization":"kjv1769-tok2","verses":2}"#,
         "\n",
@@ -3429,32 +3495,60 @@ fn code_usage_folds_in_the_derivation_family() {
       "G25":{"lemma":"ἀγαπάω","xlit":"agapaō","derivation":"perhaps from (much) (or compare G5689);"},
       "G26":{"lemma":"ἀγάπη","xlit":"agapē","derivation":"from G25 (ἀγαπάω);"}
     }"#;
+    // The families come from the shipped file, never from the prose above: an
+    // engine opened from bytes alone has none.
+    const DERIVATIONS2: &str = r#"{"format":"plumbline-strongs-derivations-v1","entries":{"G26":["G25"]}}"#;
     unsafe {
         let mut err: *mut c_char = ptr::null_mut();
-        let e =
+        let bare =
             plumbline_engine_open_from_bytes(KJV2.as_ptr(), KJV2.len(), STRONGS2.as_ptr(), STRONGS2.len(), &mut err);
+        assert!(err.is_null() && !bare.is_null(), "{:?}", take(err));
+        assert_eq!(panel::PanelSource::code_family(&*bare, "G26"), ["G26"], "no file, no family");
+        plumbline_engine_free(bare);
+
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-families-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV2).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS2).unwrap();
+        std::fs::write(home.join("data").join("derivation-families.json"), DERIVATIONS2).unwrap();
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(err.is_null() && !e.is_null(), "{:?}", take(err));
         let eng = &*e;
         assert_eq!(panel::PanelSource::code_family(eng, "G25"), ["G25", "G26"]);
         assert_eq!(panel::PanelSource::code_family(eng, "G26"), ["G25", "G26"]);
         assert_eq!(panel::PanelSource::code_family(eng, "G2316"), ["G2316"]);
 
-        // Either member's lens covers both verses, each hit being that verse's own member.
+        // The one word: each member's lens covers its own verse and bolds its own word.
+        for (code, verse, hit) in [("G25", "John 3:16", "loved"), ("G26", "1John 4:8", "love")] {
+            let lens = panel::PanelSource::code_usage(eng, code, "all", 0, false).unwrap();
+            assert_eq!(lens.total, 1, "{code}");
+            assert_eq!(lens.lines[0].refkey, verse);
+            let hits: Vec<String> =
+                lens.lines.iter().flat_map(|l| l.segs.iter().filter(|(_, h)| *h).map(|(t, _)| t.clone())).collect();
+            assert_eq!(hits, [hit], "{code}");
+        }
+        // Widened: either member's lens covers both verses, each hit being that
+        // verse's own member.
         for code in ["G25", "G26"] {
-            let lens = panel::PanelSource::code_usage(eng, code, "all", 0).unwrap();
+            let lens = panel::PanelSource::code_usage(eng, code, "all", 0, true).unwrap();
             assert_eq!(lens.total, 2, "{code}");
             let hits: Vec<String> =
                 lens.lines.iter().flat_map(|l| l.segs.iter().filter(|(_, h)| *h).map(|(t, _)| t.clone())).collect();
             assert_eq!(hits, ["loved", "love"], "{code}");
         }
-        // A code with no relatives is unchanged: the family is itself.
-        let solo = panel::PanelSource::code_usage(eng, "G2316", "all", 0).unwrap();
-        assert_eq!(solo.total, 2);
+        // A code with no relatives is unchanged either way: the family is itself.
+        for family in [false, true] {
+            let solo = panel::PanelSource::code_usage(eng, "G2316", "all", 0, family).unwrap();
+            assert_eq!(solo.total, 2);
+        }
 
         // The chip carries the transliteration beside the lemma now.
         let chip = panel::PanelSource::chip(eng, "G26");
         assert_eq!((chip.lemma.as_deref(), chip.xlit.as_deref()), (Some("ἀγάπη"), Some("agapē")));
         plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
     }
 }
 

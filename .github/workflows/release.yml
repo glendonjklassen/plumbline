@@ -117,6 +117,9 @@ jobs:
     # the server was a mirror; renaming them means re-entering them in Settings.
     env:
       MIRROR_HOST: ${{ secrets.MIRROR_HOST }}
+      # The second box (ops/hetzner/README.md, "Two boxes"); same key, its host
+      # keys appended to MIRROR_KNOWN_HOSTS. Empty = one box.
+      MIRROR2_HOST: ${{ secrets.MIRROR2_HOST }}
     permissions:
       contents: write # attach SHA256SUMS to the release
       pages: write
@@ -176,6 +179,29 @@ jobs:
           # The same string the APK carries — bare, no leading 'v'.
           PLUMBLINE_VERSION: ${{ needs.version.outputs.name }}
 
+      # The whole served app in one file, linked from About, for anyone who
+      # wants to keep it or host it themselves (ops/hetzner/README.md, "The
+      # archive"). The same bytes for the same site — sorted names, a fixed
+      # timestamp, no owners, gzip without its own stamp — so a release that
+      # changed nothing re-mints nothing. Built from dist before it is put INTO
+      # dist, with its own checksum list inside, and then listed by the
+      # release's SHA256SUMS like every other file, so the daily check proves
+      # the archive intact too.
+      - name: Archive the site for anyone to keep
+        run: |
+          stage="$RUNNER_TEMP/archive"
+          mkdir -p "$stage"
+          cp -r apps/web/dist/. "$stage/"
+          rm -f "$stage/CNAME"
+          sed "s/@VERSION@/${PLUMBLINE_VERSION}/" ops/archive-README.txt > "$stage/README.txt"
+          (cd "$stage" && find . -type f ! -name SHA256SUMS -printf '%P\n' | LC_ALL=C sort | xargs sha256sum > SHA256SUMS)
+          tar --sort=name --mtime='1970-01-01 00:00:00Z' --owner=0 --group=0 --numeric-owner \
+            -C "$stage" -cf - . | gzip -n > apps/web/dist/plumbline-site.tar.gz
+          printf '{"path":"plumbline-site.tar.gz","bytes":%s}\n' "$(stat -c %s apps/web/dist/plumbline-site.tar.gz)" > apps/web/dist/archive.json
+          cat apps/web/dist/archive.json
+        env:
+          PLUMBLINE_VERSION: ${{ needs.version.outputs.name }}
+
       # The record of what this release serves, byte for byte, kept on GitHub
       # where a compromised server cannot rewrite it. check-site.sh compares the
       # live site against it after the upload and every day after (site-check.yml).
@@ -203,7 +229,14 @@ jobs:
       # GitHub's alone. The host key is PINNED (MIRROR_KNOWN_HOSTS), not accepted
       # on first use: a deploy key that will talk to whoever answers the IP is no
       # deploy key.
-      - name: Upload the site to plumblinebible.org
+      #
+      # Every box before any check: a reader is round-robined between the boxes,
+      # so one serving the new shell while the other still lacks its hashed
+      # assets is a broken boot. Both uploads are required — a box that silently
+      # kept the old release would serve that broken boot to half the readers
+      # until someone noticed. A dead box is taken out of DNS by hand and the
+      # job re-run.
+      - name: Upload the site to every box
         if: github.event_name != 'workflow_dispatch' && env.MIRROR_HOST != ''
         env:
           MIRROR_SSH_KEY: ${{ secrets.MIRROR_SSH_KEY }}
@@ -218,17 +251,23 @@ jobs:
           # roots every path the client names there and refuses anything that
           # is not an rsync into it. The old target would nest a second
           # srv/plumbline inside the first and fail.
-          rsync -az --delete --delay-updates --exclude CNAME \
-            -e "ssh -i ~/.ssh/mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
-            apps/web/dist/ "release@${MIRROR_HOST}:/"
+          for box in $MIRROR_HOST $MIRROR2_HOST; do
+            rsync -az --delete --delay-updates --exclude CNAME \
+              -e "ssh -i ~/.ssh/mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+              apps/web/dist/ "release@${box}:/"
+          done
 
-      # Proves the upload landed rather than assuming it: DNS points at the box,
-      # every served file matches the checksums just attached, and the
-      # certificate is renewing. The same script runs daily (site-check.yml)
-      # for what changes between releases.
-      - name: Check plumblinebible.org is serving this release
+      # Proves the upload landed rather than assuming it: DNS names every box,
+      # each box serves exactly the checksums just attached, and each
+      # certificate is renewing. Once PER BOX, pinned by address — an unpinned
+      # run would prove whichever box DNS handed out. The same script runs daily
+      # (site-check.yml) for what changes between releases.
+      - name: Check every box is serving this release
         if: github.event_name != 'workflow_dispatch' && env.MIRROR_HOST != ''
-        run: ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
+        run: |
+          for box in $MIRROR_HOST $MIRROR2_HOST; do
+            BACKEND=$box ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
+          done
 
       # The standby. continue-on-error, so GitHub can neither block nor fail a
       # release that has already reached readers; a failure still shows as a

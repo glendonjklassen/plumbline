@@ -21,8 +21,24 @@
 
 use crate::config::Church;
 
-/// The hosted PWA — what every share hands over.
-pub const PWA_URL: &str = "https://plumblinebible.org/";
+/// Every address the app is served from, in the order they were added. The
+/// first is the canonical one: what a share hands over unless the reader chose
+/// another ([`Config::share_origin`](crate::config::Config::share_origin)), and
+/// what the vector table pins. They are the same files on the same servers, so
+/// a link opens the same thing at either — but they are separate browser
+/// origins, so a reader's data stays with the address they opened.
+pub const MIRRORS: [&str; 2] = ["https://plumblinebible.org/", "https://plumblinebible.ch/"];
+
+/// The canonical hosted PWA — what every share hands over by default.
+pub const PWA_URL: &str = MIRRORS[0];
+
+/// The share origin as stored: one of [`MIRRORS`], else empty (the first). An
+/// address that is not ours cannot be shared as if it were, whichever writer
+/// put it in the config.
+pub fn clean_share_origin(s: &str) -> String {
+    let s = s.trim();
+    MIRRORS.iter().find(|m| **m == s).map(|m| m.to_string()).unwrap_or_default()
+}
 
 /// Caps on the three fields. These end up in a URL, in a QR, and on a welcome
 /// screen, and the length that still scans is finite.
@@ -659,6 +675,17 @@ mod tests {
         for bad in ["", "Ps23:1", "Ps 23", "Ps 1234:1", "1 Jn 4:8", "../../etc", "Ps 23:1x"] {
             let q = format!("?at={}", bad.replace(' ', "%20"));
             assert_eq!(shared_at_ref(&q), None, "{bad:?} must not be accepted");
+        }
+    }
+
+    #[test]
+    fn share_origin_is_one_of_the_mirrors_or_nothing() {
+        for m in MIRRORS {
+            assert_eq!(clean_share_origin(m), m);
+            assert_eq!(clean_share_origin(&format!("  {m}\n")), m);
+        }
+        for bad in ["", "https://plumblinebible.org", "https://example.org/", "plumblinebible.ch"] {
+            assert_eq!(clean_share_origin(bad), "", "{bad:?} must not be accepted");
         }
     }
 

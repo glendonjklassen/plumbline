@@ -9,6 +9,20 @@
   import { getSession } from "../state/session.svelte";
   import { t } from "../lib/i18n.svelte";
 
+  /** The archive the release put beside the site, for About's download link:
+   *  `{ path, bytes }`, or null where no release built one (a local build, the
+   *  preview the tests run against), in which case the line is not shown.
+   *  Asked with no-cache so the service worker never stores it and the size is
+   *  the deployed one. */
+  let archive = $state<{ path: string; bytes: number } | null>(null);
+  $effect(() => {
+    if (s.panel?.kind !== "about") return;
+    fetch("archive.json", { cache: "no-cache" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((a) => (archive = a && typeof a.path === "string" && typeof a.bytes === "number" ? a : null))
+      .catch(() => (archive = null));
+  });
+
   const s = getSession();
 
   // NO EMBEDDED MAP CARD. The machine tier's sections are the symbolic concept
@@ -45,6 +59,9 @@
           p.scope,
           p.page,
           s.gates,
+          p.family === true,
+          p.books === true,
+          p.allCodes === true,
         )?.blocks;
       case "codeStudy":
         return s.qIn(p.lang, "codeStudyBlocks", p.code, p.word, s.gates)?.blocks;
@@ -198,6 +215,13 @@
               Plumbline <strong>{__APP_VERSION__}</strong><br />
               <span class="vsub">engine {s.engineVersion} · data {s.packVersion.slice(0, 8)} · build {__BUILD_ID__}</span>
             </p>
+            <!-- The whole site in one file, for whoever wants to keep it or host
+                 it themselves, with or without us. A plain same-origin download. -->
+            {#if archive}
+              <p class="archive">
+                <a href={archive.path} download>{t("about.archive", { size: String(Math.round(archive.bytes / 1e6)) })}</a>
+              </p>
+            {/if}
           {/if}
         {:else}
           <!-- Never look frozen: the worker is answering. -->
@@ -270,6 +294,10 @@
   .vsub {
     font-size: calc(11.5px * var(--uiScale));
     font-variant-numeric: tabular-nums;
+  }
+  .archive {
+    margin-top: 8px;
+    font-size: calc(13px * var(--uiScale));
   }
   /* The overlay's answer, directly under the headword and above the Strong's. */
   .akjv {

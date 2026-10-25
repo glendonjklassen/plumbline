@@ -57,6 +57,7 @@ use plumbline_rnd::{bridge, burst, concept, morph};
 pub mod backup;
 pub mod devotionals;
 pub mod dwell;
+pub mod memory_today;
 pub mod notes_abi;
 pub mod plans;
 pub mod reading_map;
@@ -198,8 +199,10 @@ pub struct PlumblineEngine {
     /// the navigator asks for all 1,189 chapters every time it opens.
     reading_words: OnceLock<reading::ChapterWords>,
     /// Strong's codes grouped by the root their derivations lead to (`core::strongs::Families`)
-    /// — the original-word lens's "every form of this word". Needs the dictionary, so it is
-    /// built on first use after that loads; ~14k short strings, once.
+    /// — the original-word lens's "every form of this word" and the "Same root (Strong's)"
+    /// row. Read from `data/derivation-families.json`, decided offline (data-prep/strongs/),
+    /// never from the dictionary's prose; loaded with the study data, so a home that has not
+    /// got the file yet answers "no relatives" rather than guessing.
     families: OnceLock<plumbline_core::strongs::Families>,
     /// How long the chapter on screen has really been read (`core::reading::DwellTracker`,
     /// driven by `plumbline_engine_reading_tick_json`). On the engine because it is per-reader
@@ -315,8 +318,21 @@ impl PlumblineEngine {
     /// empty one (stage 1 on the web opens before Strong's arrives; a family index built
     /// then would say every word stands alone for the rest of the session).
     fn families(&self) -> Option<&plumbline_core::strongs::Families> {
-        self.strongs.get()?;
-        Some(self.families.get_or_init(|| plumbline_core::strongs::Families::build(self.strongs())))
+        self.load_families();
+        self.families.get()
+    }
+
+    /// Read `data/derivation-families.json` into [`Self::families`] if it is there and not
+    /// read yet. Idempotent and cheap when the file is absent (a stage-1 web boot before the
+    /// study pack lands), so both the stage-2 hook and the first tap can ask.
+    fn load_families(&self) {
+        if self.families.get().is_some() {
+            return;
+        }
+        let Some(h) = &self.home else { return };
+        if let Ok(parents) = strongs::load_derivations(h.join("data").join("derivation-families.json")) {
+            let _ = self.families.set(strongs::Families::from_parents(&parents));
+        }
     }
 
     /// The fused OT↔NT bridge — needs Strong's, so it is None until the
@@ -348,6 +364,9 @@ impl PlumblineEngine {
                 self.strongs_localized.store(is_localized, std::sync::atomic::Ordering::Relaxed);
             }
         }
+        // The derivation families ride the same stage as Strong's and are as language-
+        // independent: one file, in the KJV's codes, whatever dictionary is serving.
+        self.load_families();
         // The modernization belongs to a TEXT, so the open text picks it, not the reader's
         // language: someone whose translation download has not landed is reading the KJV and
         // the AKJV is the right offer while they are on it. A language whose row names no
@@ -3250,8 +3269,18 @@ impl PanelSource for PlumblineEngine {
         })
     }
     fn word_codes(&self, word: &str) -> Vec<String> {
+        // The SOLE renderings, not the whole reverse index: a tap on an untagged
+        // "the" was offered υἱός, βασιλεία and five hundred more, every noun the
+        // article ever stood before in a tagged run (maintainer, 2026-10-24).
+        // And only those seen in two verses or more: on the shipped KJV, "the"
+        // stands alone for ὁ in fifteen verses and for δέ, εἰς, μέν, πνεῦμα and
+        // הוּא in one each — single-verse tagging strays, not words the reader
+        // should be offered. A genuinely tagged token never comes through here;
+        // this is the fallback for an UNTAGGED one.
         self.renderings_ready()
-            .map(|rx| rx.word_codes(word).into_iter().map(|(c, _)| c.to_string()).collect())
+            .map(|rx| {
+                rx.word_sole_codes(word).into_iter().filter(|(_, n)| *n >= 2).map(|(c, _)| c.to_string()).collect()
+            })
             .unwrap_or_default()
     }
     fn occurrences(&self, code: &str) -> panel::OccurrencesView {
@@ -3288,13 +3317,16 @@ impl PanelSource for PlumblineEngine {
         // the whole card, and this runs over every token of every verse painted.
         Some(usage_over(&self.corpus, &all, scope, page, folded, &move |t| group.contains(&search::fold_word(&t.word))))
     }
-    fn code_usage(&self, code: &str, scope: &str, page: u32) -> Option<panel::WordUsageView> {
+    fn code_usage(&self, code: &str, scope: &str, page: u32, family: bool) -> Option<panel::WordUsageView> {
         let ix = self.search_ix_ready()?;
-        // The whole derivation family, not the one code: the surface lens answers
-        // "rulers" with "ruler", and the original-word lens owes the same — δαίμων
-        // and "possessed with devils" (δαιμονίζομαι) beside δαιμόνιον. The card's
-        // same-root row names what was folded in; `code_family` and this must agree.
-        let family = panel::PanelSource::code_family(self, code);
+        // The ONE code unless the reader widened the lens: the family fold used to
+        // be the only answer, and it bolded "beloved" (ἀγαπητός) and "charity"
+        // (ἀγάπη) under a card headed ἀγαπάω, which read as the wrong words
+        // (maintainer, 2026-10-24). Widened, it is the whole derivation family —
+        // δαίμων and "possessed with devils" (δαιμονίζομαι) beside δαιμόνιον — and
+        // the card's same-root row names what was folded in; `code_family` and
+        // this must agree.
+        let family = if family { panel::PanelSource::code_family(self, code) } else { vec![code.to_string()] };
         let all: Vec<usize> = if family.len() == 1 {
             ix.lemma_verses(code).to_vec()
         } else {

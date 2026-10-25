@@ -30,5 +30,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release download --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS --dir "$RUNNER_TEMP"
-      - name: Check plumblinebible.org
-        run: ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
+      # Once per box, pinned, as the release does. Without the secrets (a fork)
+      # the loop runs once unpinned, which is the only check possible there.
+      - name: Check every box
+        env:
+          MIRROR_HOST: ${{ secrets.MIRROR_HOST }}
+          MIRROR2_HOST: ${{ secrets.MIRROR2_HOST }}
+        run: |
+          for box in ${MIRROR_HOST:-""} $MIRROR2_HOST; do
+            BACKEND=$box ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
+          done

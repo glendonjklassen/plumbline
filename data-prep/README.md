@@ -210,7 +210,12 @@ orthography is modernized — `dass` for `daß`), so the merge aligns **each boo
 as one token stream** in reading order, with an orthography fold and handling
 for joined words and contractions. ~98.3% of the source's ~350k tags transfer;
 words the alignment cannot confidently pair stay untagged — a missing tag is
-honest, a guessed one is not. `check-luther.py`'s seventh claim guards the
+honest, a guessed one is not. After the merge, every tag the KJV verse at the
+same address does not carry is dropped (about 1.6%): both texts render the same
+Hebrew and Greek, so a code absent from the KJV's verse is a source error or a
+slid alignment, and left in it bolded the wrong German word in the word study's
+original-word lens. `merge-strongs.py --prune` runs that pass alone over the
+shipped file. `check-luther.py`'s seventh claim guards the
 result: every code resolves in `data/strongs.json`, Hebrew only in the OT and
 Greek only in the NT, and the count is high enough to prove the merge ran.
 
@@ -221,6 +226,20 @@ python3 data-prep/luther/build-luther.py luther_1912.json
 python3 data-prep/luther/merge-strongs.py "SF_2022-02-27_GER_LUTH1912_(LUTHER_1912_mit_Strongs).xml"
 python3 data-prep/luther/check-luther.py
 ```
+
+## Strong's derivation families (`data/derivation-families.json`)
+
+`data-prep/strongs/derivations.py` reads every entry's derivation prose in
+`data/strongs.json` once, with a grammar that is explicit about what counts, and
+writes one parent list per code: what the entry STATES ("from G1142", "feminine
+of G2316", "from G1223 and G906"), never what it hedges ("probably from"),
+relates ("akin to", "compare", "(with G3588)") or borrows across the testaments
+("of Hebrew origin"). The engine's `Families` (the "Same root (Strong's)" row and
+the original-word lens's family fold) reads that file and nothing else; it used
+to scan the prose at runtime and filed θεός under the article ὁ because the entry
+says "(with G3588)". `--report` prints the classification and the residue; the
+residue is decided by hand in `derivation-overrides.json`, each with its reason.
+Rerun after any change to `strongs.json`.
 
 ## The Spanish Bible (`data/rv1909.jsonl`)
 

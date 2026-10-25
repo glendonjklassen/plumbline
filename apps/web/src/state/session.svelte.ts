@@ -14,8 +14,8 @@ import { fontStackFor, setReaderFont } from "../reader/measure";
 import {
   cleanChurch,
   clockLabel,
-  PWA_URL,
   REF_SHAPE,
+  shareBase,
   shareUrl,
   type Church,
   type SharePreset,
@@ -64,6 +64,12 @@ export type PanelView =
       kind: "wordUsage";
       word: string;
       code?: string;
+      /** With `code`: the lens widened to the code's derivation family. */
+      family?: boolean;
+      /** The by-book distribution shown even when it is long. */
+      books?: boolean;
+      /** Every original-word chip shown, past the card's cap. */
+      allCodes?: boolean;
       refKey?: string;
       tokenIndex?: number;
       scope: string;
@@ -287,7 +293,35 @@ export class Session {
    *  numbers the reader taps to set the end. */
   memorizePassageFrom = $state<string | null>(null);
   /** Memorization surface (hub / review drill / coverage+activity stats). */
-  memorize = $state<{ view: "hub" } | { view: "review"; only?: string } | { view: "stats" } | null>(null);
+  memorize = $state<
+    { view: "hub" } | { view: "review"; only?: string; queue?: string[] } | { view: "stats" } | null
+  >(null);
+
+  /** Memory cards the plans surface schedules a day; `0` is no limit. The
+   *  config value, clamped to a whole non-negative number, default 10 (the
+   *  core's default, `config::Config::memorize_per_day`). */
+  get memorizePerDay(): number {
+    const n = Number(this.config?.memorizePerDay);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 10;
+  }
+
+  setMemorizePerDay(n: number): void {
+    const v = Number.isFinite(n) && n >= 0 ? Math.min(500, Math.floor(n)) : 10;
+    if (v === this.memorizePerDay) return;
+    this.config.memorizePerDay = v;
+    this.saveConfig();
+    // The cap is part of the read's cache key, so the tiles re-ask on their own;
+    // the epoch bump is for anything holding the previous answer.
+    this.studyEpoch++;
+  }
+
+  /** Today's memorization queue under the cap — the plans surface's tile and the
+   *  bookmark row's chip read this; a review launched from either walks `refs`.
+   *  Null while the worker answers (callers hold their last answer). */
+  memoryToday(): any {
+    void this.studyEpoch;
+    return this.q("memoryToday", dayStamp(), this.memorizePerDay);
+  }
   /** Reading-history sheet (recents from the shared config). */
   showHistory = $state(false);
   /** The one Settings dialog. */
@@ -1248,17 +1282,24 @@ export class Session {
     return c?.service == null ? "" : t("church.meets", { time: clockLabel(c.service, lang()) });
   }
 
+  /** The address share links name — see `church.ts`'s `shareBase`. Every share
+   *  surface builds on this, so a reader who picked the .ch is never handed a
+   *  .org link from some other corner of the app. */
+  get shareBase(): string {
+    return shareBase(this.config.shareOrigin);
+  }
+
   /** The link this reader hands over, wherever they share from — the app plus
    *  their church. Every share surface reads this, so they cannot drift apart. */
   get shareLink(): string {
-    return shareUrl(PWA_URL, this.church);
+    return shareUrl(this.shareBase, this.church);
   }
 
   /** The link Present hands over — the same one Share does. Present used to mark
    *  it "for a new believer"; personas are gone, so a link handed over face to
    *  face is an ordinary link. */
   get presentShareLink(): string {
-    return shareUrl(PWA_URL, this.church);
+    return shareUrl(this.shareBase, this.church);
   }
 
   /** The palette's live draft on the Share screen: what the custom link will
@@ -1284,7 +1325,7 @@ export class Session {
   get customShareLink(): string {
     const d = this.shareDraft;
     const at = d.at.trim();
-    return shareUrl(PWA_URL, d.church ? this.church : null, {
+    return shareUrl(this.shareBase, d.church ? this.church : null, {
       lang: d.lang || null,
       thread: d.target === "thread" ? d.thread || null : null,
       devotional: d.target === "devotional" ? d.devotional || null : null,

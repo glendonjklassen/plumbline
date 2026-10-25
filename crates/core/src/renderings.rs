@@ -56,6 +56,9 @@ pub struct RenderingView<'a> {
 pub struct Renderings {
     by_code: HashMap<String, HashMap<String, Rendering>>,
     by_word: HashMap<String, HashMap<String, usize>>,
+    /// Normalized single word → code → the verses in which EVERY run of that
+    /// code is exactly that word. See [`Renderings::word_sole_codes`].
+    sole: HashMap<String, HashMap<String, usize>>,
 }
 
 /// Build-time accumulator for one (code, normalized-rendering) pair: raw
@@ -86,6 +89,7 @@ impl Renderings {
 pub struct RenderingsBuilder {
     by_code: HashMap<String, HashMap<String, Bucket>>,
     by_word: HashMap<String, HashMap<String, usize>>,
+    sole: HashMap<String, HashMap<String, usize>>,
     /// Next canonical verse ordinal to fold in.
     next: usize,
 }
@@ -101,6 +105,10 @@ impl RenderingsBuilder {
             let by_code = &mut self.by_code;
             let by_word = &mut self.by_word;
             let vr = v.vref();
+            // Every run closed in this verse, by code, as its normalized
+            // surface — what decides at verse end whether a one-word run stood
+            // for the code or beside it.
+            let mut verse_runs: HashMap<String, Vec<String>> = HashMap::new();
             let last = v.tokens.len().saturating_sub(1) as u16;
             // Runs open on the current token: code → (start index, surface so
             // far). Owned keys keep the borrow checker out of the way; only a
@@ -148,6 +156,7 @@ impl RenderingsBuilder {
                 let to_close: Vec<String> = open.keys().filter(|k| !active.contains(&k.as_str())).cloned().collect();
                 for code in to_close {
                     let (start, surface) = open.remove(&code).unwrap();
+                    verse_runs.entry(code.clone()).or_default().push(normalize(&surface));
                     record(by_code, &code, surface, RenderingOcc { vref: vr.clone(), span: (start, idx - 1) });
                 }
 
@@ -167,7 +176,23 @@ impl RenderingsBuilder {
 
             // Close whatever is still open at verse end.
             for (code, (start, surface)) in open.drain() {
+                verse_runs.entry(code.clone()).or_default().push(normalize(&surface));
                 record(by_code, &code, surface, RenderingOcc { vref: vr.clone(), span: (start, last) });
+            }
+
+            // A one-word run stands FOR its code only when no other run of that
+            // code in the verse reads differently. The KJV tags the article with
+            // its noun's code even across an adjective — "of [the] living God",
+            // "[the] Holy Ghost" — so "the" forms a one-word run of θεός or
+            // πνεῦμα while the noun sits two tokens on; that is the article beside
+            // the word, not a rendering of it (maintainer, 2026-10-24: a tap on
+            // "the" offered υἱός). "love … love" in one verse still counts.
+            for (code, surfaces) in verse_runs {
+                let word = &surfaces[0];
+                if word.is_empty() || word.contains(' ') || surfaces.iter().any(|s| s != word) {
+                    continue;
+                }
+                *self.sole.entry(word.clone()).or_default().entry(code).or_insert(0) += 1;
             }
         }
         self.next = end;
@@ -189,7 +214,7 @@ impl RenderingsBuilder {
             })
             .collect();
 
-        Renderings { by_code, by_word: self.by_word }
+        Renderings { by_code, by_word: self.by_word, sole: self.sole }
     }
 }
 
@@ -214,6 +239,23 @@ impl Renderings {
         let key = normalize(word);
         let mut out: Vec<(&str, usize)> =
             self.by_word.get(&key).into_iter().flatten().map(|(c, n)| (c.as_str(), *n)).collect();
+        out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+        out
+    }
+
+    /// The codes a surface word stands for ON ITS OWN, most frequent first
+    /// (ties by code), each counted in verses: those where the word, alone, is
+    /// the only way the code is rendered. The difference from
+    /// [`word_codes`](Self::word_codes): the KJV tags a phrase as one run and
+    /// the article with its noun's code, so "the" carries υἱός wherever "the
+    /// Son" is tagged and θεός across "[the] living God", and the plain reverse
+    /// index answers "the" with every noun it ever stood before. Here "the"
+    /// answers the article at most (Mark 2:14, "Levi [the] son of Alphaeus",
+    /// where nothing else carries ὁ), and "shalt" (always inside "thou shalt
+    /// love") nothing at all. What a word's original-word chips are made of.
+    pub fn word_sole_codes(&self, word: &str) -> Vec<(&str, usize)> {
+        let mut out: Vec<(&str, usize)> =
+            self.sole.get(&normalize(word)).into_iter().flatten().map(|(c, n)| (c.as_str(), *n)).collect();
         out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
         out
     }
@@ -276,7 +318,7 @@ mod tests {
     // multi-code token, a FLAG_ADDED word breaking a run (and carrying a stray
     // code that must be ignored), and a word that maps to two codes.
     const SAMPLE: &str = concat!(
-        r#"{"format":"x","tokenization":"kjv1769-tok2","verses":6}"#,
+        r#"{"format":"x","tokenization":"kjv1769-tok2","verses":7}"#,
         "\n",
         r#"{"b":"1Cor","c":13,"v":1,"t":[["","charity",",",["G26"],0]]}"#,
         "\n",
@@ -289,6 +331,8 @@ mod tests {
         r#"{"b":"1Cor","c":13,"v":7,"t":[["","love","",["G25"],0]]}"#,
         "\n",
         r#"{"b":"1Cor","c":13,"v":8,"t":[["","love","",["G5368"],0]]}"#,
+        "\n",
+        r#"{"b":"1Cor","c":13,"v":9,"t":[["","the","",["G2316"],0],["","living","",["G2198"],0],["","God","",["G2316"],0]]}"#,
     );
 
     fn build() -> Renderings {
@@ -372,7 +416,7 @@ mod tests {
         // The added "the" carried a stray G9999 — it must not index a run…
         assert!(r.renderings("G9999").is_empty());
         // …nor appear in the reverse index for "the".
-        assert!(r.word_codes("the").is_empty());
+        assert!(!r.word_codes("the").iter().any(|(c, _)| *c == "G9999"));
     }
 
     #[test]
@@ -382,6 +426,32 @@ mod tests {
         assert_eq!(r.word_codes("love"), vec![("G25", 1), ("G5368", 1)]);
         // Query normalization: caller may pass a raw surface form.
         assert_eq!(r.word_codes("Love"), r.word_codes("love"));
+    }
+
+    #[test]
+    fn sole_codes_leave_out_the_phrase_a_word_only_sits_inside() {
+        let r = build();
+        // "suffereth" is tagged G3114, but only ever inside "suffereth long": the
+        // reverse index knows the code, the sole-rendering lookup does not —
+        // the original word behind "suffereth" alone is nothing.
+        assert_eq!(r.word_codes("suffereth"), vec![("G3114", 1)]);
+        assert!(r.word_sole_codes("suffereth").is_empty());
+        // A word that IS a rendering on its own keeps every such code, counted
+        // in verses, most frequent first.
+        assert_eq!(r.word_sole_codes("love"), vec![("G25", 1), ("G5368", 1)]);
+        assert_eq!(r.word_sole_codes("Charity,"), vec![("G26", 2)]);
+        assert!(r.word_sole_codes("nope").is_empty());
+        // The article tagged with its noun's code across an adjective (13:9,
+        // "[the] living God"): a one-word run of G2316, but the noun two tokens
+        // on is G2316 too, so "the" stands beside the word, not for it — and
+        // "God" in that verse is not sole either (13:5 is where it is).
+        assert_eq!(r.word_codes("the"), vec![("G2316", 1)]);
+        assert!(r.word_sole_codes("the").is_empty());
+        assert_eq!(r.word_sole_codes("God"), vec![("H430", 1), ("H999", 1)]);
+        // 13:6 "loved … world" are two runs of G25 reading differently: neither
+        // stands alone for it there, though both are renderings of it.
+        assert!(r.word_sole_codes("loved").is_empty());
+        assert!(r.renderings("G25").iter().any(|v| v.label == "loved"));
     }
 
     #[test]

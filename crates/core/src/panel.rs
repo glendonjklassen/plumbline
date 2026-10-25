@@ -448,7 +448,11 @@ pub trait PanelSource {
     /// The verses where a code is rendered exactly `rendering` (filtered
     /// concordance); `None` when the code has no such rendering.
     fn rendering_refs(&self, code: &str, rendering: &str) -> Option<RenderingRefsView>;
-    /// The codes a surface English word translates (the reverse lens).
+    /// The codes a surface word translates ON ITS OWN, most frequent first
+    /// ([`crate::renderings::Renderings::word_sole_codes`]) — the reverse lens,
+    /// and the original-word chips of a tap on an untagged token. Not the whole
+    /// reverse index: "the" sits inside every tagged "the Son", and is not a
+    /// rendering of υἱός.
     fn word_codes(&self, word: &str) -> Vec<String>;
 
     /// A code's full concordance (capped by the source).
@@ -464,8 +468,10 @@ pub trait PanelSource {
 
     /// The usage card's original-word lens: the same view shape, but every verse
     /// tagged with `code`, emphasizing the tokens carrying it whatever the surface
-    /// rendering. Same `None` semantics as [`PanelSource::word_usage`].
-    fn code_usage(&self, _code: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
+    /// rendering. `family` widens that to every code in
+    /// [`PanelSource::code_family`]; off, only `code` itself is evidence. Same
+    /// `None` semantics as [`PanelSource::word_usage`].
+    fn code_usage(&self, _code: &str, _scope: &str, _page: u32, _family: bool) -> Option<WordUsageView> {
         None
     }
 
@@ -548,22 +554,33 @@ pub enum PanelLink {
         code: String,
         word: String,
     },
-    /// `wusage:PAGE:WORD:SCOPE` — the word-usage card (word-first study).
+    /// `wusage:PAGE[b][c]:WORD:SCOPE` — the word-usage card (word-first study).
     /// PAGE and WORD are colon-free; SCOPE is the trailing remainder because a
-    /// scope token (`book:Gen`) carries colons of its own.
+    /// scope token (`book:Gen`) carries colons of its own. Letters after the
+    /// page open what a long card folds: `b` the by-book distribution
+    /// (`books`), `c` every original-word chip (`all_codes`).
     WordUsage {
         word: String,
         scope: String,
         page: u32,
+        books: bool,
+        all_codes: bool,
     },
-    /// `lusage:PAGE:CODE:WORD:SCOPE` — the usage card in its original-word lens:
+    /// `lusage:PAGE:CODE[+]:WORD:SCOPE` — the usage card in its original-word lens:
     /// `code`'s occurrences, `word` kept so the surface chip can switch back. Same
-    /// trailing-SCOPE layout as `wusage:`.
+    /// trailing-SCOPE layout as `wusage:`. A `+` after the code widens the lens to
+    /// the code's whole derivation family (`family`); without it the lens is the
+    /// one word, which is what the reader tapped (maintainer, 2026-10-24: the
+    /// family fold bolded "beloved" under ἀγαπάω and read as a wrong answer).
     CodeUsage {
         code: String,
         word: String,
         scope: String,
         page: u32,
+        family: bool,
+        /// As on `wusage:` — the letters after the page.
+        books: bool,
+        all_codes: bool,
     },
     /// `threadedit:I:0|1` — leave/enter the thread detail's edit mode.
     ThreadEditMode {
@@ -703,16 +720,22 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
         }
         "wusage" => {
             let (page, rest) = rest.split_once(':')?;
+            let (page, books, all_codes) = usage_page(page)?;
             let (word, scope) = rest.split_once(':').unwrap_or((rest, "all"));
             if word.is_empty() {
                 return None;
             }
-            PanelLink::WordUsage { word: word.to_string(), scope: scope.to_string(), page: page.parse().ok()? }
+            PanelLink::WordUsage { word: word.to_string(), scope: scope.to_string(), page, books, all_codes }
         }
         "lusage" => {
             let (page, rest) = rest.split_once(':')?;
+            let (page, books, all_codes) = usage_page(page)?;
             let (code, rest) = rest.split_once(':')?;
             let (word, scope) = rest.split_once(':').unwrap_or((rest, "all"));
+            let (code, family) = match code.strip_suffix('+') {
+                Some(c) => (c, true),
+                None => (code, false),
+            };
             if code.is_empty() {
                 return None;
             }
@@ -720,7 +743,10 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
                 code: code.to_string(),
                 word: word.to_string(),
                 scope: scope.to_string(),
-                page: page.parse().ok()?,
+                page,
+                family,
+                books,
+                all_codes,
             }
         }
         "threadedit" => {
@@ -1138,7 +1164,18 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
 /// The per-verse extras after a word's code blocks: author actions, weave + TSK
 /// cross-references, tags, and margin notes. Author actions and the verse's tags are
 /// the reader's own data and are never gated.
+/// Everything a verse carries below a word study: the reader's own rows, then
+/// the references. One fetch of the weave partners serves both halves.
 fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<Block>) {
+    let xrefs = src.verse_xrefs(verse);
+    verse_own(src, verse, &xrefs, out);
+    verse_refs(src, verse, gates, &xrefs, out);
+}
+
+/// The verse's OWN rows: tag / add-to-thread, the weaves it is in, its tags.
+/// What the reader reaches for first, so the usage card places it before the
+/// evidence; `verse_refs` is the tail.
+fn verse_own(src: &dyn PanelSource, verse: &str, xrefs: &[XrefView], out: &mut Vec<Block>) {
     out.push(Block::Para {
         runs: vec![
             Run::new(s("panel.tagVerse"), sz::LIST, Color::Gold).link(format!("addtag:{verse}")),
@@ -1150,8 +1187,6 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
         drag: None,
     });
 
-    let xrefs = src.verse_xrefs(verse);
-
     // Which weaves this verse is IN, before the partner list and separate from it —
     // "what is this part of" is a different question from "what does it connect to".
     // Derived from the partners rather than fetched: a weave is a graph of
@@ -1159,7 +1194,7 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
     // and the distinct weaves ARE the membership. First-seen (canon) order is kept,
     // and the dedupe is by NAME because that is what identifies a weave to a reader.
     let mut in_weaves: Vec<(&str, Option<usize>)> = Vec::new();
-    for x in &xrefs {
+    for x in xrefs {
         if !in_weaves.iter().any(|(name, _)| *name == x.weave) {
             in_weaves.push((&x.weave, x.weave_index));
         }
@@ -1175,6 +1210,22 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
         }
     }
 
+    let tags = src.verse_tags(verse);
+    if !tags.is_empty() {
+        out.push(Block::para(vec![Run::new(s("panel.tags"), sz::LABEL, Color::Ink).bold()]));
+        for (i, name) in &tags {
+            out.push(Block::para(vec![
+                Run::new(name, sz::LIST, Color::Gold).link(format!("tag:{i}")),
+                Run::new("  ", sz::LIST, Color::Ink),
+                Run::new("✕", sz::LIST, Color::Faded).link(format!("untag:{i}:{verse}")),
+            ]));
+        }
+    }
+}
+
+/// The verse's references: weave partners, the TSK study cross-references
+/// (gated), and the translators' margin notes.
+fn verse_refs(src: &dyn PanelSource, verse: &str, gates: Gates, xrefs: &[XrefView], out: &mut Vec<Block>) {
     if !xrefs.is_empty() {
         out.push(Block::para(vec![Run::new(sn("panel.xrefs", xrefs.len()), sz::LABEL, Color::Ink).bold()]));
         for p in xrefs.iter().take(40) {
@@ -1211,18 +1262,6 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
                     Run::new(sn("panel.more", sx.len() - 40), sz::CAPTION, Color::Faded).italic()
                 ]));
             }
-        }
-    }
-
-    let tags = src.verse_tags(verse);
-    if !tags.is_empty() {
-        out.push(Block::para(vec![Run::new(s("panel.tags"), sz::LABEL, Color::Ink).bold()]));
-        for (i, name) in &tags {
-            out.push(Block::para(vec![
-                Run::new(name, sz::LIST, Color::Gold).link(format!("tag:{i}")),
-                Run::new("  ", sz::LIST, Color::Ink),
-                Run::new("✕", sz::LIST, Color::Faded).link(format!("untag:{i}:{verse}")),
-            ]));
         }
     }
 
@@ -1315,18 +1354,50 @@ pub fn code_study_card_gated(src: &dyn PanelSource, gates: Gates, code: &str, wo
 // ── the word-usage card (word-first study candidate) ──────────────────────────
 
 /// Occurrence lines per page of the usage card.
-pub const USAGE_PAGE_LINES: usize = 20;
+pub const USAGE_PAGE_LINES: usize = 8;
+
+/// Original-word chips the usage card shows for a word without being asked,
+/// most frequent first. A tapped token carries one to three codes; the
+/// fallback for an untagged token is every code the WORD has ever rendered,
+/// and for "the" that is most of the Greek vocabulary — a screen of chips
+/// (maintainer, 2026-10-24). Past the cap the row's "… N more" is a link that
+/// opens the whole set (the `c` on the page), and the lens's own code is
+/// always among the shown.
+pub const USAGE_LENS_CAP: usize = 6;
+
+/// Books the by-book distribution lists without being asked. A rare word's
+/// handful of books is the most useful line on the card; a common word's
+/// sixty-six is a wall on a phone (maintainer, 2026-10-24), so past this many
+/// the list sits behind "Show by book", and the testament totals stand alone.
+pub const USAGE_BOOKS_INLINE: usize = 12;
 
 /// TODO(i18n): the usage card's few labels ship hardcoded English while the
 /// language push owns the catalogues — `every_shipped_string_is_translated` is
 /// all-or-nothing, so a key added here would block every language until each
 /// catalogue carries it. Swap these for catalogue keys before the card ships.
-fn wusage_uri(word: &str, scope: &str, page: u32) -> String {
-    format!("wusage:{page}:{word}:{scope}")
+/// The PAGE segment of a usage link: the number, then the letters that open
+/// what a long card folds — `b` the by-book distribution, `c` every
+/// original-word chip. `(page, books, all_codes)`; any other letter refuses.
+fn usage_page(seg: &str) -> Option<(u32, bool, bool)> {
+    let digits = seg.trim_end_matches(|c: char| c.is_ascii_alphabetic());
+    let letters = &seg[digits.len()..];
+    if letters.chars().any(|c| c != 'b' && c != 'c') {
+        return None;
+    }
+    Some((digits.parse().ok()?, letters.contains('b'), letters.contains('c')))
 }
 
-fn lusage_uri(code: &str, word: &str, scope: &str, page: u32) -> String {
-    format!("lusage:{page}:{code}:{word}:{scope}")
+fn page_seg(page: u32, books: bool, all_codes: bool) -> String {
+    format!("{page}{}{}", if books { "b" } else { "" }, if all_codes { "c" } else { "" })
+}
+
+fn wusage_uri(word: &str, scope: &str, page: u32, books: bool, all_codes: bool) -> String {
+    format!("wusage:{}:{word}:{scope}", page_seg(page, books, all_codes))
+}
+
+fn lusage_uri(code: &str, word: &str, scope: &str, page: u32, family: bool, books: bool, all_codes: bool) -> String {
+    let plus = if family { "+" } else { "" };
+    format!("lusage:{}:{code}{plus}:{word}:{scope}", page_seg(page, books, all_codes))
 }
 
 /// What the usage card is asked to show.
@@ -1337,6 +1408,14 @@ pub struct UsageQuery<'a> {
     /// occurrence of that Strong's-tagged original word, whatever the surface
     /// rendering; `None` follows the surface word itself.
     pub lens: Option<&'a str>,
+    /// With the lens on: widen it to the code's whole derivation family
+    /// ([`PanelSource::code_family`]). Off, the lens is the one word.
+    pub family: bool,
+    /// Show the by-book distribution even when it is longer than
+    /// [`USAGE_BOOKS_INLINE`].
+    pub books: bool,
+    /// Show every original-word chip, past [`USAGE_LENS_CAP`].
+    pub all_codes: bool,
     /// A [`crate::search::SearchScope::token`] string; empty means `all`.
     pub scope: &'a str,
     pub page: u32,
@@ -1358,6 +1437,9 @@ pub struct UsageQuery<'a> {
 pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> Vec<Block> {
     let mut out = Vec::new();
     let scope = if q.scope.is_empty() { "all" } else { q.scope };
+    // The tapped verse's weave partners, fetched once: its own rows (above the
+    // evidence) and its references (below) both read them.
+    let xrefs = q.origin.map(|(verse, _)| src.verse_xrefs(verse)).unwrap_or_default();
 
     if let Some((verse, token)) = q.origin {
         let display = src.verse_display(verse).unwrap_or_else(|| verse.to_string());
@@ -1383,27 +1465,51 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
     // lens re-reads the same card over that word's occurrences, so "everywhere
     // this Greek word appears" gets the same in-context treatment as the
     // English word, and the varying renderings show themselves in the lines.
-    if !q.codes.is_empty() {
+    let codes = lens_codes(q);
+    if !codes.is_empty() {
         let mut runs = Vec::new();
         runs.push(if q.lens.is_none() {
             Run::new(q.word, sz::LABEL, Color::Ink).bold()
         } else {
-            Run::new(q.word, sz::LABEL, Color::Gold).link(wusage_uri(q.word, scope, 0))
+            Run::new(q.word, sz::LABEL, Color::Gold).link(wusage_uri(q.word, scope, 0, q.books, q.all_codes))
         });
-        for code in q.codes {
+        for code in &codes {
             let e = src.strongs(code);
-            let lemma = e.as_ref().and_then(|e| e.lemma.clone()).unwrap_or_else(|| code.clone());
+            let lemma = e.as_ref().and_then(|e| e.lemma.clone()).unwrap_or_else(|| (*code).clone());
             runs.push(Run::new("  ·  ", sz::LABEL, Color::Faded));
             runs.push(if q.lens == Some(code.as_str()) {
                 Run::new(lemma, sz::LABEL, Color::Ink).bold()
             } else {
-                Run::new(lemma, sz::LABEL, Color::Gold).link(lusage_uri(code, q.word, scope, 0))
+                Run::new(lemma, sz::LABEL, Color::Gold).link(lusage_uri(
+                    code,
+                    q.word,
+                    scope,
+                    0,
+                    false,
+                    q.books,
+                    q.all_codes,
+                ))
             });
             // The transliteration beside the chip too, so the row reads before
             // it is tapped.
             if let Some(x) = e.and_then(|e| e.xlit) {
                 runs.push(Run::new(format!(" {x}"), sz::SMALL, Color::Faded).italic());
             }
+        }
+        // The rest of a long set is one tap away, and so is the way back: a
+        // count with no door is a truncation (maintainer, 2026-10-24).
+        if q.codes.len() > codes.len() {
+            runs.push(Run::new("   ", sz::SMALL, Color::Faded));
+            runs.push(
+                Run::new(sn("panel.more", q.codes.len() - codes.len()), sz::SMALL, Color::Gold)
+                    .link(usage_uri_with(q, scope, q.page, q.books, true)),
+            );
+        } else if q.all_codes && q.codes.len() > USAGE_LENS_CAP {
+            runs.push(Run::new("   ", sz::SMALL, Color::Faded));
+            runs.push(
+                Run::new(s("panel.showFewer"), sz::SMALL, Color::Gold)
+                    .link(usage_uri_with(q, scope, q.page, q.books, false)),
+            );
         }
         out.push(Block::para(runs));
         // In the lens, name the original word properly — lemma large with the
@@ -1414,6 +1520,7 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
                 lemma_line(&e, &mut out);
             }
             same_root_row(src, code, &mut out);
+            family_toggle_row(src, q, scope, &mut out);
         }
     }
 
@@ -1431,39 +1538,101 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
             drag: None,
         });
         note_rows(src, verse, &mut out);
+        // The reader's own rows next — tag, thread, what the verse is already
+        // in — before the evidence, which for a common word runs to pages. They
+        // used to trail the whole card (maintainer, 2026-10-24: "I have to
+        // scroll way down to get to threads").
+        verse_own(src, verse, &xrefs, &mut out);
     }
 
     let view = match q.lens {
         None => src.word_usage(q.word, scope, q.page),
-        Some(code) => src.code_usage(code, scope, q.page),
+        Some(code) => src.code_usage(code, scope, q.page, q.family),
     };
     match view {
         None => out.push(Block::para(vec![Run::new(s("panel.loading"), sz::BODY, Color::Faded).italic()])),
         Some(u) => usage_body(&u, q, scope, &mut out),
     }
 
-    // The dictionary is the footer, not the front door.
-    if !q.codes.is_empty() {
+    // The dictionary is the footer, not the front door — the same capped set
+    // as the chips, so the two rows name the same words.
+    if !codes.is_empty() {
         out.push(Block::Rule);
         let mut runs = vec![Run::new(s("panel.strongs"), sz::CAPTION, Color::Faded)];
-        for code in q.codes {
+        for code in &codes {
             runs.push(Run::new("   ", sz::CAPTION, Color::Ink));
-            runs.push(Run::new(code, sz::CAPTION, Color::Gold).link(format!("code:{code}:{}", q.word)));
+            runs.push(Run::new(*code, sz::CAPTION, Color::Gold).link(format!("code:{code}:{}", q.word)));
         }
         out.push(Block::para(runs));
     }
     if let Some((verse, _)) = q.origin {
-        verse_extras(src, verse, gates, &mut out);
+        verse_refs(src, verse, gates, &xrefs, &mut out);
     }
     out
 }
 
+/// The codes the card shows chips for: the first [`USAGE_LENS_CAP`] of the
+/// query's (most frequent first, as the source orders them), plus the lens's
+/// own code if it fell past the cap — a stale or hand-written link must still
+/// show what it is looking at.
+fn lens_codes<'a>(q: &'a UsageQuery) -> Vec<&'a String> {
+    if q.all_codes {
+        return q.codes.iter().collect();
+    }
+    let mut shown: Vec<&String> = q.codes.iter().take(USAGE_LENS_CAP).collect();
+    if let Some(code) = q.lens {
+        if !shown.iter().any(|c| c.as_str() == code) {
+            if let Some(own) = q.codes.iter().find(|c| c.as_str() == code) {
+                shown.push(own);
+            }
+        }
+    }
+    shown
+}
+
 /// The uri that re-opens the card in its CURRENT lens at another scope/page.
 fn usage_uri(q: &UsageQuery, scope: &str, page: u32) -> String {
+    usage_uri_with(q, scope, page, q.books, q.all_codes)
+}
+
+/// [`usage_uri`] with the two folds set explicitly: the by-book distribution
+/// and the full chip row, shown or hidden.
+fn usage_uri_with(q: &UsageQuery, scope: &str, page: u32, books: bool, all_codes: bool) -> String {
     match q.lens {
-        Some(code) => lusage_uri(code, q.word, scope, page),
-        None => wusage_uri(q.word, scope, page),
+        Some(code) => lusage_uri(code, q.word, scope, page, q.family, books, all_codes),
+        None => wusage_uri(q.word, scope, page, books, all_codes),
     }
+}
+
+/// With the lens on a code that has relatives: the choice between the one word
+/// and its whole family, as two chips — the active one inert ink, the other a
+/// link that re-opens the card at page 0 of the same scope. Nothing for a code
+/// standing alone, where the two would be the same list.
+fn family_toggle_row(src: &dyn PanelSource, q: &UsageQuery, scope: &str, out: &mut Vec<Block>) {
+    let Some(code) = q.lens else { return };
+    if src.code_family(code).len() < 2 {
+        return;
+    }
+    let chip = |label: String, on: bool, family: bool| {
+        if on {
+            Run::new(label, sz::SMALL, Color::Ink).bold()
+        } else {
+            Run::new(label, sz::SMALL, Color::Gold).link(lusage_uri(
+                code,
+                q.word,
+                scope,
+                0,
+                family,
+                q.books,
+                q.all_codes,
+            ))
+        }
+    };
+    out.push(Block::para(vec![
+        chip(s("panel.familyOff"), !q.family, false),
+        Run::new("  ·  ", sz::SMALL, Color::Faded),
+        chip(s("panel.familyOn"), q.family, true),
+    ]));
 }
 
 /// The usage evidence itself: count, scope chips, distribution, lines, paging.
@@ -1495,28 +1664,6 @@ fn usage_body(u: &WordUsageView, q: &UsageQuery, scope: &str, out: &mut Vec<Bloc
     }
     out.push(Block::para(runs));
 
-    // Distribution — canon order, counts as plain numbers. Book names link to
-    // that book's scope: the reader chooses where to look, nothing is ranked.
-    if u.books.len() > 1 {
-        out.push(Block::section(s("panel.byBook")));
-        let mut runs = Vec::new();
-        for (i, (id, label, n)) in u.books.iter().enumerate() {
-            if i > 0 {
-                runs.push(Run::new("  ·  ", sz::LIST, Color::Faded));
-            }
-            runs.push(Run::new(label, sz::LIST, Color::Gold).link(usage_uri(q, &format!("book:{id}"), 0)));
-            runs.push(Run::new(format!(" {n}"), sz::LIST, Color::Faded));
-        }
-        out.push(Block::para(runs));
-        if u.ot > 0 && u.nt > 0 {
-            out.push(Block::para(vec![Run::new(
-                format!("{} {} · {} {}", s("search.scopeOT"), u.ot, s("search.scopeNT"), u.nt),
-                sz::SMALL,
-                Color::Faded,
-            )]));
-        }
-    }
-
     // The lines: reference on its own row, then the verse verbatim — the
     // studied word's own tokens emphasized, no other text among the segments.
     out.push(Block::Rule);
@@ -1544,6 +1691,47 @@ fn usage_body(u: &WordUsageView, q: &UsageQuery, scope: &str, out: &mut Vec<Bloc
             runs.push(Run::new("›", sz::BODY, Color::Gold).link(usage_uri(q, scope, u.page + 1)));
         }
         out.push(Block::Para { runs, indent: false, top_gap: true, drag: None });
+    }
+
+    // Distribution — canon order, counts as plain numbers — AFTER the lines and
+    // their paging, and only ASKED FOR past USAGE_BOOKS_INLINE books: a common
+    // word's sixty-six is a wall, and the lines are what the card was opened
+    // for. The testament totals always stand, one line. Book names link to that
+    // book's scope: the reader chooses where to look, nothing is ranked.
+    if u.books.len() > 1 {
+        let long = u.books.len() > USAGE_BOOKS_INLINE;
+        let shown = q.books || !long;
+        let mut head = vec![Run::new(s("panel.byBook"), sz::CAPTION, Color::Faded)];
+        if long {
+            let (label, to) = if shown { ("panel.hideByBook", false) } else { ("panel.showByBook", true) };
+            head.push(Run::new("   ", sz::CAPTION, Color::Faded));
+            head.push(Run::new(s(label), sz::SMALL, Color::Gold).link(usage_uri_with(
+                q,
+                scope,
+                u.page,
+                to,
+                q.all_codes,
+            )));
+        }
+        out.push(Block::Para { runs: head, indent: false, top_gap: true, drag: None });
+        if shown {
+            let mut runs = Vec::new();
+            for (i, (id, label, n)) in u.books.iter().enumerate() {
+                if i > 0 {
+                    runs.push(Run::new("  ·  ", sz::LIST, Color::Faded));
+                }
+                runs.push(Run::new(label, sz::LIST, Color::Gold).link(usage_uri(q, &format!("book:{id}"), 0)));
+                runs.push(Run::new(format!(" {n}"), sz::LIST, Color::Faded));
+            }
+            out.push(Block::para(runs));
+        }
+        if u.ot > 0 && u.nt > 0 {
+            out.push(Block::para(vec![Run::new(
+                format!("{} {} · {} {}", s("search.scopeOT"), u.ot, s("search.scopeNT"), u.nt),
+                sz::SMALL,
+                Color::Faded,
+            )]));
+        }
     }
 }
 
@@ -2191,6 +2379,15 @@ pub fn guide_blocks_in(lang: i18n::Lang) -> Vec<Block> {
 fn about_body(out: &mut Vec<Block>, lang: i18n::Lang) {
     out.push(Block::para(vec![Run::new(i18n::t(lang, "about.heading", &[]), sz::TITLE, Color::Ink).bold()]));
     out.push(Block::para(vec![Run::new(i18n::t(lang, "about.lede", &[]), sz::BODY, Color::Ink)]));
+    // Every address the app is served from, so a reader whose link stopped
+    // working knows the other one. Hosts, not URLs: this is read, not tapped.
+    let hosts: Vec<&str> =
+        crate::church::MIRRORS.iter().map(|m| m.trim_start_matches("https://").trim_end_matches('/')).collect();
+    out.push(Block::para(vec![Run::new(
+        i18n::t(lang, "about.addresses", &[("hosts", &hosts.join(", "))]),
+        sz::SMALL,
+        Color::Faded,
+    )]));
     // The second paragraph is entirely about the modernization toggle, so it is
     // only true for a language that HAS one. English is the only one so far;
     // German and Spanish readers have been reading a paragraph about an

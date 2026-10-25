@@ -1,0 +1,150 @@
+{
+  "_": "Hand decisions for data-prep/strongs/derivations.py where the prose defeats the grammar. `from` is the parent list; empty means the entry is its own root. Each carries its reason.",
+  "H1145": {
+    "from": [
+      "H1144"
+    ],
+    "why": "Six clauses of spelling variants; the parentage, 'patron from H1144', is the last. The first clause with a code reads 'with H376 inserted', a note about a form."
+  },
+  "H3778": {
+    "from": [
+      "H3777"
+    ],
+    "why": "An unbalanced ')' in the source swallows 'patronymically from H3777'."
+  },
+  "H4310": {
+    "from": [],
+    "why": "'an interrogative pronoun of persons, as H4100 is of things' — an analogy, not descent."
+  },
+  "H5284": {
+    "from": [],
+    "why": "'a place corresponding in name (but not identical) with H5279' — Strong's own 'not identical'."
+  },
+  "H5882": {
+    "from": [],
+    "why": "'עַיִן and the dual of H5695' — a compound whose first part is given only in Hebrew script; its own root like every compound with an unnamed part."
+  },
+  "G1438": {
+    "from": [],
+    "why": "'from a reflexive pronoun otherwise obsolete and the genitive case of G846' — a compound with an unnamed part."
+  },
+  "G128": {
+    "from": [],
+    "why": "'from (to scorch) and (the face, from G3700)' — a compound of two glossed parts; the code is the second part's own parent."
+  },
+  "G611": {
+    "from": [
+      "G575",
+      "G2919"
+    ],
+    "why": "'from G575 and ;' — the source lost the second code; ἀποκρίνομαι is ἀπό + κρίνω."
+  },
+  "G1768": {
+    "from": [
+      "G1767"
+    ],
+    "why": "'from a (tenth) multiple of G1767 and G1767 itself' — both parts are ἐννέα."
+  },
+  "H1787": {
+    "from": [
+      "H1788"
+    ],
+    "why": "'(Diyshon, the same as H1788' — an unclosed parenthetical hides the claim."
+  },
+  "H2089": {
+    "from": [
+      "H7716"
+    ],
+    "why": "'(1 Samuel by permutation for H7716' — an unclosed parenthetical."
+  },
+  "H4382": {
+    "from": [
+      "H4380"
+    ],
+    "why": "'patrial from an unused name (the same as H4380)' — the parenthetical is the name."
+  },
+  "H6397": {
+    "from": [
+      "H6395"
+    ],
+    "why": "'patronymically from an unused name (from H6395)' — the parenthetical is the name's own parent."
+  },
+  "H7320": {
+    "from": [
+      "H7311",
+      "H5828"
+    ],
+    "why": "'(or Romam from H7311 and H5828' — an unclosed parenthetical."
+  },
+  "H8351": {
+    "from": [
+      "H7582"
+    ],
+    "why": "'(Numbers from H7582' — an unclosed parenthetical."
+  },
+  "H930": {
+    "from": [],
+    "why": "'in form a plural or H929, but really a singular of Egyptian derivation' — Strong's says the resemblance to H929 is only formal."
+  },
+  "H2131": {
+    "from": [
+      "H2187"
+    ],
+    "why": "'(Isaiah 50:' never closes, so the rest of the entry reads as a parenthetical; the claim is 'from H2187'."
+  },
+  "H4363": {
+    "from": [
+      "H3647"
+    ],
+    "why": "'(Ezra 2:2' never closes; the claim is 'from H3647'."
+  },
+  "H4581": {
+    "from": [
+      "H5810"
+    ],
+    "why": "'(also מָעֻז' never closes; the claim is 'from H5810'."
+  },
+  "H5448": {
+    "from": [
+      "H5445"
+    ],
+    "why": "'(only in the form סֻבָּל' never closes; the claim is 'from H5445'."
+  },
+  "H7417": {
+    "from": [
+      "H7416"
+    ],
+    "why": "'(רִמֹּן' never closes; the claim is 'the same as H7416'."
+  },
+  "H8141": {
+    "from": [
+      "H8138"
+    ],
+    "why": "'(in plural' never closes; the claim is 'from H8138'."
+  },
+  "H8561": {
+    "from": [
+      "H8558"
+    ],
+    "why": "'(plural' never closes; the claim is 'from the same root as H8558'."
+  },
+  "H1511": {
+    "from": [
+      "H1507"
+    ],
+    "why": "'(in the m' never closes; the claim is 'patrial from H1507'."
+  },
+  "H4192": {
+    "from": [
+      "H4191",
+      "H1121"
+    ],
+    "why": "'(Psalm H48 (אֲבִירָם)' closes once for two openings; the claim is 'from H4191 and H1121'."
+  },
+  "H6903": {
+    "from": [
+      "H6905"
+    ],
+    "why": "'(corresponding to H6905' never closes."
+  }
+}

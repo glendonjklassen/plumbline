@@ -56,8 +56,8 @@ theme](assets/readme/themeable.png)
 ### Study
 
 - Tap any word for its Strong's entry with its transliteration, every
-  rendering of the underlying word, the family of words it belongs to, and a
-  concordance of where it appears
+  rendering of the underlying word, every verse that word occurs in (widened
+  to its family of words on request), and a concordance of where it appears
 - The same root traced across the Old and New Testaments
 - The 1769 translators' own margin notes
 - Cross-references from the Treasury of Scripture Knowledge
@@ -80,7 +80,7 @@ theme](assets/readme/themeable.png)
 
 - Spaced-repetition memorization (SM-2) for verses or whole passages, with
   three drills: first letters, progressive blank-out, typed recall scored word
-  by word
+  by word — scheduled beside the reading plans, so many verses a day
 - A reading map: coverage across the canon, an activity heatmap, and a history
   log; chapters you have not visited lately glow
 - Mark a chapter or book read by hand, on a date you pick

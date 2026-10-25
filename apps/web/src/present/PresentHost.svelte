@@ -6,7 +6,7 @@
   // Deliberately hard-coded light — the phone/laptop gets handed across in
   // daylight.
   import { getSession } from "../state/session.svelte";
-  import QrCode, { PWA_URL } from "../shell/QrCode.svelte";
+  import QrCode from "../shell/QrCode.svelte";
   import { hasChurch, shareUrl } from "../shell/church";
   import { plural, t } from "../lib/i18n.svelte";
 
@@ -268,7 +268,7 @@
   const firstRef = $derived(entries[0]?.ref ?? null);
   /** The app link plus the verse this thread opens on. */
   const passageLink = $derived(
-    shareUrl(PWA_URL, s.church, { at: firstRef }),
+    shareUrl(s.shareBase, s.church, { at: firstRef }),
   );
 
   async function copyPassages(): Promise<void> {
