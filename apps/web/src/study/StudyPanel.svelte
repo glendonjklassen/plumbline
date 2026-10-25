@@ -46,6 +46,8 @@
           p.page,
           s.gates,
           p.family === true,
+          p.books === true,
+          p.allCodes === true,
         )?.blocks;
       case "codeStudy":
         return s.qIn(p.lang, "codeStudyBlocks", p.code, p.word, s.gates)?.blocks;

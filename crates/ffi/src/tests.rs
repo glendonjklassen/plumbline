@@ -2349,8 +2349,12 @@ fn wire_panel_link_keys_are_golden() {
         ("occ:G25", "occurrences", &["code", "verb"]),
         ("rend:G25:loved", "rendering", &["code", "rendering", "verb"]),
         ("code:G25:loved", "codeStudy", &["code", "verb", "word"]),
-        ("wusage:0:loved:book:Gen", "wordUsage", &["page", "scope", "verb", "word"]),
-        ("lusage:0:G25:loved:book:Gen", "codeUsage", &["code", "family", "page", "scope", "verb", "word"]),
+        ("wusage:0:loved:book:Gen", "wordUsage", &["allCodes", "books", "page", "scope", "verb", "word"]),
+        (
+            "lusage:0:G25:loved:book:Gen",
+            "codeUsage",
+            &["allCodes", "books", "code", "family", "page", "scope", "verb", "word"],
+        ),
         ("threadedit:0:1", "threadEditMode", &["edit", "index", "verb"]),
         ("thread:0", "thread", &["index", "verb"]),
         ("tag:0", "tag", &["index", "verb"]),
@@ -2388,9 +2392,10 @@ fn wire_panel_link_keys_are_golden() {
     assert_eq!(verbs.len(), golden.len(), "each verb wants exactly one golden row");
     // The `+` that widens an original-word lens to its family crosses as a flag,
     // not as part of the code: the shell re-asks for the card by code.
-    let wide = crate::wire::link_to_wire(plumbline_core::panel::parse_link("lusage:0:G25+:loved:all").unwrap());
+    let wide = crate::wire::link_to_wire(plumbline_core::panel::parse_link("lusage:0bc:G25+:loved:all").unwrap());
     let v = serde_json::to_value(&wide).unwrap();
     assert_eq!((v["code"].as_str(), v["family"].as_bool()), (Some("G25"), Some(true)));
+    assert_eq!((v["page"].as_u64(), v["books"].as_bool(), v["allCodes"].as_bool()), (Some(0), Some(true), Some(true)));
 }
 
 /// A search answer's `kind` token — exhaustive on purpose, like [`block_kind`].

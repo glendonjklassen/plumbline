@@ -66,6 +66,10 @@ export type PanelView =
       code?: string;
       /** With `code`: the lens widened to the code's derivation family. */
       family?: boolean;
+      /** The by-book distribution shown even when it is long. */
+      books?: boolean;
+      /** Every original-word chip shown, past the card's cap. */
+      allCodes?: boolean;
       refKey?: string;
       tokenIndex?: number;
       scope: string;

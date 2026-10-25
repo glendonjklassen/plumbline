@@ -1139,8 +1139,8 @@ pub enum WirePanelLink {
     Occurrences { code: String },
     Rendering { code: String, rendering: String },
     CodeStudy { code: String, word: String },
-    WordUsage { word: String, scope: String, page: u32 },
-    CodeUsage { code: String, word: String, scope: String, page: u32, family: bool },
+    WordUsage { word: String, scope: String, page: u32, books: bool, all_codes: bool },
+    CodeUsage { code: String, word: String, scope: String, page: u32, family: bool, books: bool, all_codes: bool },
     ThreadEditMode { index: usize, edit: bool },
     Thread { index: usize },
     Tag { index: usize },
@@ -1175,9 +1175,11 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::Occurrences { code } => WirePanelLink::Occurrences { code },
         PanelLink::Rendering { code, rendering } => WirePanelLink::Rendering { code, rendering },
         PanelLink::CodeStudy { code, word } => WirePanelLink::CodeStudy { code, word },
-        PanelLink::WordUsage { word, scope, page } => WirePanelLink::WordUsage { word, scope, page },
-        PanelLink::CodeUsage { code, word, scope, page, family } => {
-            WirePanelLink::CodeUsage { code, word, scope, page, family }
+        PanelLink::WordUsage { word, scope, page, books, all_codes } => {
+            WirePanelLink::WordUsage { word, scope, page, books, all_codes }
+        }
+        PanelLink::CodeUsage { code, word, scope, page, family, books, all_codes } => {
+            WirePanelLink::CodeUsage { code, word, scope, page, family, books, all_codes }
         }
         PanelLink::ThreadEditMode { index, edit } => WirePanelLink::ThreadEditMode { index, edit },
         PanelLink::Thread { index } => WirePanelLink::Thread { index },

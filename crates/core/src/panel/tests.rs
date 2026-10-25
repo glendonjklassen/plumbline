@@ -1167,19 +1167,31 @@ fn flat_runs(blocks: &[Block]) -> Vec<(String, Option<String>, bool)> {
 }
 
 fn usage_query<'a>(word: &'a str, scope: &'a str, page: u32, codes: &'a [String]) -> UsageQuery<'a> {
-    UsageQuery { word, lens: None, family: false, scope, page, origin: None, codes }
+    UsageQuery { word, lens: None, family: false, books: false, all_codes: false, scope, page, origin: None, codes }
 }
 
 #[test]
 fn wusage_link_round_trips() {
     assert_eq!(
         parse_link("wusage:2:mercy:book:Gen"),
-        Some(PanelLink::WordUsage { word: "mercy".into(), scope: "book:Gen".into(), page: 2 })
+        Some(PanelLink::WordUsage {
+            word: "mercy".into(),
+            scope: "book:Gen".into(),
+            page: 2,
+            books: false,
+            all_codes: false
+        })
     );
     // Scope omitted → "all".
     assert_eq!(
         parse_link("wusage:0:mercy"),
-        Some(PanelLink::WordUsage { word: "mercy".into(), scope: "all".into(), page: 0 })
+        Some(PanelLink::WordUsage {
+            word: "mercy".into(),
+            scope: "all".into(),
+            page: 0,
+            books: false,
+            all_codes: false
+        })
     );
     assert_eq!(parse_link("wusage:0::ot"), None); // word missing
     assert_eq!(parse_link("wusage:x:mercy:all"), None); // page not a number
@@ -1192,7 +1204,9 @@ fn wusage_link_round_trips() {
             word: "mercy".into(),
             scope: "book:Gen".into(),
             page: 1,
-            family: false
+            family: false,
+            books: false,
+            all_codes: false
         })
     );
     assert_eq!(parse_link("lusage:0::mercy:all"), None); // code missing
@@ -1204,32 +1218,68 @@ fn wusage_link_round_trips() {
 
     // What the producer bakes parses back unchanged.
     assert_eq!(
-        parse_link(&wusage_uri("mercy", "book:Gen", 1)),
-        Some(PanelLink::WordUsage { word: "mercy".into(), scope: "book:Gen".into(), page: 1 })
+        parse_link(&wusage_uri("mercy", "book:Gen", 1, false, false)),
+        Some(PanelLink::WordUsage {
+            word: "mercy".into(),
+            scope: "book:Gen".into(),
+            page: 1,
+            books: false,
+            all_codes: false
+        })
     );
     assert_eq!(
-        parse_link(&lusage_uri("H2617", "mercy", "ot", 2, false)),
+        parse_link(&lusage_uri("H2617", "mercy", "ot", 2, false, false, false)),
         Some(PanelLink::CodeUsage {
             code: "H2617".into(),
             word: "mercy".into(),
             scope: "ot".into(),
             page: 2,
-            family: false
+            family: false,
+            books: false,
+            all_codes: false
         })
     );
     // The family fold rides as a `+` on the code, so an old link without it
     // still parses and means the one word.
     assert_eq!(
-        parse_link(&lusage_uri("H2617", "mercy", "ot", 2, true)),
+        parse_link(&lusage_uri("H2617", "mercy", "ot", 2, true, false, false)),
         Some(PanelLink::CodeUsage {
             code: "H2617".into(),
             word: "mercy".into(),
             scope: "ot".into(),
             page: 2,
-            family: true
+            family: true,
+            books: false,
+            all_codes: false
         })
     );
     assert_eq!(parse_link("lusage:0:+:mercy:all"), None);
+    // The by-book flag rides the page segment, on both verbs.
+    assert_eq!(
+        parse_link(&wusage_uri("mercy", "all", 3, true, false)),
+        Some(PanelLink::WordUsage {
+            word: "mercy".into(),
+            scope: "all".into(),
+            page: 3,
+            books: true,
+            all_codes: false
+        })
+    );
+    assert_eq!(
+        parse_link(&lusage_uri("H2617", "mercy", "ot", 2, true, true, true)),
+        Some(PanelLink::CodeUsage {
+            code: "H2617".into(),
+            word: "mercy".into(),
+            scope: "ot".into(),
+            page: 2,
+            family: true,
+            books: true,
+            all_codes: true
+        })
+    );
+    assert_eq!(usage_page("2cb"), Some((2, true, true)));
+    assert_eq!(parse_link("wusage:x:mercy:all"), None);
+    assert_eq!(parse_link("wusage:2z:mercy:all"), None);
 }
 
 #[test]
@@ -1293,6 +1343,8 @@ fn word_usage_card_lens_switches_to_the_original_word() {
         word: "mercy",
         lens: Some("H2617"),
         family: false,
+        books: false,
+        all_codes: false,
         scope: "all",
         page: 1,
         origin: None,
@@ -1337,6 +1389,8 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
         word: "devils",
         lens: Some("G1140"),
         family: false,
+        books: false,
+        all_codes: false,
         scope: "all",
         page: 0,
         origin: None,
@@ -1370,6 +1424,8 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
         word: "devils",
         lens: Some("G1140"),
         family: true,
+        books: false,
+        all_codes: false,
         scope: "all",
         page: 0,
         origin: None,
@@ -1391,6 +1447,8 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
         word: "God",
         lens: Some("G2316"),
         family: false,
+        books: false,
+        all_codes: false,
         scope: "all",
         page: 0,
         origin: None,
@@ -1399,6 +1457,45 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
     let blocks = word_usage_card(&g, Gates::from_bits(0), &q);
     assert!(!blocks.iter().any(|b| text_of(b).starts_with("Same root:")));
     assert!(!flat_runs(&blocks).iter().any(|(t, _, _)| t == "Only this word"));
+}
+
+#[test]
+fn word_usage_card_hides_a_long_by_book_list_until_asked() {
+    // Two books (the fixture): listed outright, no toggle. Sixty-six: the
+    // testament totals stand, the list is behind "Show by book", and asking
+    // for it re-opens the same page with the `b` flag and a "Hide by book".
+    let f = Fake { word_usage: Some(usage_view()), ..Default::default() };
+    let runs = flat_runs(&word_usage_card(&f, Gates::from_bits(0), &usage_query("mercy", "all", 1, &[])));
+    assert!(runs.iter().any(|(t, _, _)| t == "Genesis"));
+    assert!(!runs.iter().any(|(t, _, _)| t == "Show by book" || t == "Hide by book"));
+
+    let mut wide = usage_view();
+    wide.books = (1..=66).map(|i| (format!("B{i}"), format!("Book {i}"), 1)).collect();
+    let g = Fake { word_usage: Some(wide), ..Default::default() };
+    let runs = flat_runs(&word_usage_card(&g, Gates::from_bits(0), &usage_query("the", "all", 1, &[])));
+    let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
+    assert!(!runs.iter().any(|(t, _, _)| t == "Book 1"), "a long list is hidden by default");
+    assert_eq!(uri_of("Show by book"), Some("wusage:1b:the:all".into()));
+    assert!(runs.iter().any(|(t, _, _)| t.starts_with("Old Testament ") && t.contains("New Testament ")));
+
+    let q = UsageQuery {
+        word: "the",
+        lens: None,
+        family: false,
+        books: true,
+        all_codes: false,
+        scope: "all",
+        page: 1,
+        origin: None,
+        codes: &[],
+    };
+    let runs = flat_runs(&word_usage_card(&g, Gates::from_bits(0), &q));
+    let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
+    assert!(runs.iter().any(|(t, _, _)| t == "Book 66"));
+    assert_eq!(uri_of("Hide by book"), Some("wusage:1:the:all".into()));
+    // The flag travels with every other verb on the card.
+    assert_eq!(uri_of("Old Testament"), Some("wusage:0b:the:ot".into()));
+    assert_eq!(uri_of("›"), Some("wusage:2b:the:all".into()));
 }
 
 #[test]
@@ -1418,7 +1515,8 @@ fn word_usage_card_caps_the_original_word_chips() {
         .map(|(t, _, _)| t.as_str())
         .collect();
     assert_eq!(chips, ["G1", "G2", "G3", "G4", "G5", "G6"]);
-    assert!(runs.iter().any(|(t, _, _)| t.trim() == "… 4 more"), "{runs:?}");
+    let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
+    assert_eq!(uri_of("… 4 more"), Some("wusage:0c:the:all".into()), "the rest is one tap away");
     let footer: Vec<&str> = runs
         .iter()
         .filter(|(_, u, _)| u.as_deref().is_some_and(|u| u.starts_with("code:")))
@@ -1426,14 +1524,46 @@ fn word_usage_card_caps_the_original_word_chips() {
         .collect();
     assert_eq!(footer, ["G1", "G2", "G3", "G4", "G5", "G6"]);
 
-    let q =
-        UsageQuery { word: "the", lens: Some("G9"), family: false, scope: "all", page: 0, origin: None, codes: &codes };
+    let q = UsageQuery {
+        word: "the",
+        lens: Some("G9"),
+        family: false,
+        books: false,
+        all_codes: false,
+        scope: "all",
+        page: 0,
+        origin: None,
+        codes: &codes,
+    };
     let runs = flat_runs(&word_usage_card(&f, Gates::from_bits(0), &q));
     assert!(
         runs.iter().any(|(t, u, bold)| t == "G9" && u.is_none() && *bold),
         "the lensed code is shown past the cap (and counted as shown)"
     );
-    assert!(runs.iter().any(|(t, _, _)| t.trim() == "… 3 more"));
+    assert!(runs.iter().any(|(t, _, _)| t == "… 3 more"));
+
+    // Opened: all ten, and the way back.
+    let q = UsageQuery {
+        word: "the",
+        lens: None,
+        family: false,
+        books: false,
+        all_codes: true,
+        scope: "all",
+        page: 0,
+        origin: None,
+        codes: &codes,
+    };
+    let runs = flat_runs(&word_usage_card(&f, Gates::from_bits(0), &q));
+    let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
+    let chips: Vec<&str> = runs
+        .iter()
+        .filter(|(_, u, _)| u.as_deref().is_some_and(|u| u.starts_with("lusage:")))
+        .map(|(t, _, _)| t.as_str())
+        .collect();
+    assert_eq!(chips.len(), 10);
+    assert_eq!(uri_of("Show fewer"), Some("wusage:0:the:all".into()));
+    assert_eq!(uri_of("G10"), Some("lusage:0c:G10:the:all".into()), "every link on the card keeps the fold open");
 }
 
 #[test]
@@ -1450,6 +1580,8 @@ fn word_usage_card_notes_are_a_section_with_a_plus() {
         word: "mercy",
         lens: None,
         family: false,
+        books: false,
+        all_codes: false,
         scope: "all",
         page: 0,
         origin: Some(("Gen 1:1", 2)),

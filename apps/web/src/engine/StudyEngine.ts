@@ -390,6 +390,8 @@ export class StudyEngine {
     page: number,
     gates: number,
     family = false,
+    books = false,
+    allCodes = false,
   ): any {
     const s = this.#call(
       (w, c, r, sc) =>
@@ -403,7 +405,7 @@ export class StudyEngine {
             sc,
             page,
             gates,
-            family ? 1 : 0,
+            (family ? 1 : 0) | (books ? 2 : 0) | (allCodes ? 4 : 0),
           ) as number,
         ),
       [word, code, refKey, scope],
