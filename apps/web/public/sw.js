@@ -79,6 +79,9 @@ self.addEventListener("fetch", (event) => {
   // names is verified present, which a background writer could undermine.
   if (url.pathname.includes("/pack/") || url.pathname.includes("/__depot/")) return;
   if (url.pathname.endsWith("plumbline_ffi.wasm")) return;
+  // The site's own archive (About's download): a 40 MB file nobody needs
+  // offline, and the network-first branch below would store it.
+  if (url.pathname.endsWith("plumbline-site.tar.gz")) return;
 
   // Cache-first BY PATH, which is safe only because both carry their hash in the
   // filename: Vite's bundles, and the subsetted reader faces.

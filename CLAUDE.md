@@ -23,8 +23,10 @@
   <https://plumblinebible.ch/>, two boxes at two providers behind both names
   (`ops/hetzner/README.md`). Each name is a separate browser origin; share
   links name the .org unless the reader picks the .ch on the Share screen
-  (`config.shareOrigin`, one of `church::MIRRORS`), and About lists both. No
-  app store, no account.
+  (`config.shareOrigin`, one of `church::MIRRORS`), and About lists both. Every
+  release also puts the whole served site in `plumbline-site.tar.gz` beside
+  it, linked from About, for anyone to keep or host without us. No app store,
+  no account.
 - `../overlay` (Haskell) is the read-only reference implementation — port
   from it, never modify it.
 - Frozen contracts: the on-disk data formats (§Data formats below), `kjv1769-tok2`

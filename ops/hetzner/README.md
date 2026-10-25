@@ -151,6 +151,19 @@ By hand, with your own (unrestricted) key, the same upload is
 rsync -az --delete --exclude CNAME --rsync-path="sudo -u release rsync" -e "ssh -i ~/.ssh/<your key>" apps/web/dist/ deploy@<host>:/srv/plumbline/
 ```
 
+## The archive
+
+Every release puts the whole served site in one file beside it,
+`plumbline-site.tar.gz`, linked from About ("Download the site to keep or
+host yourself"), for anyone who wants Plumbline with or without us: the served
+files, a `README.txt` saying how to serve them (any static server over HTTPS,
+or `python3 -m http.server` on localhost), and their own `SHA256SUMS`. The
+release builds it reproducibly from `dist` (see release.yml) and lists it in
+the release's SHA256SUMS like every other file, so the daily check proves the
+archive intact; `archive.json` beside it carries its size for the About line,
+and About hides the line where no release built one (a local build). The
+service worker never caches it. Nothing in it points at GitHub.
+
 ## The headers
 
 The Caddyfile in [cloud-init.yaml](cloud-init.yaml) is the source for the
