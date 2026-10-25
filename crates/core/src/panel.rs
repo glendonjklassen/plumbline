@@ -448,7 +448,11 @@ pub trait PanelSource {
     /// The verses where a code is rendered exactly `rendering` (filtered
     /// concordance); `None` when the code has no such rendering.
     fn rendering_refs(&self, code: &str, rendering: &str) -> Option<RenderingRefsView>;
-    /// The codes a surface English word translates (the reverse lens).
+    /// The codes a surface word translates ON ITS OWN, most frequent first
+    /// ([`crate::renderings::Renderings::word_sole_codes`]) — the reverse lens,
+    /// and the original-word chips of a tap on an untagged token. Not the whole
+    /// reverse index: "the" sits inside every tagged "the Son", and is not a
+    /// rendering of υἱός.
     fn word_codes(&self, word: &str) -> Vec<String>;
 
     /// A code's full concordance (capped by the source).

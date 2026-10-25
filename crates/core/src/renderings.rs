@@ -218,6 +218,29 @@ impl Renderings {
         out
     }
 
+    /// The codes a surface word translates ON ITS OWN — those for which the
+    /// word, alone, is a rendering — most frequent first (ties by code). The
+    /// difference from [`word_codes`](Self::word_codes): the KJV tags a phrase as
+    /// one run, so "the" carries υἱός wherever "the Son" is tagged, and the plain
+    /// reverse index answers "the" with every noun it ever stood before. Here
+    /// "the" answers only the article, and "shalt" (always inside "thou shalt
+    /// love") nothing at all. What a word's original-word chips are made of.
+    pub fn word_sole_codes(&self, word: &str) -> Vec<(&str, usize)> {
+        let key = normalize(word);
+        let mut out: Vec<(&str, usize)> = self
+            .by_word
+            .get(&key)
+            .into_iter()
+            .flatten()
+            .filter_map(|(code, _)| {
+                let sole = self.by_code.get(code)?.get(&key)?;
+                Some((code.as_str(), sole.occs.len()))
+            })
+            .collect();
+        out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+        out
+    }
+
     /// The occurrences of one specific rendering of a code, in canonical order.
     /// `rendering` may be the display label or any equivalent surface — it is
     /// normalized before lookup — which lets a UI round-trip a chip's label
@@ -382,6 +405,21 @@ mod tests {
         assert_eq!(r.word_codes("love"), vec![("G25", 1), ("G5368", 1)]);
         // Query normalization: caller may pass a raw surface form.
         assert_eq!(r.word_codes("Love"), r.word_codes("love"));
+    }
+
+    #[test]
+    fn sole_codes_leave_out_the_phrase_a_word_only_sits_inside() {
+        let r = build();
+        // "suffereth" is tagged G3114, but only ever inside "suffereth long": the
+        // reverse index knows the code, the sole-rendering lookup does not —
+        // the original word behind "suffereth" alone is nothing.
+        assert_eq!(r.word_codes("suffereth"), vec![("G3114", 1)]);
+        assert!(r.word_sole_codes("suffereth").is_empty());
+        // A word that IS a rendering on its own keeps every such code, counted
+        // by that rendering's occurrences, most frequent first.
+        assert_eq!(r.word_sole_codes("love"), vec![("G25", 1), ("G5368", 1)]);
+        assert_eq!(r.word_sole_codes("Charity,"), vec![("G26", 2)]);
+        assert!(r.word_sole_codes("nope").is_empty());
     }
 
     #[test]

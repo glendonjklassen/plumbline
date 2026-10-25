@@ -3251,8 +3251,11 @@ impl PanelSource for PlumblineEngine {
         })
     }
     fn word_codes(&self, word: &str) -> Vec<String> {
+        // The SOLE renderings, not the whole reverse index: a tap on an untagged
+        // "the" was offered υἱός, βασιλεία and five hundred more, every noun the
+        // article ever stood before in a tagged run (maintainer, 2026-10-24).
         self.renderings_ready()
-            .map(|rx| rx.word_codes(word).into_iter().map(|(c, _)| c.to_string()).collect())
+            .map(|rx| rx.word_sole_codes(word).into_iter().map(|(c, _)| c.to_string()).collect())
             .unwrap_or_default()
     }
     fn occurrences(&self, code: &str) -> panel::OccurrencesView {
