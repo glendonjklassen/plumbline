@@ -210,23 +210,25 @@ fn capitalized_word(w: &str) -> bool {
     }
 }
 
-// ── derivation families ──────────────────────────────────────────────────────
-
-/// Codes grouped by the root their 1890 derivation prose leads to — the
-/// dictionary's own "same stem". δαιμόνιον (G1140) is "neuter of a derivative
-/// of G1142", δαιμονίζομαι (G1139) "middle voice from G1142", so both sit under
-/// δαίμων with it; a reader studying "devils" is owed "devil" and "possessed
-/// with devils" too, the way the surface lens answers "ruler" for "rulers".
+/// Strong's codes grouped by the root their derivations lead to — the
+/// "every form of this word" behind the original-word lens's family fold and
+/// the word study's "Same root (Strong's)" row.
 ///
-/// A step follows the ONE same-language code a derivation names ("from
-/// G1142"). Nothing after `compare` counts — that is a cross-reference, not a
-/// parent. A compound naming two ("from G1223 and G906") is its own root,
-/// unless every part already leads to one root (G1141, "from G1140 and G1142",
-/// joins δαίμων): following a compound up to its parts would file the devil
-/// (διάβολος) under "to throw" (βάλλω) with every other -βάλλω word. A
-/// cross-language origin ("of Hebrew origin (H03091)") is never followed — the
-/// bridge tier owns the testaments. Probable derivations ("probably from") are
-/// followed: this groups for exploration, and every line shows its own word.
+/// Built from `data/derivation-families.json`, which `data-prep/strongs/
+/// derivations.py` writes OFFLINE from the dictionary's prose: one parent list
+/// per code, holding only what an entry STATES — "from G1142", "feminine of
+/// G2316", "from G1223 and G906" — and never what it hedges ("probably from"),
+/// relates ("akin to", "compare", "(with G3588)") or borrows across the
+/// testaments ("of Hebrew origin"). The runtime used to scan the prose itself,
+/// and read θεός's "(with G3588)" as descent from the article (maintainer,
+/// 2026-10-24: "no false information"); the script's report and its hand
+/// decisions are the record of what now counts.
+///
+/// A chain follows single parents to its root. A compound naming two ("from
+/// G1223 and G906") is its own root, unless every part already leads to one
+/// root (G1141, "from G1140 and G1142", joins δαίμων): following a compound up
+/// to its parts would file the devil (διάβολος) under "to throw" (βάλλω) with
+/// every other -βάλλω word.
 #[derive(Debug, Clone, Default)]
 pub struct Families {
     /// Every code → the root it resolves to (itself, when it is one).
@@ -235,17 +237,47 @@ pub struct Families {
     members: HashMap<String, Vec<String>>,
 }
 
+/// The format stamp of `data/derivation-families.json`.
+pub const DERIVATIONS_FORMAT: &str = "plumbline-strongs-derivations-v1";
+
+#[derive(Deserialize)]
+struct DerivationsRepr {
+    format: String,
+    #[serde(default)]
+    entries: HashMap<String, Vec<String>>,
+}
+
+/// Read the shipped derivation file: code → its explicit parents.
+pub fn load_derivations(path: impl AsRef<Path>) -> Result<HashMap<String, Vec<String>>, Error> {
+    let path = path.as_ref();
+    let raw = std::fs::read(path).map_err(|e| Error::Io { path: path.display().to_string(), source: e })?;
+    parse_derivations(&raw).map_err(|e| Error::Parse(format!("{}: {e}", path.display())))
+}
+
+/// Parse the derivation file's bytes, refusing any other format stamp.
+pub fn parse_derivations(raw: &[u8]) -> Result<HashMap<String, Vec<String>>, String> {
+    let repr: DerivationsRepr = serde_json::from_slice(raw).map_err(|e| e.to_string())?;
+    if repr.format != DERIVATIONS_FORMAT {
+        return Err(format!("format {:?}, expected {DERIVATIONS_FORMAT:?}", repr.format));
+    }
+    Ok(repr.entries)
+}
+
 impl Families {
-    /// Resolve every entry's root. One pass over the dictionary, memoized, so a
-    /// chain is walked once however many codes hang off it.
-    pub fn build(dict: &StrongsDict) -> Families {
-        let refs: HashMap<&str, Vec<String>> = dict
-            .iter()
-            .map(|(code, e)| (code.as_str(), e.deriv.as_deref().map(|d| derivation_refs(code, d)).unwrap_or_default()))
-            .collect();
-        let mut root_of: HashMap<String, String> = HashMap::with_capacity(dict.len());
+    /// Resolve every code's root from the parent lists. One memoized pass, so a
+    /// chain is walked once however many codes hang off it. A parent with no
+    /// entry of its own is a root.
+    pub fn from_parents(parents: &HashMap<String, Vec<String>>) -> Families {
+        let mut refs: HashMap<&str, Vec<String>> = HashMap::with_capacity(parents.len() * 2);
+        for (code, ps) in parents {
+            refs.entry(code.as_str()).or_default().extend(ps.iter().filter(|p| *p != code).cloned());
+            for p in ps {
+                refs.entry(p.as_str()).or_default();
+            }
+        }
+        let mut root_of: HashMap<String, String> = HashMap::with_capacity(refs.len());
         let mut visiting: Vec<String> = Vec::new();
-        for code in dict.keys() {
+        for code in refs.keys() {
             root(code, &refs, &mut root_of, &mut visiting);
         }
         let mut members: HashMap<String, Vec<String>> = HashMap::new();
@@ -259,15 +291,15 @@ impl Families {
     }
 
     /// Every code sharing `code`'s root, `code` included, in code order. Just
-    /// `[code]` for one with no relatives, or one the dictionary does not have.
+    /// `[code]` for one with no relatives, or one the file does not mention.
     pub fn family(&self, code: &str) -> Vec<String> {
         self.root_of.get(code).and_then(|r| self.members.get(r)).cloned().unwrap_or_else(|| vec![code.to_string()])
     }
 }
 
-/// The root `code` resolves to: itself when its derivation names no usable
-/// parent, else its parent's root. `visiting` breaks a cycle (two entries
-/// deriving from each other) by making the first one met the root.
+/// The root `code` resolves to: itself when it names no usable parent, else its
+/// parent's root. `visiting` breaks a cycle (two entries deriving from each
+/// other) by making the first one met the root.
 fn root(
     code: &str,
     refs: &HashMap<&str, Vec<String>>,
@@ -281,12 +313,7 @@ fn root(
         return code.to_string();
     }
     visiting.push(code.to_string());
-    // Only parents the dictionary has: a reference to a missing entry cannot be
-    // walked, and the code stands as its own root.
-    let parents: Vec<&str> = refs
-        .get(code)
-        .map(|v| v.iter().map(String::as_str).filter(|p| refs.contains_key(p)).collect())
-        .unwrap_or_default();
+    let parents: Vec<&str> = refs.get(code).map(|v| v.iter().map(String::as_str).collect()).unwrap_or_default();
     let r = match parents.as_slice() {
         [] => code.to_string(),
         [one] => root(one, refs, memo, visiting),
@@ -303,44 +330,6 @@ fn root(
     visiting.pop();
     memo.insert(code.to_string(), r.clone());
     r
-}
-
-/// The same-language codes a derivation names, in order, none twice, stopping
-/// at the first `compare`. Zero-padded forms (`H03091`) are normalized to the
-/// dictionary's keys. `code` itself is never listed.
-pub fn derivation_refs(code: &str, deriv: &str) -> Vec<String> {
-    let lang = code.chars().next().unwrap_or('?');
-    let lower = deriv.to_ascii_lowercase();
-    let scan = match lower.find("compare") {
-        Some(i) => &deriv[..i],
-        None => deriv,
-    };
-    let mut out: Vec<String> = Vec::new();
-    let bytes = scan.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        let c = bytes[i] as char;
-        let boundary = i == 0 || !(bytes[i - 1] as char).is_ascii_alphanumeric();
-        if boundary && (c == 'G' || c == 'H') {
-            let mut j = i + 1;
-            while j < bytes.len() && bytes[j].is_ascii_digit() {
-                j += 1;
-            }
-            if j > i + 1 && (j == bytes.len() || !(bytes[j] as char).is_ascii_alphanumeric()) {
-                let digits = scan[i + 1..j].trim_start_matches('0');
-                if !digits.is_empty() && c == lang {
-                    let r = format!("{c}{digits}");
-                    if r != code && !out.contains(&r) {
-                        out.push(r);
-                    }
-                }
-                i = j;
-                continue;
-            }
-        }
-        i += 1;
-    }
-    out
 }
 
 /// Code order: language letter, then the number — so G25 sorts before G5368.
@@ -815,47 +804,34 @@ mod tests {
         assert_eq!(e.kjv.as_deref(), Some("beginning"));
         assert_eq!(e.deriv, None);
     }
-    fn dict(entries: &[(&str, &str)]) -> StrongsDict {
-        entries
-            .iter()
-            .map(|(c, d)| (c.to_string(), StrongsEntry { deriv: Some(d.to_string()), ..Default::default() }))
-            .collect()
+
+    fn parents(rows: &[(&str, &[&str])]) -> HashMap<String, Vec<String>> {
+        rows.iter().map(|(c, ps)| (c.to_string(), ps.iter().map(|p| p.to_string()).collect())).collect()
     }
 
     #[test]
-    fn derivation_refs_read_the_prose() {
-        // Ordinary, zero-padded, self-reference dropped, dedupe, and the compare tail cut.
-        assert_eq!(derivation_refs("G1140", "neuter of a derivative of G1142 (δαίμων);"), ["G1142"]);
-        assert_eq!(derivation_refs("H3091", "from H03068 (יְהֹוָה) and H3467 (יָשַׁע); H3091"), ["H3068", "H3467"]);
-        assert_eq!(
-            derivation_refs("H2616", "a primitive root; (compare H2603 (חָנַן)); (compare H1288)"),
-            Vec::<String>::new()
-        );
-        assert_eq!(derivation_refs("G25", "perhaps from (much) (or compare G5689);"), Vec::<String>::new());
-        // Cross-language origins are not derivations for this purpose.
-        assert_eq!(derivation_refs("G2424", "of Hebrew origin (H03091);"), Vec::<String>::new());
-        // A letter glued to a word is not a code.
-        assert_eq!(derivation_refs("G1", "from HEBREW G12x and G7;"), ["G7"]);
+    fn the_derivation_file_is_read_by_its_stamp() {
+        let ok = br#"{"format":"plumbline-strongs-derivations-v1","entries":{"G26":["G25"]}}"#;
+        assert_eq!(parse_derivations(ok).unwrap()["G26"], ["G25"]);
+        let other = br#"{"format":"plumbline-strongs-derivations-v2","entries":{}}"#;
+        assert!(parse_derivations(other).unwrap_err().contains("v2"));
+        assert!(parse_derivations(b"{not json").is_err());
+        // No entries at all is a valid, empty file.
+        assert!(parse_derivations(br#"{"format":"plumbline-strongs-derivations-v1"}"#).unwrap().is_empty());
     }
 
     #[test]
     fn a_family_is_everything_under_one_root() {
-        let d = dict(&[
-            ("G1139", "middle voice from G1142 (δαίμων);"),
-            ("G1140", "neuter of a derivative of G1142 (δαίμων);"),
-            ("G1141", "from G1140 (δαιμόνιον) and G1142 (δαίμων);"),
-            ("G1142", "from (to distribute fortunes);"),
-            ("G1225", "from G1223 (διά) and G906 (βάλλω);"),
-            ("G1228", "from G1225 (διαβάλλω);"),
-            ("G1223", "a primary preposition;"),
-            ("G906", "a primary verb;"),
-            ("G2424", "of Hebrew origin (H03091);"),
-            ("H3091", "from H3068 and H3467;"),
-            ("H2616", "a primitive root; (compare H2603 (חָנַן));"),
-            ("H2617", "from H2616 (חָסַד);"),
-            ("H2603", "a primitive root;"),
-        ]);
-        let f = Families::build(&d);
+        let f = Families::from_parents(&parents(&[
+            ("G1139", &["G1142"]),
+            ("G1140", &["G1142"]),
+            ("G1141", &["G1140", "G1142"]),
+            ("G1225", &["G1223", "G906"]),
+            ("G1228", &["G1225"]),
+            ("H2617", &["H2616"]),
+            // A self-reference is no parent.
+            ("H2603", &["H2603"]),
+        ]));
         // δαίμων's family, the compound of two members included.
         assert_eq!(f.family("G1140"), ["G1139", "G1140", "G1141", "G1142"]);
         assert_eq!(f.family("G1142"), f.family("G1139"));
@@ -864,24 +840,23 @@ mod tests {
         assert_eq!(f.family("G1228"), ["G1225", "G1228"]);
         assert_eq!(f.family("G906"), ["G906"]);
         assert_eq!(f.family("G1223"), ["G1223"]);
-        // The testaments stay apart, and so does a compared entry.
-        assert_eq!(f.family("G2424"), ["G2424"]);
+        // A parent with no entry of its own is a root, not a missing link.
         assert_eq!(f.family("H2617"), ["H2616", "H2617"]);
+        assert_eq!(f.family("H2616"), ["H2616", "H2617"]);
         assert_eq!(f.family("H2603"), ["H2603"]);
-        // Not in the dictionary at all: still an answer.
+        // Not in the file at all: still an answer.
         assert_eq!(f.family("G9999"), ["G9999"]);
     }
 
     #[test]
     fn a_derivation_cycle_terminates() {
-        let d = dict(&[("G1", "from G2;"), ("G2", "from G1;"), ("G3", "from G9;")]);
-        let f = Families::build(&d);
+        let f = Families::from_parents(&parents(&[("G1", &["G2"]), ("G2", &["G1"]), ("G3", &["G9"])]));
         let fam = f.family("G1");
         assert_eq!(fam, ["G1", "G2"]);
         assert_eq!(f.family("G2"), fam);
-        // A parent the dictionary lacks cannot be walked.
-        assert_eq!(f.family("G3"), ["G3"]);
+        assert_eq!(f.family("G3"), ["G3", "G9"]);
     }
+
     #[test]
     fn greek_is_romanized_the_sbl_way() {
         for (lemma, want) in [

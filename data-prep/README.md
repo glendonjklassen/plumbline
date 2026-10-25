@@ -227,6 +227,20 @@ python3 data-prep/luther/merge-strongs.py "SF_2022-02-27_GER_LUTH1912_(LUTHER_19
 python3 data-prep/luther/check-luther.py
 ```
 
+## Strong's derivation families (`data/derivation-families.json`)
+
+`data-prep/strongs/derivations.py` reads every entry's derivation prose in
+`data/strongs.json` once, with a grammar that is explicit about what counts, and
+writes one parent list per code: what the entry STATES ("from G1142", "feminine
+of G2316", "from G1223 and G906"), never what it hedges ("probably from"),
+relates ("akin to", "compare", "(with G3588)") or borrows across the testaments
+("of Hebrew origin"). The engine's `Families` (the "Same root (Strong's)" row and
+the original-word lens's family fold) reads that file and nothing else; it used
+to scan the prose at runtime and filed θεός under the article ὁ because the entry
+says "(with G3588)". `--report` prints the classification and the residue; the
+residue is decided by hand in `derivation-overrides.json`, each with its reason.
+Rerun after any change to `strongs.json`.
+
 ## The Spanish Bible (`data/rv1909.jsonl`)
 
 `data-prep/rv1909/build-rv1909.py` turns the eBible.org USFX edition of the

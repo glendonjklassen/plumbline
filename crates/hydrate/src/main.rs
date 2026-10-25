@@ -63,6 +63,8 @@ const RND_FILES: &[&str] = &[
     "data/quotation-pairs.json",
     // The graded text-as-witness (its gate keeps it silent until qualified).
     "data/text-witness.json",
+    // Strong's derivation families, decided offline (data-prep/strongs/).
+    "data/derivation-families.json",
 ];
 /// Authored / seed content copied as whole directories: the user's weaves,
 /// threads, tags and the suggested-weave review queue, so a fresh home opens with

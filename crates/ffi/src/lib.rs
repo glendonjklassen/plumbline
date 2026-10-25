@@ -199,8 +199,10 @@ pub struct PlumblineEngine {
     /// the navigator asks for all 1,189 chapters every time it opens.
     reading_words: OnceLock<reading::ChapterWords>,
     /// Strong's codes grouped by the root their derivations lead to (`core::strongs::Families`)
-    /// — the original-word lens's "every form of this word". Needs the dictionary, so it is
-    /// built on first use after that loads; ~14k short strings, once.
+    /// — the original-word lens's "every form of this word" and the "Same root (Strong's)"
+    /// row. Read from `data/derivation-families.json`, decided offline (data-prep/strongs/),
+    /// never from the dictionary's prose; loaded with the study data, so a home that has not
+    /// got the file yet answers "no relatives" rather than guessing.
     families: OnceLock<plumbline_core::strongs::Families>,
     /// How long the chapter on screen has really been read (`core::reading::DwellTracker`,
     /// driven by `plumbline_engine_reading_tick_json`). On the engine because it is per-reader
@@ -316,8 +318,21 @@ impl PlumblineEngine {
     /// empty one (stage 1 on the web opens before Strong's arrives; a family index built
     /// then would say every word stands alone for the rest of the session).
     fn families(&self) -> Option<&plumbline_core::strongs::Families> {
-        self.strongs.get()?;
-        Some(self.families.get_or_init(|| plumbline_core::strongs::Families::build(self.strongs())))
+        self.load_families();
+        self.families.get()
+    }
+
+    /// Read `data/derivation-families.json` into [`Self::families`] if it is there and not
+    /// read yet. Idempotent and cheap when the file is absent (a stage-1 web boot before the
+    /// study pack lands), so both the stage-2 hook and the first tap can ask.
+    fn load_families(&self) {
+        if self.families.get().is_some() {
+            return;
+        }
+        let Some(h) = &self.home else { return };
+        if let Ok(parents) = strongs::load_derivations(h.join("data").join("derivation-families.json")) {
+            let _ = self.families.set(strongs::Families::from_parents(&parents));
+        }
     }
 
     /// The fused OT↔NT bridge — needs Strong's, so it is None until the
@@ -349,6 +364,9 @@ impl PlumblineEngine {
                 self.strongs_localized.store(is_localized, std::sync::atomic::Ordering::Relaxed);
             }
         }
+        // The derivation families ride the same stage as Strong's and are as language-
+        // independent: one file, in the KJV's codes, whatever dictionary is serving.
+        self.load_families();
         // The modernization belongs to a TEXT, so the open text picks it, not the reader's
         // language: someone whose translation download has not landed is reading the KJV and
         // the AKJV is the right offer while they are on it. A language whose row names no

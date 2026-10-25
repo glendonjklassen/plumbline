@@ -3495,10 +3495,25 @@ fn code_usage_folds_in_the_derivation_family_only_when_asked() {
       "G25":{"lemma":"ἀγαπάω","xlit":"agapaō","derivation":"perhaps from (much) (or compare G5689);"},
       "G26":{"lemma":"ἀγάπη","xlit":"agapē","derivation":"from G25 (ἀγαπάω);"}
     }"#;
+    // The families come from the shipped file, never from the prose above: an
+    // engine opened from bytes alone has none.
+    const DERIVATIONS2: &str = r#"{"format":"plumbline-strongs-derivations-v1","entries":{"G26":["G25"]}}"#;
     unsafe {
         let mut err: *mut c_char = ptr::null_mut();
-        let e =
+        let bare =
             plumbline_engine_open_from_bytes(KJV2.as_ptr(), KJV2.len(), STRONGS2.as_ptr(), STRONGS2.len(), &mut err);
+        assert!(err.is_null() && !bare.is_null(), "{:?}", take(err));
+        assert_eq!(panel::PanelSource::code_family(&*bare, "G26"), ["G26"], "no file, no family");
+        plumbline_engine_free(bare);
+
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-families-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV2).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS2).unwrap();
+        std::fs::write(home.join("data").join("derivation-families.json"), DERIVATIONS2).unwrap();
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(err.is_null() && !e.is_null(), "{:?}", take(err));
         let eng = &*e;
         assert_eq!(panel::PanelSource::code_family(eng, "G25"), ["G25", "G26"]);
@@ -3533,6 +3548,7 @@ fn code_usage_folds_in_the_derivation_family_only_when_asked() {
         let chip = panel::PanelSource::chip(eng, "G26");
         assert_eq!((chip.lemma.as_deref(), chip.xlit.as_deref()), (Some("ἀγάπη"), Some("agapē")));
         plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
     }
 }
 

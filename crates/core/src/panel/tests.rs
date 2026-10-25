@@ -1403,8 +1403,8 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
     let header = blocks.iter().find(|b| text_of(b).starts_with("δαιμόνιον")).expect("the lens header");
     assert_eq!(text_of(header), "δαιμόνιον  daimónion");
     // The relatives, each a door to its own card; the lensed code is not listed as its own relative.
-    let row = blocks.iter().find(|b| text_of(b).starts_with("Same root:")).expect("the same-root row");
-    assert_eq!(text_of(row), "Same root:  δαιμονίζομαι  ·  δαίμων daímōn");
+    let row = blocks.iter().find(|b| text_of(b).starts_with("Same root (Strong’s):")).expect("the same-root row");
+    assert_eq!(text_of(row), "Same root (Strong’s):  δαιμονίζομαι  ·  δαίμων daímōn");
     let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
     assert_eq!(uri_of("δαίμων"), Some("code:G1142".into()));
     assert_eq!(uri_of("δαιμονίζομαι"), Some("code:G1139".into()));
@@ -1455,7 +1455,7 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
         codes: &solo,
     };
     let blocks = word_usage_card(&g, Gates::from_bits(0), &q);
-    assert!(!blocks.iter().any(|b| text_of(b).starts_with("Same root:")));
+    assert!(!blocks.iter().any(|b| text_of(b).starts_with("Same root (Strong’s):")));
     assert!(!flat_runs(&blocks).iter().any(|(t, _, _)| t == "Only this word"));
 }
 
