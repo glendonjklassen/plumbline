@@ -179,7 +179,7 @@ jobs:
           # The same string the APK carries — bare, no leading 'v'.
           PLUMBLINE_VERSION: ${{ needs.version.outputs.name }}
 
-      # The whole served app in one file, linked from About, for anyone who
+      # The whole served app in one file, linked from Backup, for anyone who
       # wants to keep it or host it themselves (ops/hetzner/README.md, "The
       # archive"). The same bytes for the same site — sorted names, a fixed
       # timestamp, no owners, gzip without its own stamp — so a release that

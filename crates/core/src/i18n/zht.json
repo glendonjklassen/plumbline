@@ -1,6 +1,5 @@
 {
   "about.addresses": "網址：{hosts}",
-  "about.archive": "下載整個網站，自行保存或託管（{size} MB）",
   "about.covenant.p1": "永遠屬於您：沒有帳號、沒有廣告、沒有追蹤，任何資料都不會外傳。您的資料——筆記、標籤、經文串——都以一般檔案的形式儲存在裝置上，可以備份或搬移。這個應用程式完全免費。",
   "about.covenant.title": "承諾",
   "about.heading": "關於 Plumbline",
@@ -757,6 +756,7 @@
   "settings.rndDownloading": "正在下載分析套件——{percent}%",
   "settings.rndNow": "立即下載",
   "settings.rndPreparing": "正在準備分析資料…",
+  "settings.siteArchive": "下載整個網站，自行保存或託管（{size} MB）",
   "settings.suggested": "建議串珠",
   "settings.suggestedInstalled": "已安裝。這些項目會列在串珠庫的「建議」分類中，您可以逐一決定保留或拒絕。",
   "settings.suggestedOffer": "大量建議的經文連結，供您審核並決定保留或拒絕。一次性下載 {kb} KB。",

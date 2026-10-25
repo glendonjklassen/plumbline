@@ -17,6 +17,24 @@
 
   const s = getSession();
 
+  // The whole site in one file, which a release puts beside the app
+  // (`plumbline-site.tar.gz`, see release.yml), for whoever wants to keep
+  // Plumbline or host it themselves. It sits here with the backup because it
+  // is the other half of the same promise: the backup is your data, this is
+  // the app that reads it. `archive.json` beside it carries the path and size;
+  // where no release built one (a local build, the preview the tests run
+  // against) it is absent and the row is not shown. Asked when the dialog
+  // opens, with no-cache, so the service worker never stores it and the size
+  // shown is the deployed one.
+  let archive = $state<{ path: string; bytes: number } | null>(null);
+  $effect(() => {
+    if (!s.showBackup) return;
+    fetch("archive.json", { cache: "no-cache" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((a) => (archive = a && typeof a.path === "string" && typeof a.bytes === "number" ? a : null))
+      .catch(() => (archive = null));
+  });
+
   // Backup / restore: the authored home dirs as a zip. Must stay in step with
   // engine/home.ts's USER_DIRS — a dir missing from this restore filter exports
   // into the zip and is then silently dropped on the way back in.
@@ -307,6 +325,15 @@
       <p class="desc-note">{t("settings.restoreDesc")}</p>
       <button class="action" onclick={() => void showPhrase()}>{t("settings.phraseShow")}</button>
     </div>
+    {#if archive}
+      <hr />
+      <div class="actions">
+        <!-- A plain same-origin download, styled as the row it sits among. -->
+        <a class="action" href={archive.path} download>
+          {t("settings.siteArchive", { size: String(Math.round(archive.bytes / 1e6)) })}
+        </a>
+      </div>
+    {/if}
     <button class="done" onclick={() => (s.showBackup = false)}>{t("settings.done")}</button>
   </div>
 {/if}
@@ -400,6 +427,14 @@
   }
   .action:hover {
     border-color: var(--gold, #9e7d38);
+    color: var(--gold, #9e7d38);
+  }
+  /* The download is an <a>: reads as the buttons around it, not as a link. */
+  a.action {
+    color: inherit;
+    text-decoration: none;
+  }
+  a.action:hover {
     color: var(--gold, #9e7d38);
   }
   .desc-note {

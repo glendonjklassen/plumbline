@@ -25,7 +25,7 @@
   links name the .org unless the reader picks the .ch on the Share screen
   (`config.shareOrigin`, one of `church::MIRRORS`), and About lists both. Every
   release also puts the whole served site in `plumbline-site.tar.gz` beside
-  it, linked from About, for anyone to keep or host without us. No app store,
+  it, linked from the Backup dialog, for anyone to keep or host without us. No app store,
   no account.
 - `../overlay` (Haskell) is the read-only reference implementation — port
   from it, never modify it.
