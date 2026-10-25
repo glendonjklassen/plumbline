@@ -24,14 +24,21 @@ weaves, and where your work is kept. Install and shortcuts live in the
 
 ## Search
 
-Type into the header search box:
+Type into the search screen's box:
 
 | Query | What happens |
 |-------|--------------|
-| `love` | single word, answered in ranked tiers: exact matches, then morphological variants (*loveth*, *loved*), then other renderings of the same Strong's lemma, then near spellings — each tier labelled |
+| `love` | single word, answered in ranked tiers: exact matches, then the word's other forms (*loveth*, *loved*), then other renderings of the same Strong's lemma, then near spellings — each widened row labelled |
 | `God so loved` | phrase match; when no verse has the exact phrase, verses containing every word are offered instead, plainly labelled |
 | `John 3:16`, `1 Cor 13`, `psalms` | reference jump — OSIS id, display name, or any unambiguous prefix; with a verse it scrolls there and highlights |
 | `H430`, `G26` | a bare Strong's code lists every verse tagged with it |
+
+The match chips say how far down the tiers a search goes: **Exact** is the
+word as typed, **Word forms** (the default) adds its plurals, tenses and
+possessives — for a phrase, each word's — and **Similar** adds the other
+renderings of the same original word and near spellings. Each chip carries
+the count its setting would report, so a setting that finds nothing shows
+which wider one would. The scope chips beside them say where to look.
 
 Results cap at 200 with an honest total. Click a result to open it in the
 active pane. Form-predicate queries (`tense:aorist voice:passive`) are **not

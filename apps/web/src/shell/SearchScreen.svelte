@@ -7,8 +7,9 @@
   // verse you are looking at — it is a place you go, with room for the query,
   // the scope, and results you can read without a sheet covering the Bible.
   //
-  // The engine call is the same one the panel made; what is new is the SCOPE,
-  // which is why this screen exists rather than a taller sheet.
+  // The engine call is the same one the panel made; what is new is the SCOPE
+  // and the MATCH setting, which is why this screen exists rather than a
+  // taller sheet.
   import BlockList from "../study/BlockList.svelte";
   import { dispatchLink } from "../study/links";
   import { getSession } from "../state/session.svelte";
@@ -123,10 +124,27 @@
   // A scope the chips no longer offer (the pane moved to another book) still
   // shows as selected — it is what the results below were actually searched
   // with, and dropping the highlight would misreport them.
-  const blocks = $derived.by(() => {
+  const answer = $derived.by(() => {
     void s.studyEpoch;
     if (!s.searchQuery.trim()) return null;
-    return s.q("searchBlocksScoped", s.searchQuery, s.searchScope)?.blocks ?? null;
+    return s.q("searchBlocksScoped", s.searchQuery, s.searchScope, s.searchMatch) ?? null;
+  });
+  const blocks = $derived(answer?.blocks ?? null);
+
+  // ── the match chips ────────────────────────────────────────────────────────
+  //
+  // How closely a verse must match: the word as typed, its other forms too
+  // ("worker" finds "workers"), or similar words as well. The settings are
+  // cumulative and the engine counts every one on each answer, so a chip can
+  // say what it would find — a reader on "Exact" with nothing sees the number
+  // on "Word forms" rather than an empty list and a guess.
+  const matchChips = $derived.by(() => {
+    const counts = answer?.counts as { exact: number; forms: number; similar: number } | undefined;
+    return [
+      { token: "exact", label: t("search.matchExact"), count: counts?.exact },
+      { token: "forms", label: t("search.matchForms"), count: counts?.forms },
+      { token: "similar", label: t("search.matchSimilar"), count: counts?.similar },
+    ];
   });
 
   function onInput(e: Event): void {
@@ -149,6 +167,10 @@
     // was open to ask, so it closes behind the choice rather than sitting over
     // the results it just changed.
     rangeOpen = false;
+  }
+
+  function pickMatch(token: string): void {
+    s.searchMatch = token;
   }
 
   function onLink(uri: string, ev: MouseEvent): void {
@@ -187,6 +209,14 @@
       <button class="chip range" class:on={rangeOpen} onclick={openRange} aria-expanded={rangeOpen}>
         {t("search.scopeRange")}
       </button>
+    </div>
+
+    <div class="chips match" role="group" aria-label={t("search.matchLabel")}>
+      {#each matchChips as c (c.token)}
+        <button class="chip" class:on={s.searchMatch === c.token} onclick={() => pickMatch(c.token)}>
+          {c.label}{#if c.count !== undefined}<span class="count">{c.count.toLocaleString()}</span>{/if}
+        </button>
+      {/each}
     </div>
 
     {#if rangeOpen}
@@ -303,6 +333,16 @@
     color: var(--paper, #fcf9f4);
     background: var(--gold, #9e7d38);
     border-color: var(--gold, #9e7d38);
+  }
+  /* The second row sits tight under the first: one question (where, how)
+     split over two lines, not two separate controls. */
+  .chips.match {
+    padding-top: 0;
+  }
+  .chip .count {
+    margin-left: 6px;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.8;
   }
   .range-panel {
     border: 1px solid var(--rule, #d8cba8);

@@ -462,9 +462,12 @@ export class StudyEngine {
     return this.#json("plumbline_engine_search_blocks_json", query);
   }
   /** `scope` is a `core::search::SearchScope` token — `all` | `ot` | `nt` |
-   *  `book:<osis>` | `chapter:<osis>:<ch>`. The search SCREEN's chips. */
-  searchBlocksScoped(query: string, scope: string): any {
-    return this.#json("plumbline_engine_search_blocks_scoped_json", query, scope);
+   *  `book:<osis>` | `chapter:<osis>:<ch>` | `span:…` — and `matching` a
+   *  `core::search::SearchMatch` token — `exact` | `forms` | `similar`. The
+   *  search SCREEN's two chip rows. Answers `{blocks, counts}`: the counts are
+   *  what each match setting would total, for the match chips. */
+  searchBlocksScoped(query: string, scope: string, matching: string): any {
+    return this.#json("plumbline_engine_search_blocks_scoped_json", query, scope, matching);
   }
 
   // ── authoring (null = success, else error string; home syncs after) ────────

@@ -342,18 +342,23 @@ char *plumbline_engine_word_codes_json(const struct PlumblineEngine *engine, con
 // `engine` is valid; `query` is a valid NUL-terminated UTF-8 string.
 char *plumbline_engine_search_json(const struct PlumblineEngine *engine, const char *query);
 
-// [`plumbline_engine_search_json`] narrowed to a scope. `scope` is `all` | `ot` | `nt` |
-// `book:<osis>` | `chapter:<osis>:<ch>`; anything else (or null) searches everything.
+// [`plumbline_engine_search_json`] narrowed to a scope and a match setting. `scope` is
+// `all` | `ot` | `nt` | `book:<osis>` | `chapter:<osis>:<ch>` |
+// `span:<osis>:<ch>:<osis>:<ch>`; anything else (or null) searches everything. `matching`
+// is `exact` | `forms` | `similar`; anything else (or null) is the default, `forms`. The
+// answer carries `counts` — what each setting would total — beside the rows of the one
+// asked for.
 //
 // A reference query still answers `goto` whatever the scope — the reader typed an address,
 // and a scope chip must not refuse to take them there.
 //
 // # Safety
-// `engine` is valid; `query` is a valid NUL-terminated UTF-8 string; `scope`
-// is null or valid NUL-terminated UTF-8.
+// `engine` is valid; `query` is a valid NUL-terminated UTF-8 string; `scope` and
+// `matching` are null or valid NUL-terminated UTF-8.
 char *plumbline_engine_search_scoped_json(const struct PlumblineEngine *engine,
                                           const char *query,
-                                          const char *scope);
+                                          const char *scope,
+                                          const char *matching);
 
 // The loaded threads as JSON: `{"threads":[{name,notes,created,entries:[…]}]}`.
 // Caller-freed; null on a null engine.
@@ -883,15 +888,18 @@ char *plumbline_engine_compare_blocks_json(const struct PlumblineEngine *engine,
 // `engine` is a live engine; `query` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_search_blocks_json(const struct PlumblineEngine *engine, const char *query);
 
-// [`plumbline_engine_search_blocks_json`] narrowed to a scope token — see
-// [`plumbline_engine_search_scoped_json`] for the vocabulary.
+// [`plumbline_engine_search_blocks_json`] narrowed to a scope token and a match token —
+// see [`plumbline_engine_search_scoped_json`] for both vocabularies. Answers
+// `{"blocks":[…],"counts":{exact,forms,similar}}`: the counts are what each match setting
+// would total, for the chips beside the list.
 //
 // # Safety
-// `engine` is a live engine; `query` and `scope` are null or valid
+// `engine` is a live engine; `query`, `scope` and `matching` are null or valid
 // NUL-terminated UTF-8.
 char *plumbline_engine_search_blocks_scoped_json(const struct PlumblineEngine *engine,
                                                  const char *query,
-                                                 const char *scope);
+                                                 const char *scope,
+                                                 const char *matching);
 
 // Author a weave link carrying word spans. Span bounds are token indices; pass a negative
 // bound for a span-less side. Null on success, else an owned error.

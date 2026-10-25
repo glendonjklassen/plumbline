@@ -140,6 +140,7 @@ impl PanelSource for Fake {
             total: 0,
             capped: false,
             hits: Vec::new(),
+            counts: Default::default(),
         })
     }
 }
@@ -929,6 +930,7 @@ fn search_goto_vs_hits_with_snippet() {
                 note: true,
                 why: "3× love".into(),
             }],
+            counts: Default::default(),
         }),
         ..Default::default()
     };
@@ -1082,7 +1084,13 @@ fn an_empty_weave_library_says_what_to_do() {
 #[test]
 fn a_search_with_no_hits_says_what_a_query_can_be() {
     let f = Fake {
-        search: Some(SearchView::Hits { how: String::new(), total: 0, capped: false, hits: Vec::new() }),
+        search: Some(SearchView::Hits {
+            how: String::new(),
+            total: 0,
+            capped: false,
+            hits: Vec::new(),
+            counts: Default::default(),
+        }),
         ..Default::default()
     };
     let blocks = search(&f, "quinquagesima");
@@ -1109,6 +1117,7 @@ fn the_no_hits_guidance_stays_out_of_a_search_that_found_something() {
                 note: false,
                 why: String::new(),
             }],
+            counts: Default::default(),
         }),
         ..Default::default()
     };

@@ -395,8 +395,22 @@ pub struct VerseTokensView {
 /// A search result: either a direct navigation, or ranked hits.
 #[derive(Debug, Clone)]
 pub enum SearchView {
-    Goto { book: String, chapter: u32, verse: Option<u32>, display: String },
-    Hits { how: String, total: usize, capped: bool, hits: Vec<SearchHitView> },
+    Goto {
+        book: String,
+        chapter: u32,
+        verse: Option<u32>,
+        display: String,
+    },
+    /// `how` is the finished caption (empty when the rows need none), `total`
+    /// the count under the match setting asked for, and `counts` what every
+    /// setting would count — the match chips' numbers.
+    Hits {
+        how: String,
+        total: usize,
+        capped: bool,
+        hits: Vec<SearchHitView>,
+        counts: crate::search::MatchCounts,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -511,9 +525,11 @@ pub trait PanelSource {
     /// Run a search query.
     fn search(&self, query: &str) -> SearchView;
     /// Run a search query narrowed to a scope, as
-    /// [`crate::search::SearchScope::token`] spells it. A source with no scoped path
-    /// answers the whole corpus — a wider answer, never a wrong one.
-    fn search_scoped(&self, query: &str, _scope: &str) -> SearchView {
+    /// [`crate::search::SearchScope::token`] spells it, under a match setting, as
+    /// [`crate::search::SearchMatch::token`] spells it. A source with no scoped
+    /// path answers the whole corpus under its default — a wider answer, never
+    /// a wrong one.
+    fn search_scoped(&self, query: &str, _scope: &str, _matching: &str) -> SearchView {
         self.search(query)
     }
 }
@@ -2181,26 +2197,40 @@ fn compare_side(src: &dyn PanelSource, refkey: &str, display: &str, span: Option
 // ── search results ────────────────────────────────────────────────────────────
 
 pub fn search(src: &dyn PanelSource, query: &str) -> Vec<Block> {
-    search_in(src, query, "all")
+    search_in(src, query, "all", crate::search::SearchMatch::default().token()).blocks
+}
+
+/// A search answer as the search screen shows it: the block list, and the
+/// counts its match chips carry beside the blocks — they are not content, they
+/// are what the chips say, so they travel outside the list. `None` when the
+/// answer is a reference jump, which has no settings to count under.
+#[derive(Debug, Clone, Default)]
+pub struct SearchBlocks {
+    pub blocks: Vec<Block>,
+    pub counts: Option<crate::search::MatchCounts>,
 }
 
 /// [`search`] narrowed to a scope token (`all` | `ot` | `nt` | `book:<osis>` |
-/// `chapter:<osis>:<ch>`) — the search screen's chips.
-pub fn search_in(src: &dyn PanelSource, query: &str, scope: &str) -> Vec<Block> {
-    match src.search_scoped(query, scope) {
+/// `chapter:<osis>:<ch>`) and a match token (`exact` | `forms` | `similar`) —
+/// the search screen's two chip rows.
+pub fn search_in(src: &dyn PanelSource, query: &str, scope: &str, matching: &str) -> SearchBlocks {
+    match src.search_scoped(query, scope, matching) {
         SearchView::Goto { book, chapter, verse, display } => {
             let uri = match verse {
                 Some(v) => format!("go:{book}:{chapter}:{v}"),
                 None => format!("go:{book}:{chapter}"),
             };
-            vec![Block::para(vec![Run::new(
-                crate::i18n::t(crate::i18n::active(), "panel.goTo", &[("passage", &display)]),
-                sz::SEARCH_GOTO,
-                Color::Gold,
-            )
-            .link(uri)])]
+            SearchBlocks {
+                blocks: vec![Block::para(vec![Run::new(
+                    crate::i18n::t(crate::i18n::active(), "panel.goTo", &[("passage", &display)]),
+                    sz::SEARCH_GOTO,
+                    Color::Gold,
+                )
+                .link(uri)])],
+                counts: None,
+            }
         }
-        SearchView::Hits { how, total, capped, hits } => {
+        SearchView::Hits { how, total, capped, hits, counts } => {
             let mut out =
                 vec![Block::para(vec![Run::new(sp("panel.results", total), sz::SUGGEST_HEAD, Color::Ink).bold()])];
             if !how.is_empty() {
@@ -2209,13 +2239,9 @@ pub fn search_in(src: &dyn PanelSource, query: &str, scope: &str) -> Vec<Block> 
             if total == 0 {
                 // "0 results" alone leaves the reader guessing whether they typed
                 // the wrong thing or the search is broken. Say what this search
-                // takes — the same three shapes the guide names.
-                out.push(Block::para(vec![Run::new(
-                    "Nothing matched. Try a single word (its other forms are found too), a reference like John 3:16 or 1 Cor 13, or a Strong's code like H430.",
-                    sz::SMALL,
-                    Color::Faded,
-                )
-                .italic()]));
+                // takes — the same three shapes the guide names. (A wider match
+                // setting that would find something shows its count on its chip.)
+                out.push(Block::para(vec![Run::new(s("search.noMatch"), sz::SMALL, Color::Faded).italic()]));
             }
             for h in &hits {
                 let mut runs = vec![go(&h.verse, &h.display, sz::LIST)];
@@ -2232,13 +2258,13 @@ pub fn search_in(src: &dyn PanelSource, query: &str, scope: &str) -> Vec<Block> 
             }
             if capped {
                 out.push(Block::para(vec![Run::new(
-                    format!("… {} more", total.saturating_sub(hits.len())),
+                    format!("… {}", sa("search.more", &[("n", &total.saturating_sub(hits.len()).to_string())])),
                     sz::CAPTION,
                     Color::Faded,
                 )
                 .italic()]));
             }
-            out
+            SearchBlocks { blocks: out, counts: Some(counts) }
         }
     }
 }

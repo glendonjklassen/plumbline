@@ -324,6 +324,60 @@ fn search_word_reference_and_bare_strongs() {
     }
 }
 
+/// The match token gates the rows and never the counts, through the ABI. Fails
+/// against an endpoint that drops the fourth argument (every setting reports
+/// the default's total) and against one that parses it but hands the wrong
+/// level's figure back as `total`.
+#[test]
+fn search_match_token_selects_the_rows_and_the_counts_stay() {
+    unsafe {
+        let e = open();
+        let ask = |m: &str| -> Value {
+            let m = CString::new(m).unwrap();
+            serde_json::from_str(
+                &take(plumbline_engine_search_scoped_json(e, c"loved".as_ptr(), c"all".as_ptr(), m.as_ptr())).unwrap(),
+            )
+            .unwrap()
+        };
+        let exact = ask("exact");
+        let forms = ask("forms");
+        let similar = ask("similar");
+        let garbage = ask("nearest"); // an unknown token is the default, not an error
+        for (name, v) in [("exact", &exact), ("forms", &forms), ("similar", &similar)] {
+            assert_eq!(v["kind"], "hits", "{name}");
+            assert_eq!(v["total"], v["counts"][name], "{name}: total is its own setting's count");
+            assert_eq!(v["counts"], exact["counts"], "{name}: the counts do not move with the setting");
+        }
+        assert_eq!(garbage["total"], forms["total"]);
+        let n = |v: &Value, k: &str| v["counts"][k].as_u64().unwrap();
+        assert!(n(&exact, "exact") <= n(&exact, "forms") && n(&exact, "forms") <= n(&exact, "similar"));
+        assert!(n(&exact, "exact") >= 1, "John 3:16 has the word itself");
+
+        // Through the panel endpoint the counts ride beside the blocks.
+        let panel: Value = serde_json::from_str(
+            &take(plumbline_engine_search_blocks_scoped_json(e, c"loved".as_ptr(), c"all".as_ptr(), c"exact".as_ptr()))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(json_keys(&panel), ["blocks", "counts"]);
+        assert_eq!(panel["counts"], exact["counts"]);
+        // A reference jump has no settings to count under, so it carries none.
+        let goto: Value = serde_json::from_str(
+            &take(plumbline_engine_search_blocks_scoped_json(
+                e,
+                c"John 3".as_ptr(),
+                c"all".as_ptr(),
+                c"exact".as_ptr(),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(json_keys(&goto), ["blocks"]);
+
+        plumbline_engine_free(e);
+    }
+}
+
 #[test]
 fn null_and_freed_handles_are_safe() {
     unsafe {
@@ -2427,11 +2481,14 @@ fn wire_search_keys_are_golden() {
             note: false,
             why: String::new(),
         }],
+        counts: plumbline_core::search::MatchCounts { exact: 2, forms: 3, similar: 5 },
     });
     assert_eq!(search_kind(&hits), "hits");
     let v = serde_json::to_value(&hits).unwrap();
-    assert_eq!(json_keys(&v), ["capped", "hits", "how", "kind", "total"]);
+    assert_eq!(json_keys(&v), ["capped", "counts", "hits", "how", "kind", "total"]);
     assert_camel_keys(&json_keys(&v), "hits");
+    assert_eq!(json_keys(&v["counts"]), ["exact", "forms", "similar"]);
+    assert_eq!(v["counts"]["similar"], 5);
     assert_eq!(json_keys(&v["hits"][0]), ["display", "note", "verse", "why"]);
     assert_camel_keys(&json_keys(&v["hits"][0]), "hit");
     // `total` above the returned hits is the honest count, and says so.
