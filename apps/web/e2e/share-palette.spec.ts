@@ -46,6 +46,44 @@ async function openShare(page: Page) {
  *  rebuilt here — a test that rebuilds the link is a test of its own copy. */
 const builtLink = (page: Page) => page.evaluate(() => (window as any).__plumbline.customShareLink as string);
 
+test("the address row picks which of the app's hosts every share link names", async ({ page }) => {
+  await boot(page);
+  const card = await openShare(page);
+
+  // Fails against the two ways this goes wrong: a row that changes the Share
+  // screen's link but not the others (Present and the verse menu build their
+  // own, so they are read straight off the session), and a choice that does not
+  // survive a reload (it is config, not the throwaway draft). Asserted on the
+  // link the app actually built, not on a string this test composes.
+  const address = field(card, "Address");
+  await expect(address).toHaveValue("https://plumblinebible.org/");
+  expect(await builtLink(page)).toMatch(/^https:\/\/plumblinebible\.org\//);
+
+  await address.selectOption("https://plumblinebible.ch/");
+  expect(await builtLink(page)).toMatch(/^https:\/\/plumblinebible\.ch\//);
+  const everywhere = await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    return [s.shareLink, s.presentShareLink].map((u: string) => new URL(u).host);
+  });
+  expect(everywhere).toEqual(["plumblinebible.ch", "plumblinebible.ch"]);
+  await expect(page.locator('[data-surface="share app"] p.sub', { hasText: "plumblinebible.ch" })).toBeVisible();
+
+  // Persisted: the config save is debounced, so wait for the ENGINE's copy (the
+  // worker's `configLoad`, what the next boot reads) to agree before reloading.
+  await expect
+    .poll(
+      async () =>
+        await page.evaluate(async () => (await (window as any).__plumbline.rpc.static("configLoad"))?.shareOrigin),
+      { timeout: 20_000 },
+    )
+    .toBe("https://plumblinebible.ch/");
+  await page.reload();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  expect(await page.evaluate(() => (window as any).__plumbline.shareLink as string)).toMatch(
+    /^https:\/\/plumblinebible\.ch\//,
+  );
+});
+
 test("the palette offers every language and marks what is not written yet", async ({ page }) => {
   await boot(page);
   const card = await openShare(page);

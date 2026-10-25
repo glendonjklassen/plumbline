@@ -1,4 +1,5 @@
 {
+  "about.addresses": "网址：{hosts}",
   "about.covenant.p1": "永远属于您：不需要账号，没有广告，不追踪，任何内容都不会被发送出去。您的资料——笔记、标签、经文串——都以普通文件的形式保存在设备上，您可以自行备份或转移。本应用完全免费。",
   "about.covenant.title": "承诺",
   "about.heading": "关于Plumbline",
@@ -505,7 +506,7 @@
   "panel.results.other": "{n}条结果",
   "panel.rndLoad": "加载分析",
   "panel.rndOffer": "机器分析部分需要一次性下载约1.5MB。",
-  "panel.sameRoot": "同根词：",
+  "panel.sameRoot": "同根词（Strong’s）：",
   "panel.sameRootAcross": "新旧约中的同根词",
   "panel.shortcutsHint": "按？键查看键盘快捷键。",
   "panel.showByBook": "按书卷显示",
@@ -798,6 +799,7 @@
   "settings.wordingModern": "现代化",
   "settings.wordingModernDesc": "经过现代化处理，但文采稍逊——生僻词会被更新并以点状下划线标出；点按即可查看被替换的KJV原词。",
   "share.action": "分享链接",
+  "share.address": "地址",
   "share.comingSoon": "即将推出",
   "share.copied": "链接已复制",
   "share.copyLink": "复制链接",

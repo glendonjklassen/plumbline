@@ -1,4 +1,5 @@
 {
+  "about.addresses": "Direcciones web: {hosts}",
   "about.covenant.p1": "Suya para siempre: sin cuenta, sin anuncios, sin rastreo, nada se envía a ninguna parte. Su biblioteca — notas, etiquetas, hilos — se guarda como archivos corrientes en su dispositivo, que usted puede respaldar o llevarse. La aplicación es gratuita.",
   "about.covenant.title": "EL COMPROMISO",
   "about.heading": "Acerca de Plumbline",
@@ -505,7 +506,7 @@
   "panel.results.other": "{n} resultados",
   "panel.rndLoad": "Cargar el análisis",
   "panel.rndOffer": "Las secciones de análisis por máquina son una descarga única de ~1,5 MB.",
-  "panel.sameRoot": "Misma raíz:",
+  "panel.sameRoot": "Misma raíz (Strong’s):",
   "panel.sameRootAcross": "MISMA RAÍZ EN AMBOS TESTAMENTOS",
   "panel.shortcutsHint": "Pulse ? para ver los atajos de teclado.",
   "panel.showByBook": "Mostrar por libro",
@@ -798,6 +799,7 @@
   "settings.wordingModern": "Modernizada",
   "settings.wordingModernDesc": "Modernizada, pero menos elegante — las palabras poco familiares se actualizan y se señalan con subrayado punteado; toque una para ver la palabra de la KJV a la que sustituye.",
   "share.action": "Compartir el enlace",
+  "share.address": "Dirección",
   "share.comingSoon": "Próximamente",
   "share.copied": "Enlace copiado",
   "share.copyLink": "Copiar enlace",

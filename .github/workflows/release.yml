@@ -117,6 +117,9 @@ jobs:
     # the server was a mirror; renaming them means re-entering them in Settings.
     env:
       MIRROR_HOST: ${{ secrets.MIRROR_HOST }}
+      # The second box (ops/hetzner/README.md, "Two boxes"); same key, its host
+      # keys appended to MIRROR_KNOWN_HOSTS. Empty = one box.
+      MIRROR2_HOST: ${{ secrets.MIRROR2_HOST }}
     permissions:
       contents: write # attach SHA256SUMS to the release
       pages: write
@@ -203,7 +206,14 @@ jobs:
       # GitHub's alone. The host key is PINNED (MIRROR_KNOWN_HOSTS), not accepted
       # on first use: a deploy key that will talk to whoever answers the IP is no
       # deploy key.
-      - name: Upload the site to plumblinebible.org
+      #
+      # Every box before any check: a reader is round-robined between the boxes,
+      # so one serving the new shell while the other still lacks its hashed
+      # assets is a broken boot. Both uploads are required — a box that silently
+      # kept the old release would serve that broken boot to half the readers
+      # until someone noticed. A dead box is taken out of DNS by hand and the
+      # job re-run.
+      - name: Upload the site to every box
         if: github.event_name != 'workflow_dispatch' && env.MIRROR_HOST != ''
         env:
           MIRROR_SSH_KEY: ${{ secrets.MIRROR_SSH_KEY }}
@@ -218,17 +228,23 @@ jobs:
           # roots every path the client names there and refuses anything that
           # is not an rsync into it. The old target would nest a second
           # srv/plumbline inside the first and fail.
-          rsync -az --delete --delay-updates --exclude CNAME \
-            -e "ssh -i ~/.ssh/mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
-            apps/web/dist/ "release@${MIRROR_HOST}:/"
+          for box in $MIRROR_HOST $MIRROR2_HOST; do
+            rsync -az --delete --delay-updates --exclude CNAME \
+              -e "ssh -i ~/.ssh/mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+              apps/web/dist/ "release@${box}:/"
+          done
 
-      # Proves the upload landed rather than assuming it: DNS points at the box,
-      # every served file matches the checksums just attached, and the
-      # certificate is renewing. The same script runs daily (site-check.yml)
-      # for what changes between releases.
-      - name: Check plumblinebible.org is serving this release
+      # Proves the upload landed rather than assuming it: DNS names every box,
+      # each box serves exactly the checksums just attached, and each
+      # certificate is renewing. Once PER BOX, pinned by address — an unpinned
+      # run would prove whichever box DNS handed out. The same script runs daily
+      # (site-check.yml) for what changes between releases.
+      - name: Check every box is serving this release
         if: github.event_name != 'workflow_dispatch' && env.MIRROR_HOST != ''
-        run: ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
+        run: |
+          for box in $MIRROR_HOST $MIRROR2_HOST; do
+            BACKEND=$box ops/hetzner/check-site.sh https://plumblinebible.org "$RUNNER_TEMP/SHA256SUMS"
+          done
 
       # The standby. continue-on-error, so GitHub can neither block nor fail a
       # release that has already reached readers; a failure still shows as a

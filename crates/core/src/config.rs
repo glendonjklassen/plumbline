@@ -162,6 +162,10 @@ pub struct Config {
     /// The reader's saved share-link presets, in the order they were made. See
     /// [`SharePreset`]; normalized by [`clean_presets`] on the way in.
     pub share_presets: Vec<SharePreset>,
+    /// Which of the app's addresses ([`crate::church::MIRRORS`]) the reader's
+    /// share links name. Empty = the first, not stored as such: a reader who
+    /// never chose keeps following the default if it ever moves.
+    pub share_origin: String,
 }
 
 /// One saved share-link preset: a name and the palette choices it restores.
@@ -291,6 +295,7 @@ impl Default for Config {
             concept_study: String::new(),
             gospel_thread: String::new(),
             share_presets: Vec::new(),
+            share_origin: String::new(),
         }
     }
 }
@@ -386,6 +391,8 @@ struct ConfigWire {
     /// config that has never saved one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     share_presets: Vec<SharePreset>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    share_origin: Option<String>,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -553,6 +560,8 @@ impl Config {
             // Normalized on the way IN, so a hand-edited file and a restored
             // backup get exactly what a shell's save gets.
             share_presets: clean_presets(&w.share_presets),
+            // One of ours or nothing: a hand-edited address is not shared.
+            share_origin: crate::church::clean_share_origin(w.share_origin.as_deref().unwrap_or("")),
             // A minute outside the day is corrupt; read it as "never set".
             sunday_service: w.sunday_service.filter(|m| *m < 24 * 60),
             church: w
@@ -633,6 +642,7 @@ impl Config {
             concept_study: (!self.concept_study.is_empty()).then(|| self.concept_study.clone()),
             gospel_thread: (!self.gospel_thread.is_empty()).then(|| self.gospel_thread.clone()),
             share_presets: self.share_presets.clone(),
+            share_origin: (!self.share_origin.is_empty()).then(|| self.share_origin.clone()),
             church: (!self.church.is_empty()).then(|| ChurchWire {
                 name: self.church.name.clone(),
                 service: self.church.service,
@@ -891,6 +901,8 @@ mod tests {
                 },
             ],
             localized_lexicon_off: true,
+            // The non-default address, which is the one that must survive.
+            share_origin: "https://plumblinebible.ch/".to_string(),
             church: Church {
                 name: "Grace Bible Church".into(),
                 service: Some(10 * 60),

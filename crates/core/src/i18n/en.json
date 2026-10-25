@@ -1,4 +1,5 @@
 {
+  "about.addresses": "Web addresses: {hosts}",
   "about.covenant.p1": "Yours forever: no account, no ads, no tracking, nothing sent anywhere. Your library — notes, tags, threads — is saved as ordinary files on your device that you can back up or move. The app is free.",
   "about.covenant.title": "THE COVENANT",
   "about.heading": "About Plumbline",
@@ -439,7 +440,7 @@
   "panel.results.other": "{n} results",
   "panel.rndLoad": "Load analysis",
   "panel.rndOffer": "The machine-analysis sections are a one-time ~1.5 MB download.",
-  "panel.sameRoot": "Same root:",
+  "panel.sameRoot": "Same root (Strong’s):",
   "panel.sameRootAcross": "SAME ROOT ACROSS TESTAMENTS",
   "panel.shortcutsHint": "Press ? for keyboard shortcuts.",
   "panel.showByBook": "Show by book",
@@ -732,6 +733,7 @@
   "settings.wordingModern": "Modernized",
   "settings.wordingModernDesc": "Modernized, but less elegant — unfamiliar words are updated and marked with a dotted underline; tap one to see the KJV word it replaced.",
   "share.action": "Share the link",
+  "share.address": "Address",
   "share.comingSoon": "Coming soon",
   "share.copied": "Link copied",
   "share.copyLink": "Copy link",

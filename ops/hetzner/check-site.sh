@@ -6,9 +6,13 @@
 # without a release.
 #
 #   check-site.sh https://plumblinebible.org [SHA256SUMS]
+#   BACKEND=<box> check-site.sh ...   # every request pinned to that one box
 #
 # - DNS: both names must resolve to exactly EXPECT_ADDRS, so a hijacked record
 #   fails here even though the box itself is untouched.
+# - BACKEND (a hostname or IPv4): every request below goes to that box rather
+#   than to whichever address DNS hands out. With two boxes an unpinned run
+#   samples one of them, so the release runs this once per box.
 # - With SHA256SUMS (the release writes one from `dist` and attaches it to the
 #   GitHub Release, out of the box's reach): every file is downloaded and must
 #   match it byte for byte. Any edit to any served file fails, not only a
@@ -25,13 +29,27 @@ origin=${1%/}
 sums=${2:+$(realpath "$2")}
 host=${origin#https://}
 min_days=${MIN_CERT_DAYS:-14}
-# The Hetzner box (ops/hetzner/README.md). A rebuild changes them.
+
+fail() { echo "::error::$*"; exit 1; }
+# Every box's addresses (ops/hetzner/README.md): both names must carry exactly
+# these. A rebuild changes a box's pair; a box added to DNS is added here in the
+# same change, or the next release fails on this line.
 expect_addrs=${EXPECT_ADDRS:-77.42.10.193 2a01:4f9:c015:c326::1}
+
+# The one box this run proves, if any. A name is resolved to its IPv4 once, here,
+# so every request below reaches the same machine.
+backend=${BACKEND:-}
+resolve=""
+if [ -n "$backend" ]; then
+  case $backend in
+    *[!0-9.]*) backend=$(getent ahostsv4 "$backend" | awk 'NR==1{print $1}') ;;
+  esac
+  [ -n "$backend" ] || fail "BACKEND=$BACKEND: cannot resolve"
+  resolve="--resolve $host:443:$backend --resolve www.$host:443:$backend"
+fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-
-fail() { echo "::error::$*"; exit 1; }
 
 addrs() {
   if command -v dig >/dev/null; then
@@ -50,7 +68,7 @@ done
 # Retried: the one request a restarting Caddy could plausibly miss.
 get() {
   for try in 1 2 3; do
-    curl -fsS --max-time 30 -o "$tmp/$2" "$origin/$1" && return 0
+    curl -fsS $resolve --max-time 30 -o "$tmp/$2" "$origin/$1" && return 0
     [ "$try" = 3 ] || sleep 10
   done
   fail "$origin/$1: no response"
@@ -66,7 +84,7 @@ get "" index.html
 want_csp=$(sed -n 's/^ *Content-Security-Policy "\(.*\)"$/\1/p' "$(dirname "$(realpath "$0")")/cloud-init.yaml")
 [ -n "$want_csp" ] || fail "cloud-init.yaml: no Content-Security-Policy line"
 for path in "" "no-such-page-$$"; do
-  curl -sS --max-time 30 -D "$tmp/headers" -o /dev/null "$origin/$path" ||
+  curl -sS $resolve --max-time 30 -D "$tmp/headers" -o /dev/null "$origin/$path" ||
     fail "$origin/$path: no response"
   got_csp=$(tr -d '\r' < "$tmp/headers" | sed -n 's/^[Cc]ontent-[Ss]ecurity-[Pp]olicy: //p')
   [ "$got_csp" = "$want_csp" ] ||
@@ -82,7 +100,7 @@ if [ -n "$sums" ]; then
   # Accept-Encoding is sent, so Caddy serves the stored bytes.
   mkdir "$tmp/site"
   awk -v o="$origin" '{print "url = \"" o "/" $2 "\"\noutput = \"" $2 "\""}' "$sums" > "$tmp/curl.conf"
-  (cd "$tmp/site" && curl -sS --parallel --parallel-max 8 --create-dirs --max-time 120 -K "$tmp/curl.conf") || true
+  (cd "$tmp/site" && curl -sS $resolve --parallel --parallel-max 8 --create-dirs --max-time 120 -K "$tmp/curl.conf") || true
   if ! (cd "$tmp/site" && sha256sum --check --quiet "$sums" 2>&1) > "$tmp/diff"; then
     sed 's/^/::error::/' "$tmp/diff"
     fail "$origin: $(grep -c FAILED "$tmp/diff") file(s) differ from SHA256SUMS"
@@ -94,7 +112,7 @@ else
   missing=0
   for path in $(jq -r '.files[]' "$tmp/shell-manifest.json") \
               $(jq -r '.files[] | "pack/\(.path).gz"' "$tmp/pack-manifest.json"); do
-    if ! curl -fsSI --max-time 30 -o /dev/null "$origin/$path"; then
+    if ! curl -fsSI $resolve --max-time 30 -o /dev/null "$origin/$path"; then
       echo "::error::$origin/$path: not found"
       missing=$((missing + 1))
     fi
@@ -104,11 +122,12 @@ else
 fi
 
 for name in "$host" "www.$host"; do
-  curl -fsS --max-time 30 -o /dev/null "https://$name/" ||
+  curl -fsS $resolve --max-time 30 -o /dev/null "https://$name/" ||
     fail "https://$name/: no response"
-  echo | openssl s_client -connect "$name:443" -servername "$name" 2>/dev/null |
+  # The box's own certificate, when pinned: each box fetches its own.
+  echo | openssl s_client -connect "${backend:-$name}:443" -servername "$name" 2>/dev/null |
     openssl x509 -noout -checkend $((min_days * 86400)) >/dev/null ||
     fail "$name: certificate expires within $min_days days; renewal may be failing"
 done
 
-echo "OK $origin: DNS, headers, $summary, certificates valid $min_days+ days"
+echo "OK $origin${backend:+ via $backend}: DNS, headers, $summary, certificates valid $min_days+ days"

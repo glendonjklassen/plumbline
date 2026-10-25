@@ -244,8 +244,22 @@ write_files:
     content: |
       # Plain HTTP until there is a hostname: replace `:80` with it, point DNS
       # here, `systemctl reload caddy`, and Caddy fetches the certificate itself.
-      # The live box: `plumblinebible.org, www.plumblinebible.org,
+      # The live boxes: `plumblinebible.org, www.plumblinebible.org,
       # plumblinebible.ch, www.plumblinebible.ch {`.
+      #
+      # Two boxes answer for the names, each with its own certificate, and a
+      # certificate challenge reaches whichever box DNS hands out. Caddy answers
+      # its own challenge tokens on port 80 before any route; this block forwards
+      # the tokens it does not know to the other box, which does. Replace
+      # `<other box IPv4>` (README, "Two boxes"). Everything else on port 80 is
+      # redirected, which is what Caddy would have done on its own had this
+      # block not claimed the port for these names.
+      http://plumblinebible.org, http://www.plumblinebible.org, http://plumblinebible.ch, http://www.plumblinebible.ch {
+          handle /.well-known/acme-challenge/* {
+              reverse_proxy <other box IPv4>:80
+          }
+          redir https://{host}{uri} 308
+      }
 
       # On every response, the 404 page included: handle_errors is a second
       # handler chain, so a `header` in the site block alone left the error

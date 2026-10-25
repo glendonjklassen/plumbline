@@ -1,4 +1,5 @@
 {
+  "about.addresses": "Adresses web : {hosts}",
   "about.covenant.p1": "Pour toujours à vous : aucun compte, aucune publicité, aucun suivi, rien n'est envoyé nulle part. Votre bibliothèque — notes, étiquettes, fils — est enregistrée sous forme de fichiers ordinaires sur votre appareil, que vous pouvez sauvegarder ou emporter. L'application est gratuite.",
   "about.covenant.title": "L'ENGAGEMENT",
   "about.heading": "À propos de Plumbline",
@@ -505,7 +506,7 @@
   "panel.results.other": "{n} résultats",
   "panel.rndLoad": "Charger l'analyse",
   "panel.rndOffer": "Les sections d'analyse automatique sont un téléchargement unique d'environ 1,5 Mo.",
-  "panel.sameRoot": "Même racine :",
+  "panel.sameRoot": "Même racine (Strong’s) :",
   "panel.sameRootAcross": "MÊME RACINE DANS LES DEUX TESTAMENTS",
   "panel.shortcutsHint": "Appuyez sur ? pour les raccourcis clavier.",
   "panel.showByBook": "Afficher par livre",
@@ -798,6 +799,7 @@
   "settings.wordingModern": "Modernisé",
   "settings.wordingModernDesc": "Modernisé, mais moins élégant — les mots peu familiers sont actualisés et signalés par un soulignement pointillé ; touchez-en un pour voir le mot de la KJV qu'il remplace.",
   "share.action": "Partager le lien",
+  "share.address": "Adresse",
   "share.comingSoon": "Bientôt disponible",
   "share.copied": "Lien copié",
   "share.copyLink": "Copier le lien",

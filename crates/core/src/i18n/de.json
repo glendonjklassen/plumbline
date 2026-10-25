@@ -1,4 +1,5 @@
 {
+  "about.addresses": "Webadressen: {hosts}",
   "about.covenant.p1": "Gehört Ihnen, für immer: kein Konto, keine Werbung, keine Nachverfolgung, nichts wird irgendwohin gesendet. Ihre Sammlung — Notizen, Schlagwörter, Fäden — liegt als ganz normale Dateien auf Ihrem Gerät, die Sie sichern oder mitnehmen können. Die App ist kostenlos.",
   "about.covenant.title": "DAS VERSPRECHEN",
   "about.heading": "Über Plumbline",
@@ -505,7 +506,7 @@
   "panel.results.other": "{n} Ergebnisse",
   "panel.rndLoad": "Analyse laden",
   "panel.rndOffer": "Die Abschnitte der Maschinenanalyse sind ein einmaliger Download von etwa 1,5 MB.",
-  "panel.sameRoot": "Gleiche Wurzel:",
+  "panel.sameRoot": "Gleiche Wurzel (Strong’s):",
   "panel.sameRootAcross": "GLEICHE WURZEL IN BEIDEN TESTAMENTEN",
   "panel.shortcutsHint": "Drücken Sie ? für Tastenkürzel.",
   "panel.showByBook": "Nach Buch anzeigen",
@@ -798,6 +799,7 @@
   "settings.wordingModern": "Modernisiert",
   "settings.wordingModernDesc": "Modernisiert, aber weniger elegant — ungewohnte Wörter werden aktualisiert und mit gepunkteter Unterstreichung markiert; auf ein Wort tippen, um das ersetzte KJV-Wort zu sehen.",
   "share.action": "Link teilen",
+  "share.address": "Adresse",
   "share.comingSoon": "Demnächst",
   "share.copied": "Link kopiert",
   "share.copyLink": "Link kopieren",

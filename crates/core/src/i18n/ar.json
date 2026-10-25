@@ -1,4 +1,5 @@
 {
+  "about.addresses": "عناوين الويب: {hosts}",
   "about.covenant.p1": "لك إلى الأبد: بلا حساب، وبلا إعلانات، وبلا تتبّع، ولا يُرسَل شيء إلى أي جهة. مكتبتك — الملاحظات والوسوم والسلاسل — تُحفَظ ملفات عادية على جهازك يمكنك نسخها احتياطيًّا أو نقلها. التطبيق مجاني.",
   "about.covenant.title": "العهد",
   "about.heading": "عن Plumbline",
@@ -505,7 +506,7 @@
   "panel.results.other": "{n} نتيجة",
   "panel.rndLoad": "تحميل التحليل",
   "panel.rndOffer": "أقسام التحليل الآلي تنزيل لمرة واحدة بحجم ~1.5 ميغابايت.",
-  "panel.sameRoot": "الجذر نفسه:",
+  "panel.sameRoot": "الجذر نفسه (Strong’s):",
   "panel.sameRootAcross": "الجذر نفسه في العهدين",
   "panel.shortcutsHint": "اضغط ? لاختصارات لوحة المفاتيح.",
   "panel.showByBook": "عرض حسب السفر",
@@ -798,6 +799,7 @@
   "settings.wordingModern": "محدَّثة",
   "settings.wordingModernDesc": "محدَّثة، لكن أقلّ أناقة — تُحدَّث الكلمات غير المألوفة وتُعلَّم بخط سفلي منقّط؛ انقر إحداها لترى كلمة الملك جيمس التي حلّت محلّها.",
   "share.action": "مشاركة الرابط",
+  "share.address": "العنوان",
   "share.comingSoon": "قريبًا",
   "share.copied": "نُسِخ الرابط",
   "share.copyLink": "نسخ الرابط",

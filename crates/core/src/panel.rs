@@ -2379,6 +2379,15 @@ pub fn guide_blocks_in(lang: i18n::Lang) -> Vec<Block> {
 fn about_body(out: &mut Vec<Block>, lang: i18n::Lang) {
     out.push(Block::para(vec![Run::new(i18n::t(lang, "about.heading", &[]), sz::TITLE, Color::Ink).bold()]));
     out.push(Block::para(vec![Run::new(i18n::t(lang, "about.lede", &[]), sz::BODY, Color::Ink)]));
+    // Every address the app is served from, so a reader whose link stopped
+    // working knows the other one. Hosts, not URLs: this is read, not tapped.
+    let hosts: Vec<&str> =
+        crate::church::MIRRORS.iter().map(|m| m.trim_start_matches("https://").trim_end_matches('/')).collect();
+    out.push(Block::para(vec![Run::new(
+        i18n::t(lang, "about.addresses", &[("hosts", &hosts.join(", "))]),
+        sz::SMALL,
+        Color::Faded,
+    )]));
     // The second paragraph is entirely about the modernization toggle, so it is
     // only true for a language that HAS one. English is the only one so far;
     // German and Spanish readers have been reading a paragraph about an

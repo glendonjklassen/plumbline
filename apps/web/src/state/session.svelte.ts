@@ -14,8 +14,8 @@ import { fontStackFor, setReaderFont } from "../reader/measure";
 import {
   cleanChurch,
   clockLabel,
-  PWA_URL,
   REF_SHAPE,
+  shareBase,
   shareUrl,
   type Church,
   type SharePreset,
@@ -1282,17 +1282,24 @@ export class Session {
     return c?.service == null ? "" : t("church.meets", { time: clockLabel(c.service, lang()) });
   }
 
+  /** The address share links name — see `church.ts`'s `shareBase`. Every share
+   *  surface builds on this, so a reader who picked the .ch is never handed a
+   *  .org link from some other corner of the app. */
+  get shareBase(): string {
+    return shareBase(this.config.shareOrigin);
+  }
+
   /** The link this reader hands over, wherever they share from — the app plus
    *  their church. Every share surface reads this, so they cannot drift apart. */
   get shareLink(): string {
-    return shareUrl(PWA_URL, this.church);
+    return shareUrl(this.shareBase, this.church);
   }
 
   /** The link Present hands over — the same one Share does. Present used to mark
    *  it "for a new believer"; personas are gone, so a link handed over face to
    *  face is an ordinary link. */
   get presentShareLink(): string {
-    return shareUrl(PWA_URL, this.church);
+    return shareUrl(this.shareBase, this.church);
   }
 
   /** The palette's live draft on the Share screen: what the custom link will
@@ -1318,7 +1325,7 @@ export class Session {
   get customShareLink(): string {
     const d = this.shareDraft;
     const at = d.at.trim();
-    return shareUrl(PWA_URL, d.church ? this.church : null, {
+    return shareUrl(this.shareBase, d.church ? this.church : null, {
       lang: d.lang || null,
       thread: d.target === "thread" ? d.thread || null : null,
       devotional: d.target === "devotional" ? d.devotional || null : null,

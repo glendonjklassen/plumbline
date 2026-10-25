@@ -13,7 +13,9 @@
     churchTitle,
     cleanChurch,
     hasChurch,
+    MIRRORS,
     REF_SHAPE,
+    shareBase,
     sharedAtRef,
     sharedDevotional,
     sharedLang,
@@ -300,7 +302,7 @@
           {targetCaption.text}
         </p>
       {/if}
-      <p class="sub">plumblinebible.org</p>
+      <p class="sub">{new URL(link).host}</p>
       {#if hasChurch(s.church)}
         <p class="with">{t("share.with", { church: s.church.name })}</p>
       {/if}
@@ -441,6 +443,25 @@
               <span>{t("share.includeChurch")}</span>
             </label>
           {/if}
+
+        <!-- Which of the app's addresses the link names. The same files at
+             either, so it is the sender's call; a persisted setting rather than
+             part of the draft, because a church that hands out the .ch keeps
+             handing it out. Hosts as the labels: the address IS the choice. -->
+        <label class="row">
+          <span>{t("share.address")}</span>
+          <select
+            value={shareBase(s.config.shareOrigin)}
+            onchange={(e) => {
+              s.config.shareOrigin = (e.currentTarget as HTMLSelectElement).value;
+              s.saveConfig();
+            }}
+          >
+            {#each MIRRORS as m (m)}
+              <option value={m}>{new URL(m).host}</option>
+            {/each}
+          </select>
+        </label>
       </div>
 
       <div class="acts">

@@ -6,7 +6,7 @@
   import { nowStamp } from "../engine/StudyEngine";
   import { dispatchLink } from "../study/links";
   import { refDisplay } from "./refname";
-  import { hasChurch, PWA_URL, shareUrl } from "../shell/church";
+  import { hasChurch, shareUrl } from "../shell/church";
   import { lang, t } from "../lib/i18n.svelte";
   import { ttsSpeak, ttsSupported } from "./tts.svelte";
 
@@ -56,7 +56,7 @@
     // recipient READS is the book's name; what travels in `?at=` is `ref`.
     const said = shown;
     close();
-    const url = shareUrl(PWA_URL, s.church, { at: ref });
+    const url = shareUrl(s.shareBase, s.church, { at: ref });
     const title = hasChurch(s.church)
       ? t("menu.shareTitleChurch", { passage: said, church: s.church.name })
       : t("menu.shareTitle", { passage: said });

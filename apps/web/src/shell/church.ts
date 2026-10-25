@@ -31,6 +31,18 @@
 
 export const PWA_URL = "https://plumblinebible.org/";
 
+/** Every address the app is served from — the core's `church::MIRRORS`. The
+ *  first is `PWA_URL`. Same files, same servers; separate browser origins. */
+export const MIRRORS: readonly string[] = [PWA_URL, "https://plumblinebible.ch/"];
+
+/** The base a share link is built on: the reader's chosen address
+ *  (`config.shareOrigin`) when it is one of ours, else the first. The core
+ *  stores only one of `MIRRORS` (`church::clean_share_origin`), so this is the
+ *  same check applied to what a shell is about to hand over. */
+export function shareBase(origin: unknown): string {
+  return typeof origin === "string" && MIRRORS.includes(origin) ? origin : PWA_URL;
+}
+
 export interface Church {
   name: string;
   /** When they meet, as MINUTES SINCE LOCAL MIDNIGHT — the same grain as

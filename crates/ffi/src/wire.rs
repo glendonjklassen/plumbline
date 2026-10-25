@@ -1340,6 +1340,10 @@ pub struct WireConfigState {
     /// The thread "share the gospel" opens; absent = the stock Romans Road.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gospel_thread: Option<String>,
+    /// Which of the app's addresses share links name; absent = the first
+    /// (`church::MIRRORS`). The core keeps only one of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share_origin: Option<String>,
     /// The reader's saved share-link presets. A LIST, not an `Option`: absent and
     /// empty both mean "none saved", and the core normalizes what arrives
     /// (`config::clean_presets`) so a shell cannot write a nameless or duplicate
@@ -1489,6 +1493,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         language: (!cfg.language.is_empty()).then(|| cfg.language.clone()),
         concept_study: (!cfg.concept_study.is_empty()).then(|| cfg.concept_study.clone()),
         gospel_thread: (!cfg.gospel_thread.is_empty()).then(|| cfg.gospel_thread.clone()),
+        share_origin: (!cfg.share_origin.is_empty()).then(|| cfg.share_origin.clone()),
         share_presets: cfg.share_presets.clone(),
         localized_lexicon_off: Some(cfg.localized_lexicon_off),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
@@ -1581,6 +1586,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         // there, so nothing validates it away here.
         concept_study: w.concept_study.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
         gospel_thread: w.gospel_thread.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
+        share_origin: plumbline_core::church::clean_share_origin(w.share_origin.as_deref().unwrap_or("")),
         // Normalized here as well as on load: the shell is the other untrusted
         // writer, and a save must not be able to store what a load would refuse.
         share_presets: plumbline_core::config::clean_presets(&w.share_presets),
