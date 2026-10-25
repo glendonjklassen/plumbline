@@ -275,3 +275,45 @@ test.describe("a German reader", () => {
     await expect(page.getByRole("button", { name: /^Gospels/ })).toHaveCount(0);
   });
 });
+
+// How closely a word matches. "worker" is in the KJV once as itself (1 Kings 7:14) and
+// more often as "workers", so Exact and Word forms must differ; Similar can only add.
+// Each chip carries the count its setting would report, so the three numbers are read
+// off the chips before a chip is pressed, then checked against the list each one shows.
+//
+// Fails against a SearchScreen passing a constant match token instead of
+// `s.searchMatch` (every chip's list reports the same count), and against an engine
+// that stops counting at the chosen setting (the wider chips read the shown count).
+test("a match chip narrows the search, and every chip says what it would find", async ({ page }) => {
+  await boot(page);
+  const field = await openSearch(page);
+  await field.fill("worker");
+
+  const count = async (): Promise<number> => {
+    const head = await page.locator('[data-surface="search results"] >> text=/\\d+ results?/').first().textContent();
+    return Number(/(\d[\d,]*)/.exec(head ?? "")?.[1]?.replace(/,/g, "") ?? -1);
+  };
+  const chipCount = async (label: string): Promise<number> => {
+    const chip = page.getByRole("group", { name: "How to match" }).getByRole("button", { name: new RegExp(`^${label}`) });
+    const n = await chip.locator(".count").textContent();
+    return Number((n ?? "").replace(/,/g, ""));
+  };
+  await expect.poll(count, { timeout: 30_000 }).toBeGreaterThan(0);
+
+  // The default is Word forms, and its chip agrees with the header.
+  const forms = await count();
+  await expect.poll(() => chipCount("Word forms"), { timeout: 30_000 }).toBe(forms);
+  const exact = await chipCount("Exact");
+  const similar = await chipCount("Similar");
+  expect(exact, `exact ${exact} < forms ${forms}`).toBeLessThan(forms);
+  expect(exact).toBeGreaterThan(0);
+  expect(similar, `similar ${similar} >= forms ${forms}`).toBeGreaterThanOrEqual(forms);
+
+  await page.getByRole("button", { name: /^Exact/ }).click();
+  await expect.poll(count, { timeout: 30_000 }).toBe(exact);
+  // A hit that is only a form of the word is gone from the list, not merely relabelled.
+  await expect(page.locator('[data-surface="search results"]').getByText("word form")).toHaveCount(0);
+
+  await page.getByRole("button", { name: /^Similar/ }).click();
+  await expect.poll(count, { timeout: 30_000 }).toBe(similar);
+});

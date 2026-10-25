@@ -1715,20 +1715,25 @@ pub unsafe extern "C" fn plumbline_engine_search_json(
     })
 }
 
-/// [`plumbline_engine_search_json`] narrowed to a scope. `scope` is `all` | `ot` | `nt` |
-/// `book:<osis>` | `chapter:<osis>:<ch>`; anything else (or null) searches everything.
+/// [`plumbline_engine_search_json`] narrowed to a scope and a match setting. `scope` is
+/// `all` | `ot` | `nt` | `book:<osis>` | `chapter:<osis>:<ch>` |
+/// `span:<osis>:<ch>:<osis>:<ch>`; anything else (or null) searches everything. `matching`
+/// is `exact` | `forms` | `similar`; anything else (or null) is the default, `forms`. The
+/// answer carries `counts` — what each setting would total — beside the rows of the one
+/// asked for.
 ///
 /// A reference query still answers `goto` whatever the scope — the reader typed an address,
 /// and a scope chip must not refuse to take them there.
 ///
 /// # Safety
-/// `engine` is valid; `query` is a valid NUL-terminated UTF-8 string; `scope`
-/// is null or valid NUL-terminated UTF-8.
+/// `engine` is valid; `query` is a valid NUL-terminated UTF-8 string; `scope` and
+/// `matching` are null or valid NUL-terminated UTF-8.
 #[no_mangle]
 pub unsafe extern "C" fn plumbline_engine_search_scoped_json(
     engine: *const PlumblineEngine,
     query: *const c_char,
     scope: *const c_char,
+    matching: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let (Some(engine), Some(query)) = (engine.as_ref(), opt_str(query)) else {
@@ -1736,7 +1741,8 @@ pub unsafe extern "C" fn plumbline_engine_search_scoped_json(
         };
         let study = engine.study_read();
         let scope = opt_str(scope).and_then(search::SearchScope::parse).unwrap_or_default();
-        match search::run_search_scoped(&engine.corpus, &study.notes, engine.search_ix(), query, &scope) {
+        let matching = opt_str(matching).and_then(search::SearchMatch::parse).unwrap_or_default();
+        match search::run_search_scoped(&engine.corpus, &study.notes, engine.search_ix(), query, &scope, matching) {
             Some(answer) => out_json(&wire::search_to_wire(&answer)),
             None => ptr::null_mut(),
         }
@@ -3572,14 +3578,16 @@ impl PanelSource for PlumblineEngine {
         self.corpus.verse(&v).map(|verse| verse.body())
     }
     fn search(&self, query: &str) -> panel::SearchView {
-        self.search_scoped(query, "all")
+        self.search_scoped(query, "all", search::SearchMatch::default().token())
     }
-    fn search_scoped(&self, query: &str, scope: &str) -> panel::SearchView {
+    fn search_scoped(&self, query: &str, scope: &str, matching: &str) -> panel::SearchView {
         let study = self.study_read();
-        // An unparseable token searches everything rather than nothing, so a shell sending a
-        // scope this build does not know still gets an answer.
+        // An unparseable token searches everything rather than nothing, and matches the default
+        // way rather than no way, so a shell sending a token this build does not know still gets
+        // an answer.
         let scope = search::SearchScope::parse(scope).unwrap_or_default();
-        match search::run_search_scoped(&self.corpus, &study.notes, self.search_ix(), query, &scope) {
+        let matching = search::SearchMatch::parse(matching).unwrap_or_default();
+        match search::run_search_scoped(&self.corpus, &study.notes, self.search_ix(), query, &scope, matching) {
             Some(search::SearchAnswer::GoTo { book, chapter, verse }) => {
                 let display = match verse {
                     Some(v) => VRef::new(book.clone(), chapter, v).display(),
@@ -3587,12 +3595,13 @@ impl PanelSource for PlumblineEngine {
                 };
                 panel::SearchView::Goto { book, chapter: chapter as u32, verse: verse.map(u32::from), display }
             }
-            Some(search::SearchAnswer::Hits { how, total, hits }) => {
+            Some(search::SearchAnswer::Hits { how, total, hits, counts }) => {
                 let capped = total > hits.len();
                 panel::SearchView::Hits {
                     how,
                     total,
                     capped,
+                    counts,
                     hits: hits
                         .into_iter()
                         .map(|h| panel::SearchHitView {
@@ -3604,7 +3613,13 @@ impl PanelSource for PlumblineEngine {
                         .collect(),
                 }
             }
-            None => panel::SearchView::Hits { how: String::new(), total: 0, capped: false, hits: Vec::new() },
+            None => panel::SearchView::Hits {
+                how: String::new(),
+                total: 0,
+                capped: false,
+                hits: Vec::new(),
+                counts: Default::default(),
+            },
         }
     }
 }
@@ -3862,17 +3877,20 @@ pub unsafe extern "C" fn plumbline_engine_search_blocks_json(
     })
 }
 
-/// [`plumbline_engine_search_blocks_json`] narrowed to a scope token — see
-/// [`plumbline_engine_search_scoped_json`] for the vocabulary.
+/// [`plumbline_engine_search_blocks_json`] narrowed to a scope token and a match token —
+/// see [`plumbline_engine_search_scoped_json`] for both vocabularies. Answers
+/// `{"blocks":[…],"counts":{exact,forms,similar}}`: the counts are what each match setting
+/// would total, for the chips beside the list.
 ///
 /// # Safety
-/// `engine` is a live engine; `query` and `scope` are null or valid
+/// `engine` is a live engine; `query`, `scope` and `matching` are null or valid
 /// NUL-terminated UTF-8.
 #[no_mangle]
 pub unsafe extern "C" fn plumbline_engine_search_blocks_scoped_json(
     engine: *const PlumblineEngine,
     query: *const c_char,
     scope: *const c_char,
+    matching: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let (Some(e), Some(query)) = (engine.as_ref(), opt_str(query)) else {
@@ -3881,7 +3899,8 @@ pub unsafe extern "C" fn plumbline_engine_search_blocks_scoped_json(
         if query.trim().is_empty() {
             return ptr::null_mut();
         }
-        out_json(&wire::blocks_to_wire(panel::search_in(e, query, opt_str(scope).unwrap_or("all"))))
+        let matching = opt_str(matching).unwrap_or_else(|| search::SearchMatch::default().token());
+        out_json(&wire::search_blocks_to_wire(panel::search_in(e, query, opt_str(scope).unwrap_or("all"), matching)))
     })
 }
 

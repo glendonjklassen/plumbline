@@ -260,6 +260,7 @@ export class Session {
     this.searchDraft = "";
     this.searchQuery = "";
     this.searchScope = "all";
+    this.searchMatch = Session.DEFAULT_SEARCH_MATCH;
   }
 
   /**
@@ -271,6 +272,18 @@ export class Session {
    * re-aimed when the pane moved would change what a shown result list means.
    */
   searchScope = $state("all");
+
+  /** The engine's own default (`core::search::SearchMatch::default`): a word
+   *  and its other forms. Spelled here so the shell can reset to it without
+   *  asking the engine. */
+  static readonly DEFAULT_SEARCH_MATCH = "forms";
+
+  /**
+   * How closely the search matches, as `core::search::SearchMatch::token`
+   * spells it — `exact` | `forms` | `similar`. Kept with the query and the
+   * scope across Back, since all three say what the shown results are.
+   */
+  searchMatch = $state(Session.DEFAULT_SEARCH_MATCH);
 
   /** Refreshed after any authoring write (worker reload → shell re-fetch). */
   studyEpoch = $state(0);

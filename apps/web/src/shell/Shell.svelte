@@ -40,7 +40,7 @@
   import { t } from "../lib/i18n.svelte";
   import { uiScale } from "../lib/uiScale";
   import { DEFAULT_FONT, FONT_SCALE } from "../engine/fonts.generated";
-  import { getSession } from "../state/session.svelte";
+  import { getSession, Session } from "../state/session.svelte";
   import { startReadingTracker } from "../state/readingTracker";
 
   const s = getSession();
@@ -98,11 +98,12 @@
     s.panel = { kind: "wordUsage", word: "", refKey, tokenIndex, scope: "all", page: 0, lang };
   }
 
-  // Search is its own screen; the bar carries only the way in. The scope starts
-  // fresh at "everywhere" each time — a chip left on from the last question is a
-  // search that lies about what it looked at.
+  // Search is its own screen; the bar carries only the way in. The scope and the
+  // match setting start fresh each time — a chip left on from the last question
+  // is a search that lies about what it looked at.
   function openSearch(): void {
     s.searchScope = "all";
+    s.searchMatch = Session.DEFAULT_SEARCH_MATCH;
     s.screen = "search";
   }
   // Surfaces are exclusive: picking a destination closes the others. Shared by

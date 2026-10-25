@@ -292,7 +292,41 @@ pub enum WireSearch {
         /// Whether `hits` was capped below `total`.
         capped: bool,
         hits: Vec<WireSearchHit>,
+        /// What each match setting would count — the match chips' numbers.
+        counts: WireMatchCounts,
     },
+}
+
+/// The totals under each `SearchMatch` setting, within the scope — cumulative,
+/// so `exact <= forms <= similar`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireMatchCounts {
+    pub exact: usize,
+    pub forms: usize,
+    pub similar: usize,
+}
+
+impl From<plumbline_core::search::MatchCounts> for WireMatchCounts {
+    fn from(c: plumbline_core::search::MatchCounts) -> Self {
+        WireMatchCounts { exact: c.exact, forms: c.forms, similar: c.similar }
+    }
+}
+
+/// A search answer for the search screen: the block list plus the match
+/// chips' counts beside it (`{blocks, counts}`). The blocks alone are what
+/// every other panel endpoint returns, so a shell reading only `blocks` still
+/// works. `counts` is absent for a reference jump.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireSearchPanel {
+    pub blocks: Vec<WireBlock>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counts: Option<WireMatchCounts>,
+}
+
+pub fn search_blocks_to_wire(sb: plumbline_core::panel::SearchBlocks) -> WireSearchPanel {
+    WireSearchPanel { blocks: blocks_to_wire(sb.blocks).blocks, counts: sb.counts.map(Into::into) }
 }
 
 #[derive(Serialize)]
@@ -1607,11 +1641,12 @@ pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
             };
             WireSearch::Goto { book: book.clone(), chapter: *chapter, verse: *verse, display }
         }
-        SearchAnswer::Hits { how, total, hits } => WireSearch::Hits {
+        SearchAnswer::Hits { how, total, hits, counts } => WireSearch::Hits {
             how: how.clone(),
             total: *total,
             capped: *total > hits.len(),
             hits: hits.iter().map(search_hit_to_wire).collect(),
+            counts: (*counts).into(),
         },
     }
 }

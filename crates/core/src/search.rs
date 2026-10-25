@@ -6,11 +6,13 @@
 //! reads as a reference (`John 3:16`, `1 Cor 13`, `psalms`) becomes a `GoTo`
 //! jump; everything else answers `Hits`. A single word runs four ranked tiers —
 //! exact → stem variants → other renderings of the same Strong's lemma → near
-//! spellings — and the first tier to produce anything names the answer; a
-//! multi-word query is a phrase match falling back to every-word-in-any-order;
-//! a bare Strong's code lists every verse tagged with it. Margin notes are
-//! searched alongside the exact tier. Rows are capped at [`HIT_CAP`] in
-//! tier-then-canon order while the total stays honest.
+//! spellings — and a [`SearchMatch`] setting says how far down them the shown
+//! rows go: every tier is still counted, so the answer carries what each
+//! setting would find. A multi-word query is a phrase match falling back to
+//! every-word-in-any-order, with the stem variants of each word admitted under
+//! the wider settings; a bare Strong's code lists every verse tagged with it.
+//! Margin notes are searched alongside the exact tier. Rows are capped at
+//! [`HIT_CAP`] in tier-then-canon order while the total stays honest.
 //!
 //! The morphology *form-predicate* path (`tense:aorist voice:passive`) needs
 //! the optional morphology layer, so it answers with a placeholder here;
@@ -155,6 +157,75 @@ impl SearchScope {
 fn chapter_bounds(corpus: &Corpus, book: &str, chapter: u16) -> Option<std::ops::Range<usize>> {
     let last = corpus.chapter_count(book);
     corpus.chapter_range(book, chapter.clamp(1, last.max(1)))
+}
+
+/// How closely a verse's words must match the query — the search screen's
+/// match chips. The settings are cumulative, in this order: each one keeps
+/// everything the narrower one finds, shown first, and adds a tier after it.
+/// Derived `Ord` IS that widening order; the tiers compare against it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum SearchMatch {
+    /// The word (or phrase) as typed, plus the margin notes.
+    Exact,
+    /// Plus the other forms of each word: plurals, tenses, possessives.
+    #[default]
+    Forms,
+    /// Plus other renderings of the same original word, and near spellings.
+    Similar,
+}
+
+impl SearchMatch {
+    /// The wire token the scoped FFI endpoints take: `exact` | `forms` |
+    /// `similar`.
+    pub fn token(self) -> &'static str {
+        match self {
+            SearchMatch::Exact => "exact",
+            SearchMatch::Forms => "forms",
+            SearchMatch::Similar => "similar",
+        }
+    }
+
+    /// Parse a wire token; `None` for anything unrecognized (the FFI layer
+    /// treats that as the default rather than failing the whole query).
+    pub fn parse(t: &str) -> Option<SearchMatch> {
+        match t {
+            "exact" => Some(SearchMatch::Exact),
+            "forms" => Some(SearchMatch::Forms),
+            "similar" => Some(SearchMatch::Similar),
+            _ => None,
+        }
+    }
+}
+
+/// What each [`SearchMatch`] setting would report as its total, within the
+/// scope — the numbers on the match chips, so a reader whose setting found
+/// nothing can see which wider one would. Cumulative like the settings, so
+/// `exact <= forms <= similar`.
+///
+/// A floor, not an exact figure, once the shown rows fill [`HIT_CAP`]: the
+/// near-spelling pass is skipped then (see [`single_word`]), so `similar` can
+/// equal `forms` for a common word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MatchCounts {
+    pub exact: usize,
+    pub forms: usize,
+    pub similar: usize,
+}
+
+impl MatchCounts {
+    /// The total the given setting reports.
+    pub fn at(&self, m: SearchMatch) -> usize {
+        match m {
+            SearchMatch::Exact => self.exact,
+            SearchMatch::Forms => self.forms,
+            SearchMatch::Similar => self.similar,
+        }
+    }
+
+    /// Every setting reports the same figure — a tier-less answer.
+    fn flat(n: usize) -> Self {
+        MatchCounts { exact: n, forms: n, similar: n }
+    }
 }
 
 /// Where the New Testament starts in this corpus.
@@ -378,8 +449,9 @@ pub struct SearchHit {
     pub vref: VRef,
     /// matched in a 1769 margin note, not the verse text.
     pub note: bool,
-    /// why this verse widened past an exact match (`""` for exact/phrase):
-    /// e.g. `"variant"`, `"also H430"`, `"≈ typo"`.
+    /// why this verse widened past an exact match (`""` for exact/phrase), in
+    /// the reader's language: a word form, the same original word (with its
+    /// code), or a near spelling. See [`Why::render`].
     pub why: String,
 }
 
@@ -388,9 +460,11 @@ pub struct SearchHit {
 pub enum SearchAnswer {
     /// The query is a reference: book id, chapter, and verse (when given).
     GoTo { book: String, chapter: u16, verse: Option<u16> },
-    /// How the hits were found (shown to the reader), the honest total count,
-    /// and the hits, capped at [`HIT_CAP`] in tier-then-canon order.
-    Hits { how: String, total: usize, hits: Vec<SearchHit> },
+    /// How the hits were found — the caption over the rows, in the reader's
+    /// language, empty when the rows need no explaining — the honest total
+    /// count under the setting asked for, the hits, capped at [`HIT_CAP`] in
+    /// tier-then-canon order, and what every setting would have counted.
+    Hits { how: String, total: usize, hits: Vec<SearchHit>, counts: MatchCounts },
 }
 
 /// Notes keyed by verse — the 1769 translators' margin notes, searched last.
@@ -399,18 +473,20 @@ pub type Notes = HashMap<VRef, Vec<String>>;
 /// Answer a query against the corpus, its margin notes, and the index.
 /// `None` means the query is blank. Ported from `runSearch`.
 pub fn run_search(corpus: &Corpus, notes: &Notes, ix: &SearchIx, raw_query: &str) -> Option<SearchAnswer> {
-    run_search_scoped(corpus, notes, ix, raw_query, &SearchScope::All)
+    run_search_scoped(corpus, notes, ix, raw_query, &SearchScope::All, SearchMatch::default())
 }
 
-/// [`run_search`] narrowed to a [`SearchScope`]. A reference query still
-/// answers `GoTo` whatever the scope — the reader typed an address, and
-/// refusing to take them there because a chip is set would read as broken.
+/// [`run_search`] narrowed to a [`SearchScope`] and a [`SearchMatch`]. A
+/// reference query still answers `GoTo` whatever the scope — the reader typed
+/// an address, and refusing to take them there because a chip is set would
+/// read as broken.
 pub fn run_search_scoped(
     corpus: &Corpus,
     notes: &Notes,
     ix: &SearchIx,
     raw_query: &str,
     scope: &SearchScope,
+    matching: SearchMatch,
 ) -> Option<SearchAnswer> {
     let q = raw_query.trim();
     if q.is_empty() {
@@ -436,13 +512,12 @@ pub fn run_search_scoped(
         return None;
     }
 
-    let (how, rows) = if qws.len() == 1 {
-        single_word(corpus, notes, ix, &qws[0], range)
+    let (how, rows, counts) = if qws.len() == 1 {
+        single_word(corpus, notes, ix, &qws[0], range, matching)
     } else {
-        multi_word(corpus, notes, ix, &qws, range)
+        multi_word(corpus, notes, ix, &qws, range, matching)
     };
 
-    let total = rows.total;
     let hits = rows
         .kept
         .into_iter()
@@ -451,7 +526,10 @@ pub fn run_search_scoped(
             corpus.verse_at(i).map(|v| SearchHit { vref: v.vref(), note, why: why.render() })
         })
         .collect();
-    Some(SearchAnswer::Hits { how: how.to_string(), total, hits })
+    // The caption reaches the reader finished: the keys above are the tiers'
+    // vocabulary, the string is the reader's.
+    let how = if how.is_empty() { String::new() } else { crate::i18n::t(crate::i18n::active(), how, &[]) };
+    Some(SearchAnswer::Hits { how, total: counts.at(matching), hits, counts })
 }
 
 /// The verse indices whose margin notes contain the whole normalized query.
@@ -487,13 +565,14 @@ enum Why<'a> {
 }
 
 impl Why<'_> {
-    /// The reason as [`SearchHit::why`] carries it.
+    /// The reason as [`SearchHit::why`] carries it, in the reader's language.
     fn render(self) -> String {
+        let lang = crate::i18n::active();
         match self {
             Why::Plain => String::new(),
-            Why::Variant => "variant".to_string(),
-            Why::Also(lemma) => format!("also {lemma}"),
-            Why::Typo => "≈ typo".to_string(),
+            Why::Variant => crate::i18n::t(lang, "search.whyForm", &[]),
+            Why::Also(lemma) => crate::i18n::t(lang, "search.whyLemma", &[("code", lemma)]),
+            Why::Typo => crate::i18n::t(lang, "search.whySimilar", &[]),
         }
     }
 }
@@ -532,13 +611,19 @@ impl Seen {
 /// The count and the rows are separated ON PURPOSE. `total` is what the reader
 /// is told ("200 of 24,135") so it has to see every posting, but a row past the
 /// cap can never be shown — so it is counted and thrown away instead of being
-/// built, sorted, and copied twice on the way to being thrown away.
+/// built, sorted, and copied twice on the way to being thrown away. The tiers
+/// past the reader's [`SearchMatch`] setting are the same: counted, so the chip
+/// for a wider setting can say what it would find, and never built.
 struct Rows<'a> {
     seen: Seen,
     /// Up to [`HIT_CAP`] rows, in the order they were offered.
     kept: Vec<(usize, bool, Why<'a>)>,
-    /// Distinct verses across every tier — uncapped, and shown as the total.
+    /// Distinct verses across every tier offered so far — uncapped. A tier
+    /// reads it after its push to learn the count up to and including itself.
     total: usize,
+    /// Whether an offered verse is also SHOWN. The tiers turn it off once they
+    /// pass the reader's setting.
+    keeping: bool,
     /// The scope's verse-index range; `None` is the whole corpus. Checked at
     /// the mouth of `push` so every tier — words, notes, variants, lemmas,
     /// typos — is filtered in one place and `total` never counts a verse the
@@ -548,7 +633,7 @@ struct Rows<'a> {
 
 impl<'a> Rows<'a> {
     fn new(corpus: &Corpus, scope: Option<std::ops::Range<usize>>) -> Self {
-        Rows { seen: Seen::new(corpus.len()), kept: Vec::new(), total: 0, scope }
+        Rows { seen: Seen::new(corpus.len()), kept: Vec::new(), total: 0, keeping: true, scope }
     }
 
     /// Offer one verse. False when the scope excludes it or a better tier
@@ -563,7 +648,7 @@ impl<'a> Rows<'a> {
             return false;
         }
         self.total += 1;
-        if self.kept.len() < HIT_CAP {
+        if self.keeping && self.kept.len() < HIT_CAP {
             self.kept.push((i, note, why));
         }
         true
@@ -576,22 +661,34 @@ impl<'a> Rows<'a> {
     }
 }
 
+/// The caption keys an answer can carry as its `how`. Empty when the rows
+/// speak for themselves — exact matches under the setting the reader chose.
+const HOW_FORMS: &str = "search.howForms";
+const HOW_SIMILAR: &str = "search.howSimilar";
+const HOW_EVERY_WORD: &str = "search.howEveryWord";
+
 fn single_word<'a>(
     corpus: &Corpus,
     notes: &Notes,
     ix: &'a SearchIx,
     w: &str,
     scope: Option<std::ops::Range<usize>>,
-) -> (&'static str, Rows<'a>) {
+    m: SearchMatch,
+) -> (&'static str, Rows<'a>, MatchCounts) {
     let mut rows = Rows::new(corpus, scope);
+    let mut counts = MatchCounts::default();
 
     // Tier 1, then the margin notes. The postings are already deduplicated and
     // ascending, so offering them in order IS the canon order.
     let exact = rows.push_all(ix.word_idxs(w).iter().copied(), false, Why::Plain);
     let note_only = rows.push_all(note_idxs(corpus, notes, ix, w), true, Why::Plain);
+    counts.exact = rows.total;
 
+    rows.keeping = m >= SearchMatch::Forms;
     let variants = rows.push_all(variant_idxs(ix, w), false, Why::Variant);
+    counts.forms = rows.total;
 
+    rows.keeping = m >= SearchMatch::Similar;
     let mut renders = 0;
     for (i, lemma) in rendering_idxs(ix, w) {
         if rows.push(i, false, Why::Also(lemma)) {
@@ -599,22 +696,24 @@ fn single_word<'a>(
         }
     }
 
-    // Skip the full-vocabulary Levenshtein pass once the better tiers already
-    // fill the cap — those near-spellings would be dropped anyway.
-    let typos = if rows.total >= HIT_CAP { 0 } else { rows.push_all(fuzzy_idxs(ix, w), false, Why::Typo) };
+    // Skip the full-vocabulary Levenshtein pass once the shown rows already
+    // fill the cap — those near-spellings would be dropped anyway, and the
+    // reader with 200 rows on screen is not short of a wider setting.
+    let typos = if rows.kept.len() >= HIT_CAP { 0 } else { rows.push_all(fuzzy_idxs(ix, w), false, Why::Typo) };
+    counts.similar = rows.total;
 
-    let label = if exact > 0 || note_only > 0 {
-        "verses with the word"
-    } else if variants > 0 {
-        "no exact match — word variants"
-    } else if renders > 0 {
-        "no exact match — same original word"
-    } else if typos > 0 {
-        "no exact match — near spellings"
+    // The caption names the widening only when the reader sees nothing else:
+    // under its own setting, the first non-empty tier below the exact one.
+    let how = if exact > 0 || note_only > 0 {
+        ""
+    } else if m >= SearchMatch::Forms && variants > 0 {
+        HOW_FORMS
+    } else if m >= SearchMatch::Similar && (renders > 0 || typos > 0) {
+        HOW_SIMILAR
     } else {
-        "verses with the word"
+        ""
     };
-    (label, rows)
+    (how, rows, counts)
 }
 
 /// Tier 2: the verses of every word that stems to the same root as the query,
@@ -698,9 +797,8 @@ fn multi_word<'a>(
     ix: &SearchIx,
     qws: &[String],
     scope: Option<std::ops::Range<usize>>,
-) -> (&'static str, Rows<'a>) {
-    let postings: Vec<&[usize]> = qws.iter().map(|w| ix.word_idxs(w)).collect();
-
+    m: SearchMatch,
+) -> (&'static str, Rows<'a>, MatchCounts) {
     // Intersect every word's postings first (a phrase hit needs all of them),
     // then confirm a consecutive run comparing tokens in place. For common
     // bigrams ("of the") this replaces rebuilding ~500k lowercased Strings per
@@ -708,19 +806,25 @@ fn multi_word<'a>(
     // Narrowed BEFORE the phrase confirmation, so a scoped query neither
     // decodes verses it will discard nor lets a phrase outside the scope
     // choose the label for hits inside it.
+    //
+    // `groups[k]` is every surface word the k-th query word may match in a
+    // verse, and `postings[k]` the union of their verses — one word under
+    // `Exact`, its whole stem group under `Forms`.
     let in_scope = |i: &usize| scope.as_ref().is_none_or(|r| r.contains(i));
-    let every_word: Vec<usize> = and_idxs(&postings).into_iter().filter(in_scope).collect();
-    let phrase_idxs: Vec<usize> =
-        every_word.iter().copied().filter(|&i| corpus.verse_at(i).is_some_and(|v| phrase_in_verse(qws, v))).collect();
-
-    let (label, text_idxs) = if !phrase_idxs.is_empty() {
-        ("verses with the phrase", phrase_idxs)
-    } else {
-        ("no exact phrase — verses with every word", every_word)
+    let level = |groups: &[Vec<&str>], postings: &[&[usize]]| -> (Vec<usize>, Vec<usize>) {
+        let every: Vec<usize> = and_idxs(postings).into_iter().filter(in_scope).collect();
+        let phrase: Vec<usize> =
+            every.iter().copied().filter(|&i| corpus.verse_at(i).is_some_and(|v| phrase_in_verse(groups, v))).collect();
+        (phrase, every)
     };
 
-    let mut rows = Rows::new(corpus, scope);
-    rows.push_all(text_idxs, false, Why::Plain);
+    let exact_groups: Vec<Vec<&str>> = qws.iter().map(|w| vec![w.as_str()]).collect();
+    let exact_postings: Vec<&[usize]> = qws.iter().map(|w| ix.word_idxs(w)).collect();
+    let (phrase, every) = level(&exact_groups, &exact_postings);
+
+    let mut rows = Rows::new(corpus, scope.clone());
+    let mut counts = MatchCounts::default();
+    rows.push_all(if phrase.is_empty() { every.iter().copied() } else { phrase.iter().copied() }, false, Why::Plain);
     // Two adjacent Han query words came from an unspaced run — a note that
     // matches them says "耶穌", never "耶 穌" — so the needle joins them the
     // way the writer typed them. Spaced scripts keep their space.
@@ -735,7 +839,44 @@ fn multi_word<'a>(
         needle.push_str(w);
     }
     rows.push_all(note_idxs(corpus, notes, ix, &needle), true, Why::Plain);
-    (label, rows)
+    counts.exact = rows.total;
+    let mut how = if phrase.is_empty() && !every.is_empty() { HOW_EVERY_WORD } else { "" };
+
+    // The forms level: each word may be any of its stem group, so "worker of
+    // iniquity" reaches "workers of iniquity". Only when some word HAS other
+    // forms — otherwise the postings are the same lists and the answer the same
+    // rows. The exact rows stay first; `Rows` dedups what both levels reach.
+    // Near spellings are not combined across words: a phrase of near-misses is
+    // too many candidates for a keystroke, so `Similar` is `Forms` here.
+    rows.keeping = m >= SearchMatch::Forms;
+    let forms_groups: Vec<Vec<&str>> = qws
+        .iter()
+        .map(|w| {
+            let group = ix.stem_group(w);
+            if group.is_empty() {
+                vec![w.as_str()]
+            } else {
+                group.iter().map(String::as_str).collect()
+            }
+        })
+        .collect();
+    // A word outside the index with ONE other form ("bless" → "blessed") is a
+    // group of one that is still not the word, so the test is against the
+    // query, not the group's size.
+    let widened = forms_groups.iter().zip(qws).any(|(g, w)| g.len() != 1 || g[0] != w);
+    if widened {
+        let forms_postings: Vec<Vec<usize>> = qws.iter().map(|w| ix.stem_verses(w)).collect();
+        let forms_slices: Vec<&[usize]> = forms_postings.iter().map(Vec::as_slice).collect();
+        let (phrase_f, every_f) = level(&forms_groups, &forms_slices);
+        let (found, offered) = if phrase_f.is_empty() { (!every_f.is_empty(), every_f) } else { (true, phrase_f) };
+        rows.push_all(offered, false, Why::Variant);
+        if how.is_empty() && counts.exact == 0 && found && m >= SearchMatch::Forms {
+            how = HOW_FORMS;
+        }
+    }
+    counts.forms = rows.total;
+    counts.similar = rows.total;
+    (how, rows, counts)
 }
 
 /// Intersect all postings (every-word-in-any-order), keeping ascending order.
@@ -776,14 +917,17 @@ fn word_eq_lower(word: &str, lower: &str) -> bool {
     word.chars().flat_map(char::to_lowercase).eq(lower.chars())
 }
 
-/// Do the query words appear as a consecutive token run in this verse?
-fn phrase_in_verse(qws: &[String], v: &crate::corpus::Verse) -> bool {
-    let n = qws.len();
+/// Do the query words appear as a consecutive token run in this verse? Each
+/// position may be any word of its group — the one query word under `Exact`,
+/// its stem group under `Forms`.
+fn phrase_in_verse(groups: &[Vec<&str>], v: &crate::corpus::Verse) -> bool {
+    let n = groups.len();
     if n == 0 || n > v.tokens.len() {
         return false;
     }
-    (0..=v.tokens.len() - n)
-        .any(|start| qws.iter().enumerate().all(|(k, qw)| word_eq_lower(&v.tokens[start + k].word, qw)))
+    (0..=v.tokens.len() - n).any(|start| {
+        groups.iter().enumerate().all(|(k, group)| group.iter().any(|qw| word_eq_lower(&v.tokens[start + k].word, qw)))
+    })
 }
 
 /// Intersect two ascending, deduplicated lists.
@@ -1328,13 +1472,19 @@ fn form_search_scoped(
                     corpus.verse_at(i).map(|v| SearchHit { vref: v.vref(), note: false, why: String::new() })
                 })
                 .collect();
-            return SearchAnswer::Hits { how: format!("verses tagged {s}"), total: idxs.len(), hits };
+            return SearchAnswer::Hits {
+                how: crate::i18n::t(crate::i18n::active(), "search.howTagged", &[("code", s)]),
+                total: idxs.len(),
+                hits,
+                counts: MatchCounts::flat(idxs.len()),
+            };
         }
     }
     SearchAnswer::Hits {
-        how: "form search needs the morphology layer — enable it in Full study mode".to_string(),
+        how: crate::i18n::t(crate::i18n::active(), "search.howNeedsMorphology", &[]),
         total: 0,
         hits: Vec::new(),
+        counts: MatchCounts::default(),
     }
 }
 
@@ -1454,7 +1604,7 @@ mod tests {
     use super::*;
     use crate::corpus;
 
-    const SAMPLE: &str = concat!(
+    pub(super) const SAMPLE: &str = concat!(
         r#"{"format":"x","tokenization":"kjv1769-tok2","verses":5}"#,
         "\n",
         r#"{"b":"Gen","c":1,"t":[["","In","",[],0],["","the","",[],0],["","beginning","",["H7225"],0],["","God","",["H430"],0],["","created","",["H1254"],0]],"v":1}"#,
@@ -1468,7 +1618,7 @@ mod tests {
         r#"{"b":"John","c":3,"t":[["","For","",[],0],["","God","",["H2316"],0],["","so","",[],0],["","loved","",[],0]],"v":16}"#,
     );
 
-    fn ix_of(c: &corpus::Corpus) -> SearchIx {
+    pub(super) fn ix_of(c: &corpus::Corpus) -> SearchIx {
         SearchIx::build(c)
     }
 
@@ -1617,7 +1767,7 @@ mod tests {
         let c = corpus::from_str(SAMPLE).unwrap();
         let ix = ix_of(&c);
         let notes = Notes::new();
-        let refs = |scope: SearchScope| match run_search_scoped(&c, &notes, &ix, "God", &scope) {
+        let refs = |scope: SearchScope| match run_search_scoped(&c, &notes, &ix, "God", &scope, SearchMatch::Forms) {
             Some(SearchAnswer::Hits { total, hits, .. }) => {
                 let r: Vec<String> = hits.iter().map(|h| h.vref.ref_key()).collect();
                 // The total is the scope's own count, not the corpus-wide one:
@@ -1649,8 +1799,9 @@ mod tests {
         let c = corpus::from_str(SAMPLE).unwrap();
         let ix = ix_of(&c);
         let notes = Notes::new();
-        let ask = |q: &str, scope: SearchScope| match run_search_scoped(&c, &notes, &ix, q, &scope) {
-            Some(SearchAnswer::Hits { how, total, hits }) => {
+        let ask = |q: &str, scope: SearchScope| match run_search_scoped(&c, &notes, &ix, q, &scope, SearchMatch::Forms)
+        {
+            Some(SearchAnswer::Hits { how, total, hits, .. }) => {
                 (how, total, hits.iter().map(|h| h.vref.ref_key()).collect::<Vec<_>>())
             }
             _ => panic!("expected hits"),
@@ -1658,7 +1809,7 @@ mod tests {
 
         // Unscoped: the exact verse leads, the variant follows.
         let (how, _, refs) = ask("blessing", SearchScope::All);
-        assert_eq!(how, "verses with the word");
+        assert_eq!(how, "");
         assert_eq!(refs, ["Gen 1:3", "Gen 1:2"]);
 
         // Scoped to the verse-2 chapter of a book that has only the VARIANT:
@@ -1670,7 +1821,7 @@ mod tests {
         // A form query (bare Strong's code) is scoped by the same range —
         // H430 tags Gen 1:1, 1:2 and 1:3.
         let (how, total, refs) = ask("H430", SearchScope::Chapter("Gen".into(), 1));
-        assert_eq!(how, "verses tagged H430");
+        assert_eq!(how, "Verses tagged H430");
         assert_eq!((total, refs.len()), (3, 3));
         let (_, total, _) = ask("H430", SearchScope::NewTestament);
         assert_eq!(total, 0);
@@ -1683,7 +1834,7 @@ mod tests {
         let c = corpus::from_str(SAMPLE).unwrap();
         let ix = ix_of(&c);
         let notes = Notes::new();
-        let ans = run_search_scoped(&c, &notes, &ix, "John 3", &SearchScope::Book("Gen".into()));
+        let ans = run_search_scoped(&c, &notes, &ix, "John 3", &SearchScope::Book("Gen".into()), SearchMatch::Forms);
         match ans {
             Some(SearchAnswer::GoTo { book, chapter, verse }) => {
                 assert_eq!((book.as_str(), chapter, verse), ("John", 3, None));
@@ -1712,8 +1863,8 @@ mod tests {
         .unwrap();
         let ix = ix_of(&c);
         let notes = Notes::new();
-        let ask = |scope: SearchScope| match run_search_scoped(&c, &notes, &ix, "word of", &scope) {
-            Some(SearchAnswer::Hits { how, total, hits }) => {
+        let ask = |scope: SearchScope| match run_search_scoped(&c, &notes, &ix, "word of", &scope, SearchMatch::Forms) {
+            Some(SearchAnswer::Hits { how, total, hits, .. }) => {
                 (how, total, hits.iter().map(|h| h.vref.ref_key()).collect::<Vec<_>>())
             }
             other => panic!("expected hits, got {other:?}"),
@@ -1721,13 +1872,13 @@ mod tests {
 
         // Unscoped, Genesis has the phrase and wins the tier.
         let (how, _, refs) = ask(SearchScope::All);
-        assert_eq!(how, "verses with the phrase");
+        assert_eq!(how, "");
         assert_eq!(refs, ["Gen 1:1"]);
 
         // Scoped to John, whose verse holds both words apart: the answer is
         // John's verse under the every-word label, NOT an empty phrase answer.
         let (how, total, refs) = ask(SearchScope::Book("John".into()));
-        assert_eq!(how, "no exact phrase — verses with every word");
+        assert_eq!(how, "No exact phrase. Showing verses with every word.");
         assert_eq!((total, refs), (1, vec!["John 1:1".to_string()]));
     }
 
@@ -1746,7 +1897,7 @@ mod tests {
             to_book: tb.into(),
             to_chapter: tc,
         };
-        let refs = |scope: SearchScope| match run_search_scoped(&c, &notes, &ix, "God", &scope) {
+        let refs = |scope: SearchScope| match run_search_scoped(&c, &notes, &ix, "God", &scope, SearchMatch::Forms) {
             Some(SearchAnswer::Hits { total, hits, .. }) => {
                 let r: Vec<String> = hits.iter().map(|h| h.vref.ref_key()).collect();
                 assert_eq!(total, r.len(), "total disagrees with the rows for {}", scope.token());
@@ -1823,7 +1974,7 @@ mod tests {
         let ans = run_search(&c, &notes, &ix, "God").unwrap();
         match ans {
             SearchAnswer::Hits { how, hits, .. } => {
-                assert_eq!(how, "verses with the word");
+                assert_eq!(how, "");
                 // God in Gen 1:1, 1:2, 1:3, John 3:16
                 let refs: Vec<_> = hits.iter().map(|h| h.vref.ref_key()).collect();
                 assert!(refs.contains(&"Gen 1:1".to_string()));
@@ -1880,8 +2031,8 @@ mod tests {
         let ans = run_search(&c, &notes, &ix, "bless").unwrap();
         match ans {
             SearchAnswer::Hits { how, hits, .. } => {
-                assert!(how.contains("word variants"));
-                assert!(hits.iter().all(|h| h.why == "variant"));
+                assert_eq!(how, "No exact match. Showing other forms of the word.");
+                assert!(hits.iter().all(|h| h.why == "word form"));
                 assert_eq!(hits.len(), 2);
             }
             _ => panic!("expected hits"),
@@ -1896,7 +2047,7 @@ mod tests {
         let ans = run_search(&c, &notes, &ix, "God created").unwrap();
         match ans {
             SearchAnswer::Hits { how, hits, .. } => {
-                assert_eq!(how, "verses with the phrase");
+                assert_eq!(how, "");
                 assert_eq!(hits.len(), 1);
                 assert_eq!(hits[0].vref.ref_key(), "Gen 1:1");
             }
@@ -1954,7 +2105,7 @@ mod tests {
         let ans = run_search(&c, &notes, &ix, "H430").unwrap();
         match ans {
             SearchAnswer::Hits { how, total, .. } => {
-                assert_eq!(how, "verses tagged H430");
+                assert_eq!(how, "Verses tagged H430");
                 assert_eq!(total, 3); // Gen 1:1, 1:2, 1:3
             }
             _ => panic!("expected strongs hits"),
@@ -1981,6 +2132,7 @@ mod tests {
 
 #[cfg(test)]
 mod review_tests {
+    use super::tests::{ix_of, SAMPLE};
     use super::*;
     use crate::corpus;
 
@@ -2020,13 +2172,13 @@ mod review_tests {
         let Some(SearchAnswer::Hits { how, total, .. }) = run_search(&c, &notes, &ix, "paste sat") else {
             panic!("expected hits");
         };
-        assert_eq!(how, "verses with the phrase");
+        assert_eq!(how, "");
         assert_eq!(total, 2); // v1 and v3 contain "paste sat" consecutively
 
         let Some(SearchAnswer::Hits { how, total, .. }) = run_search(&c, &notes, &ix, "sat the") else {
             panic!("expected hits");
         };
-        assert!(how.starts_with("no exact phrase"));
+        assert_eq!(how, "No exact phrase. Showing verses with every word.");
         assert_eq!(total, 1); // only v3 has both words
     }
 
@@ -2070,11 +2222,14 @@ mod review_tests {
         notes.insert(VRef::new("Gen", 1, 6), vec!["Heb. alpha".to_string()]);
         ix.attach_notes(&c, &notes);
 
-        let Some(SearchAnswer::Hits { how, total, hits }) = run_search(&c, &notes, &ix, "alpha") else {
+        let Some(SearchAnswer::Hits { how, total, hits, counts }) =
+            run_search_scoped(&c, &notes, &ix, "alpha", &SearchScope::All, SearchMatch::Similar)
+        else {
             panic!("expected hits");
         };
-        assert_eq!(how, "verses with the word");
+        assert_eq!(how, "");
         assert_eq!(total, 6, "every tier's verse is counted once");
+        assert_eq!(counts, MatchCounts { exact: 3, forms: 4, similar: 6 });
         let got: Vec<(String, bool, String)> = hits.iter().map(|h| (h.vref.ref_key(), h.note, h.why.clone())).collect();
         assert_eq!(
             got,
@@ -2082,9 +2237,9 @@ mod review_tests {
                 ("Gen 1:1".to_string(), false, String::new()),
                 ("Gen 1:2".to_string(), false, String::new()),
                 ("Gen 1:6".to_string(), true, String::new()),
-                ("Gen 1:3".to_string(), false, "variant".to_string()),
-                ("Gen 1:4".to_string(), false, "also H1".to_string()),
-                ("Gen 1:5".to_string(), false, "≈ typo".to_string()),
+                ("Gen 1:3".to_string(), false, "word form".to_string()),
+                ("Gen 1:4".to_string(), false, "same original word (H1)".to_string()),
+                ("Gen 1:5".to_string(), false, "near spelling".to_string()),
             ]
         );
     }
@@ -2103,13 +2258,113 @@ mod review_tests {
         let c = tiered();
         let ix = SearchIx::build(&c);
         let notes = Notes::new();
-        let Some(SearchAnswer::Hits { how, hits, .. }) = run_search(&c, &notes, &ix, "alph") else {
+        let Some(SearchAnswer::Hits { how, hits, .. }) =
+            run_search_scoped(&c, &notes, &ix, "alph", &SearchScope::All, SearchMatch::Similar)
+        else {
             panic!("expected hits");
         };
-        assert_eq!(how, "no exact match — near spellings");
-        assert!(hits.iter().all(|h| h.why == "≈ typo"));
+        assert_eq!(how, "No exact match. Showing similar words.");
+        assert!(hits.iter().all(|h| h.why == "near spelling"));
         let refs: Vec<String> = hits.iter().map(|h| h.vref.ref_key()).collect();
         assert_eq!(refs, vec!["Gen 1:1", "Gen 1:2"], "\"alph\" is one edit from the indexed \"alpha\"");
+
+        // Under the default setting those rows are not shown — but they are
+        // counted, so the chip for the wider setting can say they exist.
+        let Some(SearchAnswer::Hits { how, total, hits, counts }) = run_search(&c, &notes, &ix, "alph") else {
+            panic!("expected hits");
+        };
+        assert_eq!((how.as_str(), total, hits.len()), ("", 0, 0));
+        assert_eq!(counts, MatchCounts { exact: 0, forms: 0, similar: 2 });
+    }
+
+    /// The match setting gates which tiers are SHOWN; every tier is still
+    /// COUNTED. Fails against a `Rows::push` that skips `seen`/`total` for a
+    /// non-kept tier (the counts collapse onto the shown total) and against a
+    /// `single_word` that stops offering tiers at the setting (the wider counts
+    /// read 0).
+    #[test]
+    fn the_match_setting_gates_the_rows_and_counts_every_setting() {
+        let c = tiered();
+        let mut ix = SearchIx::build(&c);
+        let mut notes = Notes::new();
+        notes.insert(VRef::new("Gen", 1, 6), vec!["Heb. alpha".to_string()]);
+        ix.attach_notes(&c, &notes);
+        let ask = |m: SearchMatch| match run_search_scoped(&c, &notes, &ix, "alpha", &SearchScope::All, m) {
+            Some(SearchAnswer::Hits { how, total, hits, counts }) => {
+                (how, total, hits.iter().map(|h| h.vref.ref_key()).collect::<Vec<_>>(), counts)
+            }
+            other => panic!("expected hits, got {other:?}"),
+        };
+        let all = MatchCounts { exact: 3, forms: 4, similar: 6 };
+
+        let (how, total, refs, counts) = ask(SearchMatch::Exact);
+        assert_eq!((how.as_str(), total), ("", 3));
+        assert_eq!(refs, ["Gen 1:1", "Gen 1:2", "Gen 1:6"]);
+        assert_eq!(counts, all, "the setting changes the rows, never the counts");
+
+        let (how, total, refs, counts) = ask(SearchMatch::Forms);
+        assert_eq!((how.as_str(), total), ("", 4));
+        assert_eq!(refs, ["Gen 1:1", "Gen 1:2", "Gen 1:6", "Gen 1:3"]);
+        assert_eq!(counts, all);
+
+        let (_, total, refs, counts) = ask(SearchMatch::Similar);
+        assert_eq!((total, refs.len()), (6, 6));
+        assert_eq!(counts, all);
+
+        // A word with only forms: `Exact` shows nothing and says nothing — the
+        // forms count on its chip is the pointer — while `Forms` captions the
+        // widening it shows.
+        let c = corpus::from_str(SAMPLE).unwrap();
+        let ix = ix_of(&c);
+        let notes = Notes::new();
+        let Some(SearchAnswer::Hits { how, total, counts, .. }) =
+            run_search_scoped(&c, &notes, &ix, "bless", &SearchScope::All, SearchMatch::Exact)
+        else {
+            panic!("expected hits");
+        };
+        assert_eq!((how.as_str(), total), ("", 0));
+        assert_eq!(counts, MatchCounts { exact: 0, forms: 2, similar: 2 });
+        let Some(SearchAnswer::Hits { how, total, .. }) = run_search(&c, &notes, &ix, "bless") else {
+            panic!("expected hits");
+        };
+        assert_eq!((how.as_str(), total), ("No exact match. Showing other forms of the word.", 2));
+    }
+
+    /// A phrase admits each word's other forms under `Forms`: "God blessing"
+    /// is exact in Gen 1:3 and reaches "God blessed" in Gen 1:2 as a word form,
+    /// shown after the exact row and tagged. Fails against a `multi_word` that
+    /// only ever intersects `word_idxs` (the forms level is never reached) and
+    /// against a `phrase_in_verse` that tests one surface per position (the
+    /// stem group's verses pass the intersection but fail the run).
+    #[test]
+    fn a_phrase_reaches_the_other_forms_of_its_words() {
+        let c = corpus::from_str(SAMPLE).unwrap();
+        let ix = ix_of(&c);
+        let notes = Notes::new();
+        let ask = |q: &str, m: SearchMatch| match run_search_scoped(&c, &notes, &ix, q, &SearchScope::All, m) {
+            Some(SearchAnswer::Hits { how, total, hits, counts }) => {
+                (how, total, hits.iter().map(|h| (h.vref.ref_key(), h.why.clone())).collect::<Vec<_>>(), counts)
+            }
+            other => panic!("expected hits, got {other:?}"),
+        };
+
+        let (how, total, rows, counts) = ask("God blessing", SearchMatch::Exact);
+        assert_eq!((how.as_str(), total), ("", 1));
+        assert_eq!(rows, [("Gen 1:3".to_string(), String::new())]);
+        assert_eq!(counts, MatchCounts { exact: 1, forms: 2, similar: 2 });
+
+        let (how, total, rows, _) = ask("God blessing", SearchMatch::Forms);
+        assert_eq!((how.as_str(), total), ("", 2));
+        assert_eq!(rows, [("Gen 1:3".to_string(), String::new()), ("Gen 1:2".to_string(), "word form".to_string())]);
+
+        // No exact phrase at all ("bless" is no surface word): the forms rows
+        // are all there is, and the caption says so.
+        let (how, total, rows, counts) = ask("God bless", SearchMatch::Forms);
+        assert_eq!((how.as_str(), total), ("No exact match. Showing other forms of the word.", 2));
+        assert!(rows.iter().all(|(_, why)| why == "word form"), "{rows:?}");
+        assert_eq!(counts, MatchCounts { exact: 0, forms: 2, similar: 2 });
+        let (_, total, rows, _) = ask("God bless", SearchMatch::Exact);
+        assert_eq!((total, rows.len()), (0, 0));
     }
 
     /// The cap bounds the ROWS, never the count: 265 verses match, 200 come
