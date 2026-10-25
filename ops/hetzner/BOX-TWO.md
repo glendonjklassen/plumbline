@@ -1,14 +1,17 @@
 # Adding box two, step by step
 
 Everything here is copy-paste. Two values are yours to fill in once the box
-exists: `B2V4` (box two's IPv4) and `B2V6` (its IPv6). Box one is
-`77.42.10.193` / `2a01:4f9:c015:c326::1`. Run the commands from a checkout
-of this repo, on this branch.
+exists: `B2V4` (box two's IPv4) and `B2V6` (its IPv6). Nothing else is a
+placeholder: `<other box IPv4>` below is literal text inside cloud-init.yaml
+that the command replaces for you. Box one is `77.42.10.193` /
+`2a01:4f9:c015:c326::1`. Run the commands from a checkout of this repo, on
+this branch.
 
 ## 1. Infomaniak: build the box
 
 Make the user-data: cloud-init.yaml with the release key copied off box one
-and the challenge forward pointed at box one.
+and the challenge forward pointed at box one. Paste these three lines as they
+are.
 
 ```sh
 key=$(ssh deploy@77.42.10.193 'sudo grep -o "ssh-ed25519 [^ ]* plumbline release" /home/release/.ssh/authorized_keys')
