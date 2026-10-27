@@ -1,0 +1,29 @@
+{
+  "id": "when-the-roll-is-called-up-yonder",
+  "number": 102,
+  "tune": "ROLL CALL",
+  "meter": "15.11.15.11 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "When the Roll Is Called Up Yonder",
+      "author": "James M. Black",
+      "translator": null,
+      "year": 1893,
+      "stanzas": [
+        "[G]When the trumpet of the Lord shall sound, and [C]time shall be no [G]more,\nAnd the morning breaks, eternal, bright and [D]fair;\n[G]When the saved of earth shall gather over [C]on the other [G]shore,\nAnd the roll is called up [D7]yonder, I'll be [G]there.",
+        "On that bright and cloudless morning when the dead in Christ shall rise,\nAnd the glory of His resurrection share;\nWhen His chosen ones shall gather to their home beyond the skies,\nAnd the roll is called up yonder, I'll be there.",
+        "Let us labor for the Master from the dawn till setting sun,\nLet us talk of all His wondrous love and care;\nThen when all of life is over, and our work on earth is done,\nAnd the roll is called up yonder, I'll be there."
+      ],
+      "chorus": "When the [G]roll is called up yonder,\nWhen the [D7]roll is called up yonder,\nWhen the [G]roll is called up [C]yonder,\nWhen the [G]roll is called up [D7]yonder, I'll be [G]there.",
+      "sources": [
+        "https://library.timelesstruths.org/music/When_the_Roll_Is_Called_Up_Yonder/",
+        "https://library.timelesstruths.org/library/music/W/When_the_Roll_Is_Called_Up_Yonder/When_the_Roll_Is_Called_Up_Yonder.xml",
+        "https://hymnary.org/text/when_the_trumpet_of_the_lord_shall_black",
+        "https://hymnary.org/tune/roll_call_black"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (Evening Light Songs #507). Hymnary's representative text (Our Great Redeemer's Praise #624) has the same three stanzas and refrain, differing only in line-initial capitals and two line-end marks. TT offers 'sabbath morning' as an alternate for 'cloudless morning' in stanza 2; 'cloudless' is the 1893 reading and ships. Tune ROLL CALL, meter 15.11.15.11 with refrain. Key: hymnary's instances run 40 A-flat to 15 G (9 G plus 6 'G or modal') and 1 A; TT prints A-flat. Moved to G for guitar per the key rule (G is a semitone away and first in the preference order). Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed A-flat to G. Stanza: I, with V/A and I/B walking the bass under 'sound' dropped, IV6 on 'time shall be no', I, a cluster of passing chords on 'bright and' dropped, V on 'fair', the same again, then I6/4-V7-I. Refrain: the score opens each 'roll' on a one-beat iii or ii (Bm, Am) before settling; the harmonic rhythm underneath is I | V7 | I IV | I V7 I, which is what the chart carries."
+}

@@ -1,0 +1,31 @@
+{
+  "id": "when-we-all-get-to-heaven",
+  "number": 101,
+  "tune": "HEAVEN",
+  "meter": "8.7.8.7 with refrain",
+  "key": "C",
+  "texts": {
+    "en": {
+      "title": "When We All Get to Heaven",
+      "author": "Eliza E. Hewitt",
+      "translator": null,
+      "year": 1898,
+      "stanzas": [
+        "[C]Sing the wondrous love of Jesus,\n[G7]Sing His mercy and His [C]grace;\n[C]In the mansions [F]bright and blessed\n[C]He'll pre[G7]pare for us a [C]place.",
+        "While we walk the pilgrim pathway,\nClouds will overspread the sky;\nBut when trav'ling days are over,\nNot a shadow, not a sigh.",
+        "Let us then be true and faithful,\nTrusting, serving every day;\nJust one glimpse of Him in glory\nWill the toils of life repay.",
+        "Onward to the prize before us!\nSoon His beauty we'll behold;\nSoon the pearly gates will open;\nWe shall tread the streets of gold."
+      ],
+      "chorus": "[C]When we all get to heaven,\nWhat a day of re[D7]joicing that will [G7]be!\n[C]When we all see [F]Jesus,\n[C]We'll sing and [G7]shout the victo[C]ry!",
+      "sources": [
+        "https://library.timelesstruths.org/music/When_We_All_Get_to_Heaven/",
+        "https://library.timelesstruths.org/library/music/W/When_We_All_Get_to_Heaven/When_We_All_Get_to_Heaven.xml",
+        "https://hymnary.org/text/sing_the_wondrous_love_of_jesus_sing_his",
+        "https://hymnary.org/tune/heaven_wilson",
+        "http://www.hymntime.com/tch/htm/w/w/a/g/wwag2hvn.htm"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (Echoes from Heaven #192), which agrees word for word with the Cyber Hymnal's transcription of the first printing (Pentecostal Praises, Philadelphia 1898) except that the Cyber Hymnal prints 'traveling' and 'Heaven' capitalised; hymnary's representative text (Our Great Redeemer's Praise #616) agrees too, with 'ev'ry' and lower-case line openings. Tune HEAVEN (Emily D. Wilson, 1898), meter 8.7.8.7 with refrain. Key C: hymnary's instances run 49 C to 13 D-flat; TT prints C, already a guitar key. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat. The score is an echo setting; the stanza's harmony is I with passing ii and IV (dropped), V7 alternating with I under 'Sing His mercy' (written V7), IV on 'bright and blessed' with a vii-dim7 of V on '-ed' dropped, and the cadence. Refrain: the 'What a day of rejoicing' bar passes through I6, iii and II7 (V of V) before V7 on 'be!'; the II7 is kept on 'rejoicing' because it is the bar's colour, the rest dropped. The E-major chords on the refrain's pickups are chromatic alto motion, not harmony."
+}

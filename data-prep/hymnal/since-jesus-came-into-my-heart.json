@@ -1,0 +1,31 @@
+{
+  "id": "since-jesus-came-into-my-heart",
+  "number": 104,
+  "tune": "MCDANIEL",
+  "meter": "12.8.12.8 with refrain",
+  "key": "A",
+  "texts": {
+    "en": {
+      "title": "Since Jesus Came into My Heart",
+      "author": "Rufus H. McDaniel",
+      "translator": null,
+      "year": 1914,
+      "stanzas": [
+        "[A]What a wonderful change in my life has been wrought\nSince [D]Jesus came into my [A]heart;\nI have light in my soul for which long I have sought,\nSince [B7]Jesus came into my [E7]heart.",
+        "I have ceased from my wand'ring and going astray,\nSince Jesus came into my heart;\nAnd my sins which were many are all washed away,\nSince Jesus came into my heart.",
+        "I'm possessed of a hope that is steadfast and sure,\nSince Jesus came into my heart;\nAnd no dark clouds of doubt now my pathway obscure,\nSince Jesus came into my heart.",
+        "There's a light in the valley of death now for me,\nSince Jesus came into my heart;\nAnd the gates of the City beyond I can see,\nSince Jesus came into my heart.",
+        "I shall go there to dwell in that City I know,\nSince Jesus came into my heart;\nAnd I'm happy, so happy as onward I go,\nSince Jesus came into my heart."
+      ],
+      "chorus": "Since [A]Jesus came into my heart,\nSince [D]Jesus came into my [A]heart;\nFloods of joy o'er my soul like the sea billows roll,\n[D]Since [E7]Jesus came into my [A]heart.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Since_Jesus_Came_into_My_Heart/",
+        "https://library.timelesstruths.org/library/music/S/Since_Jesus_Came_into_My_Heart/Since_Jesus_Came_into_My_Heart.xml",
+        "https://hymnary.org/text/what_a_wonderful_change_in_my_life_has",
+        "https://hymnary.org/tune/mcdaniel_gabriel"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths, which cites hymnary. Hymnary's representative text (Our Great Redeemer's Praise #552) has the same five stanzas; it reads 'I have light in my soul for which long I sought' (simple past) where TT has 'long I have sought', drops the article in the refrain's third line, lower-cases 'city', and ends the second line of several stanzas with an exclamation mark. TT kept; the score sings 'long I have sought'. Tune MCDANIEL (Charles H. Gabriel, 1914), meter 12.8.12.8 with refrain. Key: hymnary's instances run 22 A-flat to 18 A; TT prints A. A is a guitar key and nearly as common, so nothing was transposed. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat. Stanza: I with IV/A and sus4 neighbours over the tonic pedal (dropped), a iii7 on the pickup 'Since' dropped, IV, I; second half the same with II7 (V of V) on 'Jesus' and a half cadence on V7. Refrain: I, IV-I, then IV on the last 'Since' into a cadential 6/4 written as the E7 it is. COPYRIGHT: 1914, public domain in the United States; McDaniel died 1940 and Gabriel 1932, so the words are clear under life-plus-70 terms from 2011."
+}

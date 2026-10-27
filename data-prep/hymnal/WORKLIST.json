@@ -972,6 +972,216 @@
       "langs": [
         "de"
       ]
+    },
+    {
+      "number": 95,
+      "id": "standing-on-the-promises",
+      "title": "Standing on the Promises",
+      "author": "R. Kelso Carter",
+      "year": 1886,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 96,
+      "id": "the-old-rugged-cross",
+      "title": "The Old Rugged Cross",
+      "author": "George Bennard",
+      "year": 1913,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 97,
+      "id": "at-calvary",
+      "title": "At Calvary",
+      "author": "William R. Newell",
+      "year": 1895,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 98,
+      "id": "there-is-power-in-the-blood",
+      "title": "There Is Power in the Blood",
+      "author": "Lewis E. Jones",
+      "year": 1899,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 99,
+      "id": "tis-so-sweet-to-trust-in-jesus",
+      "title": "'Tis So Sweet to Trust in Jesus",
+      "author": "Louisa M. R. Stead",
+      "year": 1882,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 100,
+      "id": "have-thine-own-way-lord",
+      "title": "Have Thine Own Way, Lord",
+      "author": "Adelaide A. Pollard",
+      "year": 1907,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 101,
+      "id": "when-we-all-get-to-heaven",
+      "title": "When We All Get to Heaven",
+      "author": "Eliza E. Hewitt",
+      "year": 1898,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 102,
+      "id": "when-the-roll-is-called-up-yonder",
+      "title": "When the Roll Is Called Up Yonder",
+      "author": "James M. Black",
+      "year": 1893,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 103,
+      "id": "love-lifted-me",
+      "title": "Love Lifted Me",
+      "author": "James Rowe",
+      "year": 1912,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 104,
+      "id": "since-jesus-came-into-my-heart",
+      "title": "Since Jesus Came into My Heart",
+      "author": "Rufus H. McDaniel",
+      "year": 1914,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 105,
+      "id": "great-is-thy-faithfulness",
+      "title": "Great Is Thy Faithfulness",
+      "author": "Thomas O. Chisholm",
+      "year": 1923,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 106,
+      "id": "sweet-hour-of-prayer",
+      "title": "Sweet Hour of Prayer",
+      "author": "William W. Walford",
+      "year": 1845,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 107,
+      "id": "jesus-loves-me",
+      "title": "Jesus Loves Me",
+      "author": "Anna B. Warner",
+      "year": 1860,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 108,
+      "id": "count-your-blessings",
+      "title": "Count Your Blessings",
+      "author": "Johnson Oatman, Jr.",
+      "year": 1897,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 109,
+      "id": "almost-persuaded",
+      "title": "Almost Persuaded",
+      "author": "Philip P. Bliss",
+      "year": 1871,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 110,
+      "id": "i-know-whom-i-have-believed",
+      "title": "I Know Whom I Have Believed",
+      "author": "Daniel W. Whittle",
+      "year": 1883,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 111,
+      "id": "redeemed-how-i-love-to-proclaim-it",
+      "title": "Redeemed, How I Love to Proclaim It",
+      "author": "Fanny J. Crosby",
+      "year": 1882,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 112,
+      "id": "glory-to-his-name",
+      "title": "Glory to His Name",
+      "author": "Elisha A. Hoffman",
+      "year": 1878,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 113,
+      "id": "jesus-saves",
+      "title": "Jesus Saves",
+      "author": "Priscilla J. Owens",
+      "year": 1882,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 114,
+      "id": "turn-your-eyes-upon-jesus",
+      "title": "Turn Your Eyes upon Jesus",
+      "author": "Helen H. Lemmel",
+      "year": 1922,
+      "langs": [
+        "en"
+      ]
+    },
+    {
+      "number": 115,
+      "id": "near-the-cross",
+      "title": "Near the Cross",
+      "author": "Fanny J. Crosby",
+      "year": 1869,
+      "langs": [
+        "en"
+      ]
     }
   ]
 }

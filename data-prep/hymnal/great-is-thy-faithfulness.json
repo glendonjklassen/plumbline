@@ -1,0 +1,29 @@
+{
+  "id": "great-is-thy-faithfulness",
+  "number": 105,
+  "tune": "FAITHFULNESS",
+  "meter": "11.10.11.10 with refrain",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Great Is Thy Faithfulness",
+      "author": "Thomas O. Chisholm",
+      "translator": null,
+      "year": 1923,
+      "stanzas": [
+        "[D]Great is Thy [G]faithfulness, [A7]O God my [D]Father;\n[G]There is no [D]shadow of [E7]turning with [A]Thee;\n[A7]Thou changest [D]not, Thy com[Em]passions, they [G]fail not;\n[G#dim7]As Thou hast [D/A]been Thou for[A7]ever wilt [D]be.",
+        "Summer and winter and springtime and harvest,\nSun, moon, and stars in their courses above\nJoin with all nature in manifold witness\nTo Thy great faithfulness, mercy, and love.",
+        "Pardon for sin and a peace that endureth,\nThine own dear presence to cheer and to guide,\nStrength for today and bright hope for tomorrow—\nBlessings all mine, with ten thousand beside!"
+      ],
+      "chorus": "[A7]Great is Thy [D]faithfulness!\n[B7]Great is Thy [Em]faithfulness!\n[A7]Morning by [D]morning new [E7]mercies I [A]see:\n[A7]All I have [D]needed Thy hand [Em]hath pro[G]vided—\n[G#dim7]Great is Thy [D/A]faithfulness, Lord, [A7]unto [D]me!",
+      "sources": [
+        "https://library.timelesstruths.org/music/Great_Is_Thy_Faithfulness/",
+        "https://library.timelesstruths.org/library/music/G/Great_Is_Thy_Faithfulness/Great_Is_Thy_Faithfulness.xml",
+        "https://hymnary.org/text/great_is_thy_faithfulness_o_god_my_fathe",
+        "https://hymnary.org/tune/faithfulness_runyan"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths, which cites hymnary. Hymnary's representative text (Hymns and Devotions for Daily Worship #311) has the same three stanzas and refrain; it reads 'O God, my Father' with a comma, lower-case 'thy', 'Thy hand hast provided' (a slip for 'hath') and 'Blessings all mine and ten thousand beside'. TT kept. Tune FAITHFULNESS (William M. Runyan, 1923), meter 11.10.11.10 with refrain. Key: hymnary's instances run 52 D to 33 E-flat; TT prints E-flat. D is both the commoner key and a guitar key, so the chart is in D and the E-flat score was transposed down a semitone. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed E-flat to D. This harmonisation is the richest in the book: the chart keeps the vii-dim7 of V (G#dim7) that opens 'As Thou hast been' and the cadential 6/4 (D/A) it leads to, because both are what a congregation hears; the I-aug passing chord on 'Thy', the maj7/6 colour on 'faithfulness', the vi-V/E-I bass walk under 'shadow of', the B7 under 'turn-ing', and the Dm6 on 'new' were dropped. The refrain's 'Great is Thy faithfulness' pair is V7-I then II7-ii, as every hymnal prints it. COPYRIGHT: words and music first published 1923, public domain in the United States since 2019; Chisholm died 1960 and Runyan 1957, so under life-plus-70 terms (Switzerland, the EU) the text is protected until the end of 2030."
+}

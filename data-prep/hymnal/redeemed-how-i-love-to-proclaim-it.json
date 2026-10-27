@@ -1,0 +1,32 @@
+{
+  "id": "redeemed-how-i-love-to-proclaim-it",
+  "number": 111,
+  "tune": "REDEEMED",
+  "meter": "9.8.9.8 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Redeemed, How I Love to Proclaim It",
+      "author": "Fanny J. Crosby",
+      "translator": null,
+      "year": 1882,
+      "stanzas": [
+        "Re[G]deemed, how I love to proclaim it!\nRe[D]deemed by the blood of the [G]Lamb;\nRe[G]deemed through His infinite mercy,\nHis [D7]child and forever I [G]am.",
+        "Redeemed, and so happy in Jesus,\nNo language my rapture can tell;\nI know that the light of His presence\nWith me doth continually dwell.",
+        "I think of my blessed Redeemer,\nI think of Him all the day long:\nI sing, for I cannot be silent;\nHis love is the theme of my song.",
+        "I know I shall see in His beauty\nThe King in whose law I delight;\nWho lovingly guardeth my footsteps,\nAnd giveth me songs in the night.",
+        "I know there's a crown that is waiting\nIn yonder bright mansion for me,\nAnd soon, with the spirits made perfect,\nAt home with the Lord I shall be."
+      ],
+      "chorus": "Re[C]deemed, re[G]deemed,\nRe[D]deemed by the blood of the [G]Lamb;\nRe[C]deemed, re[G]deemed,\nHis [D7]child and forever I [G]am.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Redeemed_How_I_Love_to_Proclaim_It/",
+        "https://library.timelesstruths.org/library/music/R/Redeemed_How_I_Love_to_Proclaim_It/Redeemed_How_I_Love_to_Proclaim_It.xml",
+        "http://www.hymntime.com/tch/htm/r/e/d/e/redeemed.htm",
+        "https://hymnary.org/text/redeemed_how_i_love_to_proclaim_it",
+        "https://hymnary.org/tune/redeemed_kirkpatrick"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths, which cites the Cyber Hymnal's transcription of Songs of Redeeming Love (Philadelphia 1882); the two agree word for word (the Cyber Hymnal marks 'blessèd'). Five stanzas; hymnary's representative text (Our Great Redeemer's Praise #530) prints four, dropping the last ('I know there's a crown'), and differs only in punctuation. All five ship. Tune: hymnary names it REDEEMED (Kirkpatrick); some hymnals call it ADA. Meter 9.8.9.8 with refrain. Key: hymnary's instances run 32 A-flat to 2 G and 2 A; TT prints A-flat. Moved to G for guitar per the key rule. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed A-flat to G. The score is an echo setting ('redeemed, redeemed' answered in the lower voices); its harmony is I with IV/G and sus4 neighbours over the pedal (dropped), V on 'by the blood' with a ii7 passing chord dropped, I, then V7-I. Refrain: IV, I (augmented passing chords on the echoes dropped), V, I, IV, I, V7, I."
+}

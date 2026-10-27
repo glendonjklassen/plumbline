@@ -1,0 +1,30 @@
+{
+  "id": "there-is-power-in-the-blood",
+  "number": 98,
+  "tune": "POWER IN THE BLOOD",
+  "meter": "10.9.10.8 with refrain",
+  "key": "A",
+  "texts": {
+    "en": {
+      "title": "There Is Power in the Blood",
+      "author": "Lewis E. Jones",
+      "translator": null,
+      "year": 1899,
+      "stanzas": [
+        "[A]Would you be free from the [D]burden of [A]sin?\nThere's [E]pow'r in the blood, [A]pow'r in the blood;\n[A]Would you o'er evil a [D]victory [A]win?\nThere's [E7]wonderful pow'r in the [A]blood.",
+        "Would you be free from your passion and pride?\nThere's pow'r in the blood, pow'r in the blood;\nCome for a cleansing to Calvary's tide;\nThere's wonderful pow'r in the blood.",
+        "Would you be whiter, much whiter than snow?\nThere's pow'r in the blood, pow'r in the blood;\nSin-stains are lost in its life-giving flow;\nThere's wonderful pow'r in the blood.",
+        "Would you do service for Jesus your King?\nThere's pow'r in the blood, pow'r in the blood;\nWould you live daily His praises to sing?\nThere's wonderful pow'r in the blood."
+      ],
+      "chorus": "There is [A]pow'r, pow'r, [D]wonder-working [A]pow'r\nIn the [E7]blood of the [A]Lamb;\nThere is [A]pow'r, pow'r, [D]wonder-working [A]pow'r\nIn the [E7]precious blood of the [A]Lamb.",
+      "sources": [
+        "https://library.timelesstruths.org/music/There_Is_Power_in_the_Blood/",
+        "https://library.timelesstruths.org/library/music/T/There_Is_Power_in_the_Blood/There_Is_Power_in_the_Blood.xml",
+        "https://hymnary.org/text/would_you_be_free_from_the_burden_jones",
+        "https://hymnary.org/tune/power_in_the_blood_jones"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (Evening Light Songs #505). Hymnary's representative text (Our Great Redeemer's Praise #487) has the same four stanzas and refrain; it spells 'power' in full where TT and the score sing 'pow'r', and ends several lines with periods where TT has semicolons. TT kept. Tune POWER IN THE BLOOD, meter 10.9.10.8 with refrain (hymnary's text meter writes the refrain out as 10.9.10.8.9.6.9.8). Key: hymnary's instances run 49 B-flat to 4 A-flat and 1 G; TT prints B-flat. Moved to A for guitar per the key rule. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed B-flat to A. Stanza: I, IV on 'burden'/'victory', back to I, V for 'pow'r in the blood', I; the one-beat diminished neighbours under 'the' were dropped. The score's refrain is an echo setting whose inner voices run a chromatic line (C#aug, Ddim7, Edim7 in A) under 'In the blood of the Lamb'; a strummed chart cannot carry that, so it is written as the V7-I cadence the line resolves to, which is also how every guitar hymnal prints it."
+}
