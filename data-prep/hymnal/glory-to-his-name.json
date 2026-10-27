@@ -1,0 +1,30 @@
+{
+  "id": "glory-to-his-name",
+  "number": 112,
+  "tune": "GLORY TO HIS NAME",
+  "meter": "9.9.9.5 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Glory to His Name",
+      "author": "Elisha A. Hoffman",
+      "translator": null,
+      "year": 1878,
+      "stanzas": [
+        "[G]Down at the cross where my [C]Savior [G]died,\nDown where for cleansing from sin I [D]cried,\n[G]There to my heart was the [C]blood ap[G]plied;\nGlory to [D7]His [G]Name!",
+        "I am so wondrously saved from sin,\nJesus so sweetly abides within,\nThere at the cross where He took me in;\nGlory to His Name!",
+        "Oh, precious fountain that saves from sin,\nI am so glad I have entered in;\nThere Jesus saves me and keeps me clean;\nGlory to His Name!",
+        "Come to this fountain so rich and sweet,\nCast thy poor soul at the Savior's feet;\nPlunge in today, and be made complete;\nGlory to His Name!"
+      ],
+      "chorus": "[C]Glory to His [G]Name,\n[G]Glory to His [D]Name:\n[G]There to my heart was the [C]blood ap[G]plied;\nGlory to [D7]His [G]Name!",
+      "sources": [
+        "https://library.timelesstruths.org/music/Glory_to_His_Name/",
+        "https://library.timelesstruths.org/library/music/G/Glory_to_His_Name/Glory_to_His_Name.xml",
+        "https://hymnary.org/text/down_at_the_cross_where_my_savior_di_dow",
+        "https://hymnary.org/tune/glory_to_his_name_stockton"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (Evening Light Songs #465, Select Hymns 1911 #614), which cites hymnary; four stanzas and refrain, and hymnary's representative text agrees. Often titled 'Down at the Cross'. Tune GLORY TO HIS NAME (John H. Stockton, 1878), meter 9.9.9.5 with refrain. Key: hymnary's instances run 50 A-flat to 7 G; TT prints A-flat. Moved to G for guitar per the key rule. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed A-flat to G. The stanza is I with a IV6 neighbour and an augmented passing chord on 'where my' (dropped) into IV on 'Savior', I; line 2 I to V; line 3 as line 1; 'Glory to His Name' a 6/4 into V7, written D7. Refrain: IV, I, I (vii-dim7 and sus4 passing chords on 'Glory to' dropped), V, then line 3 and the cadence as in the stanza."
+}

@@ -1,0 +1,29 @@
+{
+  "id": "almost-persuaded",
+  "number": 109,
+  "tune": "ALMOST PERSUADED",
+  "meter": "9.9.6.6.6.4",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Almost Persuaded",
+      "author": "Philip P. Bliss",
+      "translator": null,
+      "year": 1871,
+      "stanzas": [
+        "[G]\"Almost persuaded\" [Em]now [D]to be[G]lieve;\n[G]\"Almost persuaded\" [D]Christ to re[G]ceive;\n[C]Seems now some [G]soul to say,\n[D]\"Go, Spirit, [G]go Thy way,\n[G]Some [Am7]more con[C]venient [G]day\nOn [D7]Thee I'll [G]call.\"",
+        "\"Almost persuaded,\" come, come today;\n\"Almost persuaded,\" turn not away;\nJesus invites you here,\nAngels are ling'ring near,\nPrayers rise from hearts so dear;\nO wand'rer, come!",
+        "\"Almost persuaded,\" harvest is past!\n\"Almost persuaded,\" doom comes at last!\n\"Almost\" cannot avail;\n\"Almost\" is but to fail!\nSad, sad, that bitter wail—\n\"Almost,\" but lost!"
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/Almost_Persuaded/",
+        "https://library.timelesstruths.org/library/music/A/Almost_Persuaded/Almost_Persuaded.xml",
+        "https://hymnary.org/text/almost_persuaded_now_to_believe",
+        "https://hymnary.org/tune/almost_persuaded_bliss"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (The Blue Book #104). Hymnary's representative text (AME Hymnal #275) has the same three stanzas, spelling 'lingering' and 'wanderer' in full where TT elides them to the note, and ending a few lines differently. TT kept. Words and music both Bliss, 1871. Tune: hymnary files it under its first line, '[Almost persuaded now to believe] (Bliss)'; ALMOST PERSUADED is the name most hymnals use. Meter 9.9.6.6.6.4. Key G: hymnary's instances run 25 G to 4 E-flat and 3 F; TT prints G, already a guitar key. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat. The opening bars run I through chromatic augmented passing chords (Eaug, Baug) that are alto motion, not harmony, and were dropped; 'now to believe' is vi-V-I, 'Christ to receive' V-I; 'Seems now some soul to say' IV-I; 'Go, Spirit, go Thy way' V-I with a V7sus4 over the tonic dropped; 'Some more convenient day' I-ii7-IV-I (the I/B between ii7 and IV dropped); the close is a cadential 6/4 into V7, written D7."
+}

@@ -1,0 +1,30 @@
+{
+  "id": "at-calvary",
+  "number": 97,
+  "tune": "CALVARY",
+  "meter": "9.9.9.4 with refrain",
+  "key": "C",
+  "texts": {
+    "en": {
+      "title": "At Calvary",
+      "author": "William R. Newell",
+      "translator": null,
+      "year": 1895,
+      "stanzas": [
+        "[C]Years I spent in vanity and pride,\n[G7]Caring not my Lord was [C]crucified,\n[C]Knowing not it was for me He died\nOn [F]Cal[G7]va[C]ry.",
+        "By God's Word at last my sin I learned;\nThen I trembled at the law I'd spurned,\nTill my guilty soul imploring turned\nTo Calvary.",
+        "Now I've giv'n to Jesus everything,\nNow I gladly own Him as my King,\nNow my raptured soul can only sing\nOf Calvary!",
+        "Oh, the love that drew salvation's plan!\nOh, the grace that brought it down to man!\nOh, the mighty gulf that God did span\nAt Calvary!"
+      ],
+      "chorus": "[F]Mercy there was great, and [C]grace was free;\n[G7]Pardon there was multi[C]plied to me;\n[F]There my burdened soul found [C]liberty\nAt [F]Cal[G7]va[C]ry.",
+      "sources": [
+        "https://library.timelesstruths.org/music/At_Calvary/",
+        "https://library.timelesstruths.org/library/music/A/At_Calvary/At_Calvary.xml",
+        "https://hymnary.org/text/years_i_spent_in_vanity_and_pride",
+        "https://hymnary.org/tune/calvary_towner"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths, which cites hymnary. Hymnary's representative text (Our Great Redeemer's Praise #579) agrees word for word apart from 'ev'rything' for 'everything' and 'O the' for 'Oh, the' in stanza 4; TT kept. Tune CALVARY (Towner, 1895; hymnary's record is dated 1887 but the text is 1895), meter 9.9.9.4 with refrain. Key C: hymnary's instances run 45 C to 2 B-flat and TT prints C, already a guitar key. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat. The stanza sits on I with a ii7 and a V7sus4 neighbour over the tonic pedal that were dropped, V7 for 'Caring not my Lord was', and the IV6-V7-I cadence on 'Cal-va-ry'. Refrain: IV with its minor-iv colouring under 'Mercy there was great' dropped, the 6/4 under 'grace' written as the C it is, V7 through 'Pardon there was multiplied', and the same cadence. Stanza 3 'giv'n' is TT's elision and matches the score."
+}

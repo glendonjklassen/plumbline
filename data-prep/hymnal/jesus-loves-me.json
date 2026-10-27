@@ -1,0 +1,29 @@
+{
+  "id": "jesus-loves-me",
+  "number": 107,
+  "tune": "JESUS LOVES ME",
+  "meter": "7.7.7.7 with refrain",
+  "key": "C",
+  "texts": {
+    "en": {
+      "title": "Jesus Loves Me",
+      "author": "Anna B. Warner",
+      "translator": null,
+      "year": 1860,
+      "stanzas": [
+        "[C]Jesus loves me! This I know,\n[F]For the Bible [C]tells me so;\n[C]Little ones to Him belong;\n[F]They are [C]weak, but He [G7]is [C]strong.",
+        "Jesus loves me! He who died\nHeaven's gate to open wide;\nHe will wash away my sin,\nLet His little child come in.",
+        "Jesus loves me! He will stay\nClose beside me all the way;\nThou hast bled and died for me,\nI will henceforth live for Thee."
+      ],
+      "chorus": "[C]Yes, Jesus [F]loves me!\n[C]Yes, Jesus [G]loves me!\n[C]Yes, Jesus [F]loves me!\nThe [C]Bible tells [G7]me [C]so.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Jesus_Loves_Me/",
+        "https://library.timelesstruths.org/library/music/J/Jesus_Loves_Me/Jesus_Loves_Me.xml",
+        "https://hymnary.org/text/jesus_loves_me_this_i_know_for_the_bible",
+        "https://hymnary.org/tune/jesus_loves_me_bradbury"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths, which prints five stanzas; only the three that are Anna Warner's ship. TT's stanza 2 ('As He loved so long ago, taking children on His knee') is David Rutherford McGuire's, written 1971 and credited to him in the Baptist Hymnal and on hymnary's text page, so it is not public domain; TT's stanza 3 ('Jesus loves me still today, walking with me on my way') is a later addition of unknown authorship. Hymnary's representative text (Psalter Hymnal 1987) prints Warner's first two with McGuire's third. Stanza 3 here ('He will stay / Close beside me all the way') is the common hymnal form; Warner's 1860 text ends that stanza differently ('Then His little child will take / Up to heaven for His dear sake'), so expect the question. Author Anna Bartlett Warner, in the novel Say and Seal (1860; hymnary dates it 1859). Tune JESUS LOVES ME (William B. Bradbury, 1862; CHINA in some books), meter 7.7.7.7 with refrain. Key C: hymnary's instances run 48 C to 15 D and 14 E-flat; TT prints C, already a guitar key. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat. The stanza is I and IV with a one-beat V on 'me!' and 'to' that was dropped; the cadence I-I6/4-V7-I is written C-G7-C. Refrain: I-IV, I-V (a 6/4 under 'loves'), I-IV, then the 'Bible tells me so' bar with its vi passing chord dropped."
+}

@@ -1,0 +1,30 @@
+{
+  "id": "the-old-rugged-cross",
+  "number": 96,
+  "tune": "OLD RUGGED CROSS",
+  "meter": "12.8.12.8 with refrain",
+  "key": "A",
+  "texts": {
+    "en": {
+      "title": "The Old Rugged Cross",
+      "author": "George Bennard",
+      "translator": null,
+      "year": 1913,
+      "stanzas": [
+        "[A]On a hill far away stood an [D]old rugged cross,\n[B7]The [E7]emblem of suff'ring and [A]shame;\n[A]And I love that old cross where the [D]Dearest and Best\n[B7]For a [E7]world of lost sinners was [A]slain.",
+        "Oh, that old rugged cross, so despised by the world,\nHas a wondrous attraction for me;\nFor the dear Lamb of God left His glory above\nTo bear it to dark Calvary.",
+        "In that old rugged cross, stained with blood so divine,\nA wondrous beauty I see,\nFor 'twas on that old cross Jesus suffered and died,\nTo pardon and sanctify me.",
+        "To the old rugged cross I will ever be true;\nIts shame and reproach gladly bear;\nThen He'll call me someday to my home far away,\nWhere His glory forever I'll share."
+      ],
+      "chorus": "[E7]So I'll cherish the old rugged [A]cross,\nTill my [D]trophies at last I lay [A]down;\n[A]I will cling to the old rugged [D]cross,\nAnd ex[E7]change it someday for a [A]crown.",
+      "sources": [
+        "https://library.timelesstruths.org/music/The_Old_Rugged_Cross/",
+        "https://library.timelesstruths.org/library/music/T/The_Old_Rugged_Cross/The_Old_Rugged_Cross.xml",
+        "https://hymnary.org/text/on_a_hill_far_away_stood_an_old_rugged",
+        "https://hymnary.org/tune/old_rugged_cross_bennard"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (Evening Light Songs #511). Hymnary's representative text (United Methodist Hymnal) has the same four stanzas and differs only in 'suffering' for 'suff'ring', 'some day' as two words, lower-case 'dearest and best', and 'To that old rugged cross' for 'To the old rugged cross' in stanza 4; TT's readings kept. Tune OLD RUGGED CROSS, meter 12.8.12.8 with refrain per hymnary's text page (its tune record counts the half-lines as 6.6.8.6.6.8). Key: hymnary's instances run 60 B-flat to 4 A-flat and 2 A; TT prints B-flat. Moved to A for guitar per the key rule. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed B-flat to A. Stanza: I for the first six syllables, IV on 'old rugged cross', the secondary dominant B (V of V) on the pickup word 'The' / 'For', then V7 and I; the diminished passing chords the inner voices make inside the I and IV bars were dropped. Refrain: V7 straight through 'cherish the old rugged' (a one-beat I under 'rug-' dropped), IV on 'trophies', the second half I-IV, then the cadential 6/4 under 'change' written as the E7 it resolves into. COPYRIGHT: words and music 1913, public domain in the United States; Bennard died 1958, so under life-plus-70 terms (Switzerland, the EU) the text is protected until the end of 2028."
+}

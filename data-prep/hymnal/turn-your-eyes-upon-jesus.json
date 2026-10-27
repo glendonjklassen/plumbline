@@ -1,0 +1,30 @@
+{
+  "id": "turn-your-eyes-upon-jesus",
+  "number": 114,
+  "tune": "LEMMEL",
+  "meter": "9.8.9.8 with refrain",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "Turn Your Eyes upon Jesus",
+      "author": "Helen H. Lemmel",
+      "translator": null,
+      "year": 1922,
+      "stanzas": [
+        "[E]O soul, are you weary and [A]troubled?\nNo [B7]light in the darkness you [E]see?\nThere's [E]light for a look at the [C#m]Savior,\nAnd [E]life [F#7]more abundant and [B]free!",
+        "Through death into life everlasting\nHe passed, and we follow Him there;\nO'er us sin no more hath dominion—\nFor more than conqu'rors we are!",
+        "His Word shall not fail you—He promised;\nBelieve Him, and all will be well:\nThen go to a world that is dying,\nHis perfect salvation to tell!"
+      ],
+      "chorus": "[E]Turn your [B7]eyes upon [C#m]Jesus,\n[E7]Look [A]full in His wonderful [B7]face,\n[E]And the things of earth will grow [C#m]strangely [A]dim,\nIn the [E/B]light of His [B7]glory and [E]grace.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Turn_Your_Eyes_upon_Jesus/",
+        "https://library.timelesstruths.org/library/music/T/Turn_Your_Eyes_upon_Jesus/Turn_Your_Eyes_upon_Jesus.xml",
+        "http://www.hymntime.com/tch/htm/t/u/r/n/turnyour.htm",
+        "https://hymnary.org/text/o_soul_are_you_weary_and_troubled",
+        "https://hymnary.org/tune/lemmel_lemmel"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths, which cites the Cyber Hymnal; the two agree except that the Cyber Hymnal spells 'There's a light for a look', 'Over us' and 'conquerors' in full where TT elides to the note, and hymnary's representative text (50 Favorites #45) agrees with TT ('Thro'' for 'Through'). Three stanzas everywhere. Words and music both Lemmel, 1922 (first in Glad Songs, British National Sunday School Union). Tune LEMMEL, meter 9.8.9.8 with refrain (hymnary's tune record says Irregular). Key: hymnary's instances run 30 F to 1 E and 1 E-flat; TT prints F. Moved to E for guitar per the key rule, as near-the-cross was. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed F to E. The stanza is I with a diminished neighbour (dropped), IV (maj7 and 6 colour dropped) on 'troubled', V7 on 'light in the darkness', I; 'look at the Savior' lands on vi (C#m6 in the score, the 6th dropped); 'life more abundant and free' is I, II7 (V of V) on 'more', then V with a vi7 passing chord dropped. Refrain: I, V7, vi on 'Jesus', I7 on 'Look' into IV (maj7/6 colour and a ii-half-diminished passing chord dropped), V7; 'things of earth will grow strangely dim' I with passing I6 and vii-dim7 dropped, vi, IV; the close is a cadential 6/4 over B (E/B) into V7 and I. COPYRIGHT: 1922, public domain in the United States since 2018; Lemmel died 1961, so under life-plus-70 terms (Switzerland, the EU) the text is protected until the end of 2031."
+}

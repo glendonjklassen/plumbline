@@ -1,0 +1,32 @@
+{
+  "id": "i-know-whom-i-have-believed",
+  "number": 110,
+  "tune": "EL NATHAN",
+  "meter": "8.6.8.6 with refrain",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "I Know Whom I Have Believed",
+      "author": "Daniel W. Whittle",
+      "translator": null,
+      "year": 1883,
+      "stanzas": [
+        "[D]I know not why God's [G]wondrous [D]grace\nTo me He hath made [A]known,\n[A7]Nor [D]why, unworthy, [G]Christ in [D]love\nRe[A]deemed me for [A7]His [D]own.",
+        "I know not how this saving faith\nTo me He did impart,\nNor how believing in His Word\nWrought peace within my heart.",
+        "I know not how the Spirit moves,\nConvincing men of sin,\nRevealing Jesus through the Word,\nCreating faith in Him.",
+        "I know not what of good or ill\nMay be reserved for me,\nOf weary ways or golden days,\nBefore His face I see.",
+        "I know not when my Lord may come,\nAt night or noonday fair,\nNor if I walk the vale with Him,\nOr meet Him in the air."
+      ],
+      "chorus": "But \"I [G]know Whom I have be[D]lieved,\nAnd am per[A7]suaded that He is [D]able\nTo [G]keep that which I've com[D]mitted\nUnto [A7]Him against that [D]day.\"",
+      "sources": [
+        "https://library.timelesstruths.org/music/I_Know_Whom_I_Have_Believed/",
+        "https://library.timelesstruths.org/library/music/I/I_Know_Whom_I_Have_Believed/I_Know_Whom_I_Have_Believed.xml",
+        "https://hymnary.org/text/i_know_not_why_gods_wondrous_grace_to_me",
+        "https://hymnary.org/tune/el_nathan_mcgranahan",
+        "http://www.hymntime.com/tch/htm/i/k/w/i/ikwihb.htm"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (Hymns for His Praise No. 2, 1906), five stanzas. The Cyber Hymnal's transcription of Gospel Hymns No. 4 (1883) agrees except that it reads 'Convincing us of sin' in stanza 3 and marks 'believèd'; hymnary's representative text (Our Great Redeemer's Praise) prints four stanzas (stanza 4 'what of good or ill' dropped) and reads 'convicting men of sin'. 'Convincing men' is the 1883 reading and ships. Tune EL NATHAN (James McGranahan, 1883), meter 8.6.8.6 with refrain (hymnary's tune record writes the refrain out as 8.6.8.6.9.10.8.7). Key D: hymnary's instances run 40 D to 19 E-flat; TT prints D, already a guitar key. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat. The stanza is I with IV/D and diminished neighbours over the tonic pedal, of which the IV on 'wondrous' and 'Christ' is kept and the rest dropped; the vi-V7 approach under 'made' was dropped; 'Redeemed me for His own' is V-V7-I. Refrain: IV-I, V7-I (a ii7 before 'able' dropped), IV-I, then V7 with a one-beat VI (B major, V of ii) dropped, I."
+}

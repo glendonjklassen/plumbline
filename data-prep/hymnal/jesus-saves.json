@@ -1,0 +1,30 @@
+{
+  "id": "jesus-saves",
+  "number": 113,
+  "tune": "JESUS SAVES",
+  "meter": "7.6.7.6.7.7.7.6",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Jesus Saves",
+      "author": "Priscilla J. Owens",
+      "translator": null,
+      "year": 1882,
+      "stanzas": [
+        "[G]We have heard the joyful sound:\nJesus saves! Jesus [D]saves!\n[D7]Spread the [G]tidings all around:\nJesus [D]saves! [D7]Jesus [G]saves!\n[C]Bear the news to every land,\n[G]Climb the steeps and cross the [D]waves;\nOnward! [G]'tis our [C]Lord's command;\n[G]Jesus [D]saves! [D7]Jesus [G]saves!",
+        "Waft it on the rolling tide:\nJesus saves! Jesus saves!\nTell to sinners far and wide:\nJesus saves! Jesus saves!\nSing, ye islands of the sea;\nEcho back, ye ocean caves;\nEarth shall keep her jubilee:\nJesus saves! Jesus saves!",
+        "Sing above the battle strife:\nJesus saves! Jesus saves!\nBy His death and endless life\nJesus saves! Jesus saves!\nSing it softly through the gloom,\nWhen the heart for mercy craves;\nSing in triumph o'er the tomb:\nJesus saves! Jesus saves!",
+        "Give the winds a mighty voice:\nJesus saves! Jesus saves!\nLet the nations now rejoice:\nJesus saves! Jesus saves!\nShout salvation full and free;\nHighest hills and deepest caves;\nThis our song of victory:\nJesus saves! Jesus saves!"
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/Jesus_Saves/",
+        "https://library.timelesstruths.org/library/music/J/Jesus_Saves/Jesus_Saves.xml",
+        "https://hymnary.org/text/we_have_heard_the_joyful_sound",
+        "https://hymnary.org/tune/jesus_saves_kirkpatrick"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text: Timeless Truths' layout and punctuation (Hymnal of the Church of God 1953), with three readings restored to Owens' 1882 wording as hymnary's representative text (Our Great Redeemer's Praise #556) has them: 'Climb the steeps and cross the waves' (TT: 'Climb the mountains, cross the waves'), 'Sing, ye islands of the sea; Echo back, ye ocean caves' (TT: 'you'), and 'Sing it softly through the gloom' (TT: 'Shout it brightly through the gloom'). The Church of God readings are that book's alterations; the originals are what the hymnals this book serves print. Four stanzas in both. Tune JESUS SAVES (William J. Kirkpatrick, 1882), meter 7.6.7.6.7.7.7.6. Key G: hymnary's instances run 46 G to 7 F; TT prints G, already a guitar key. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat. 'We have heard the joyful sound' is I with a IV6 neighbour (dropped); the first 'Jesus saves! Jesus saves!' ends on V, the second V-V7-I; 'Bear the news' is IV, 'Climb the steeps' I to V; 'Onward! 'tis our Lord's command' walks the bass G-F-E-D-C under I-I7-IV-I-IV, written as I to IV; the close V-V7-I."
+}

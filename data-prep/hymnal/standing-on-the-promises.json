@@ -1,0 +1,32 @@
+{
+  "id": "standing-on-the-promises",
+  "number": 95,
+  "tune": "PROMISES",
+  "meter": "11.11.11.9 with refrain",
+  "key": "A",
+  "texts": {
+    "en": {
+      "title": "Standing on the Promises",
+      "author": "R. Kelso Carter",
+      "translator": null,
+      "year": 1886,
+      "stanzas": [
+        "[A]Standing on the promises of Christ my King,\n[D]Through eternal ages let His prais[A]es ring,\n[A]Glory in the highest, I will shout and sing,\n[A]Standing on the [Bm]promis[E7]es of [A]God.",
+        "Standing on the promises that cannot fail,\nWhen the howling storms of doubt and fear assail,\nBy the living Word of God I shall prevail,\nStanding on the promises of God.",
+        "Standing on the promises I now can see\nPerfect, present cleansing in the blood for me;\nStanding in the liberty where Christ makes free,\nStanding on the promises of God.",
+        "Standing on the promises of Christ the Lord,\nBound to Him eternally by love's strong cord,\nOvercoming daily with the Spirit's sword,\nStanding on the promises of God.",
+        "Standing on the promises I cannot fall,\nList'ning every moment to the Spirit's call,\nResting in my Savior as my all in all,\nStanding on the promises of God."
+      ],
+      "chorus": "[A]Standing, [D]standing,\n[E]Standing on the promises of [A]God my [D]Sav[A]ior;\n[A]Standing, [D]standing,\nI'm [E7]standing on the promises of [A]God.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Standing_on_the_Promises/",
+        "https://library.timelesstruths.org/library/music/S/Standing_on_the_Promises/Standing_on_the_Promises.xml",
+        "http://www.hymntime.com/tch/htm/s/t/a/n/standotp.htm",
+        "https://hymnary.org/text/standing_on_the_promises_of_christ_my_ki",
+        "https://hymnary.org/tune/promises_carter"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (Evening Light Songs #512), which agrees word for word with the Cyber Hymnal's transcription of the first printing (Carter's Songs of Perfect Love, Philadelphia 1886) except that the Cyber Hymnal prints 'Christ my king' with a lower-case k and spells stanza 5's opening 'Listening every moment' in full; the score sings it as two syllables, so the elided 'List'ning' is kept. Hymnary's representative text (Our Great Redeemer's Praise #434, 2022) is a modernised setting of the same five stanzas -- 'Christ, my King!', lower-case line openings, 'list'ning ev'ry moment', 'the Spirit's Sword' capitalised -- and was NOT followed; its first-line survey shows 'Christ my King' and 'Christ, my King' both widespread and 'Christ our King' in a few books. Five stanzas is the full text; many hymnals print four, dropping stanza 3 ('perfect, present cleansing') or stanza 4. Author's name as the first printing credits him, R. Kelso Carter (Russell Kelso Carter, 1849-1928; words and music both his). Tune PROMISES, meter 11.11.11.9 with refrain, per hymnary's tune record. Key: hymnary's tune record says B-flat and its instance list runs 56 B-flat to 5 A-flat, 1 A, 1 G; Timeless Truths prints B-flat too. Moved to A for guitar per the key rule, as rock-of-ages and i-sing-the-mighty-power were. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed B-flat to A: the stanza is I throughout except bar 3 (IV, returning to I on 'prais-es'), and the cadence bar's ii-V7 (Cm-F7, here Bm-E7) under 'prom-is-es'. The refrain alternates I and IV on the two 'Standing, standing' bars, sits on V for 'Standing on the promises of', and touches IV under 'Sav-' of 'Savior'; the final 'I'm standing on the promises' bar carries the seventh (F7, here E7) where the earlier V bar does not, so the two are marked differently on purpose. Passing chords dropped as noise for a strummed instrument: the Eb and Eb6 colour tones inside the I bars, and the Gm under 'standing' in the refrain's second bar. German: Timeless Truths offers a translation, 'Trauend dem Verheißungsworte meines Herrn', tr. H. von Berge, four stanzas (Standing_on_the_Promises@de.pdf beside the English page). Not shipped: von Berge's dates and the translation's publication could not be confirmed, so its public-domain status is unverified, and the PDF's text layer does not extract cleanly enough to quote without a second source."
+}

@@ -1,0 +1,30 @@
+{
+  "id": "sweet-hour-of-prayer",
+  "number": 106,
+  "tune": "SWEET HOUR",
+  "meter": "8.8.8.8 D",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Sweet Hour of Prayer",
+      "author": "William W. Walford",
+      "translator": null,
+      "year": 1845,
+      "stanzas": [
+        "[D]Sweet hour of prayer! sweet [G]hour of prayer!\nThat [D]calls me from a [A]world of care,\nAnd [D]bids me at my [G]Father's throne\nMake [D]all my wants and [A7]wishes [D]known.\nIn [D]seasons of distress and grief,\nMy soul has often found re[A]lief,\nAnd [D]oft escaped the [G]tempter's snare,\nBy [D]thy return, sweet [A7]hour of [D]prayer!",
+        "Sweet hour of prayer! sweet hour of prayer!\nThe joys I feel, the bliss I share,\nOf those whose anxious spirits burn\nWith strong desires for thy return!\nWith such I hasten to the place\nWhere God my Savior shows His face,\nAnd gladly take my station there,\nAnd wait for thee, sweet hour of prayer!",
+        "Sweet hour of prayer! sweet hour of prayer!\nThy wings shall my petition bear\nTo Him whose truth and faithfulness\nEngage the waiting soul to bless.\nAnd since He bids me seek His face,\nBelieve His Word and trust His grace,\nI'll cast on Him my every care,\nAnd wait for thee, sweet hour of prayer!",
+        "Sweet hour of prayer! sweet hour of prayer!\nMay I thy consolation share,\nTill, from Mount Pisgah's lofty height,\nI view my home and take my flight.\nThis robe of flesh I'll drop, and rise\nTo seize the everlasting prize,\nAnd shout, while passing through the air,\n\"Farewell, farewell, sweet hour of prayer!\""
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/Sweet_Hour_of_Prayer/",
+        "https://library.timelesstruths.org/library/music/S/Sweet_Hour_of_Prayer/Sweet_Hour_of_Prayer.xml",
+        "https://hymnary.org/text/sweet_hour_of_prayer_sweet_hour_of_pray",
+        "https://hymnary.org/tune/sweet_hour_bradbury"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (Evening Light Songs #312, Select Hymns #528), four stanzas. Hymnary's representative text (United Methodist Hymnal) prints three, dropping stanza 4 ('May I thy consolation share'), which its notes say is sometimes omitted; the three it has agree with TT word for word apart from lower-case pronouns and line openings and one comma. All four ship. Author William W. Walford, 1845 (the attribution rests on Thomas Salmon's 1845 account; hymnary carries the same). Tune: hymnary files it under its first line, '[Sweet hour of prayer, sweet hour of prayer] (Bradbury)', and most hymnals name it SWEET HOUR; meter 8.8.8.8 D (L.M.D.). Key: hymnary's instances run 36 D to 25 C; TT prints D, already a guitar key. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat. Each 'sweet hour of prayer' pair is I then IV; the one-beat IV the inner voices make on 'dis-' of 'distress' and 'of-' of 'often' was dropped, as were the sus4 neighbours over the pedal and a vii-dim7 of V before each cadence. The cadences are I6/4-V7-I, written A7 then D."
+}

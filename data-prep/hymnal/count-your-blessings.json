@@ -1,0 +1,30 @@
+{
+  "id": "count-your-blessings",
+  "number": 108,
+  "tune": "BLESSINGS",
+  "meter": "11.11.11.11 with refrain",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Count Your Blessings",
+      "author": "Johnson Oatman, Jr.",
+      "translator": null,
+      "year": 1897,
+      "stanzas": [
+        "[D]When upon life's billows you are [A7]tempest-tossed,\nWhen you are discouraged, thinking [D]all is lost,\n[D]Count your many blessings, name them [A7]one by one,\nAnd it will surprise you what the Lord has [D]done.",
+        "Are you ever burdened with a load of care?\nDoes the cross seem heavy you are called to bear?\nCount your many blessings, every doubt will fly,\nAnd you will keep singing as the days go by.",
+        "When you look at others with their lands and gold,\nThink that Christ has promised you His wealth untold;\nCount your many blessings—money cannot buy\nYour reward in heaven, nor your home on high.",
+        "So, amid the conflict whether great or small,\nDo not be discouraged, God is over all;\nCount your many blessings, angels will attend,\nHelp and comfort give you to your journey's end."
+      ],
+      "chorus": "[D]Count your blessings, name them [A7]one by one,\nCount your blessings, see what [D]God has done!\n[D]Count your [G]blessings, [A7]name them one by one,\n[D]Count your many [G]blessings, see what [A7]God has [D]done.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Count_Your_Blessings/",
+        "https://library.timelesstruths.org/library/music/C/Count_Your_Blessings/Count_Your_Blessings.xml",
+        "https://hymnary.org/text/when_upon_lifes_billows_you_are_tempest",
+        "https://hymnary.org/tune/blessings_excell"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (Hymns for His Praise No. 2, 1906), four stanzas. Hymnary's representative text (Baptist Hymnal 1991) has the same four; it reads 'hath' for 'has' throughout ('what the Lord hath done', 'see what God hath done'), 'you will be singing' for 'you will keep singing' in stanza 2, and 'ev'ry' for 'every'. 'Hath' is the 1897 spelling; TT's modernised reading is kept as the file's text, the variant recorded here. TT also offers two alternates ('And it will surprise you what the Lord has done' as the refrain's last line, and 'wealth can never buy' in stanza 3) and both were left aside for the main reading. Tune BLESSINGS (E. O. Excell, 1897), meter 11.11.11.11 with refrain. Key: hymnary's instances run 43 E-flat to 18 D; TT prints E-flat. Moved to D for guitar per the key rule. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed E-flat to D. The stanza alternates I and V7 by the line; the vi and ii passing chords on 'thinking' / 'what the' and the diminished neighbours inside the V bars were dropped, and the cadential 6/4 is written as the A7 it stands on. The refrain's third and fourth lines move I-IV-V7 and I-IV-V7-I as the score has them."
+}

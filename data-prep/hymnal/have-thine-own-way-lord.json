@@ -1,0 +1,30 @@
+{
+  "id": "have-thine-own-way-lord",
+  "number": 100,
+  "tune": "ADELAIDE",
+  "meter": "5.4.5.4 D",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Have Thine Own Way, Lord",
+      "author": "Adelaide A. Pollard",
+      "translator": null,
+      "year": 1907,
+      "stanzas": [
+        "[D]Have Thine own [G]way, [D]Lord! Have Thine own [A7]way!\nThou art the Potter, I am the [D]clay.\n[D]Mold me and [G]make [D]me [D7]after Thy [G]will,\nWhile I am [A]waiting, [A7]yielded and [D]still.",
+        "Have Thine own way, Lord! Have Thine own way!\nSearch me and try me, Master, today!\nWhiter than snow, Lord, wash me just now,\nAs in Thy presence humbly I bow.",
+        "Have Thine own way, Lord! Have Thine own way!\nWounded and weary, help me, I pray!\nPower, all power, surely is Thine!\nTouch me and heal me, Savior divine.",
+        "Have Thine own way, Lord! Have Thine own way!\nHold o'er my being absolute sway!\nFill with Thy Spirit till all shall see\nChrist only, always, living in me."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/Have_Thine_Own_Way_Lord/",
+        "https://library.timelesstruths.org/library/music/H/Have_Thine_Own_Way_Lord/Have_Thine_Own_Way_Lord.xml",
+        "https://hymnary.org/text/have_thine_own_way_lord",
+        "https://hymnary.org/tune/adelaide_stebbins"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths, which cites hymnary. Hymnary's representative text (United Methodist Hymnal #382) has the same four stanzas; it lower-cases the pronouns and 'potter', reads 'Savior' for 'Master' and shortens 'wash me just now' in stanza 2, and ends several lines with periods where TT has exclamation marks. TT kept. Tune ADELAIDE (Stebbins, 1907), meter 5.4.5.4 D. Key: hymnary's instances run 76 E-flat to 3 F; TT prints E-flat. Moved to D for guitar per the key rule (D before E in the preference order). Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed E-flat to D. I with a ii7 neighbour (dropped) and IV under 'way', V7 through 'Thou art the Potter, I am the' with its 6/4 and half-diminished passing chords dropped, I7 as the pivot into IV under 'after Thy will', and the cadential 6/4 under 'waiting' written as the A it stands on."
+}

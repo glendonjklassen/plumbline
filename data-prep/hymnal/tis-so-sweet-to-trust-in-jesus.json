@@ -1,0 +1,30 @@
+{
+  "id": "tis-so-sweet-to-trust-in-jesus",
+  "number": 99,
+  "tune": "TRUST IN JESUS",
+  "meter": "8.7.8.7 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "'Tis So Sweet to Trust in Jesus",
+      "author": "Louisa M. R. Stead",
+      "translator": null,
+      "year": 1882,
+      "stanzas": [
+        "[G]'Tis so sweet to [C]trust in [G]Jesus,\nJust to take Him [D]at His Word;\n[G]Just to rest up[C]on His [G]promise,\nJust to [C]know, \"Thus [D]saith the [G]Lord!\"",
+        "Oh, how sweet to trust in Jesus,\nJust to trust His cleansing blood;\nAnd in simple faith to plunge me\n'Neath the healing, cleansing flood!",
+        "Yes, 'tis sweet to trust in Jesus,\nJust from sin and self to cease;\nJust from Jesus simply taking\nLife and rest, and joy and peace.",
+        "I'm so glad I learned to trust Thee,\nPrecious Jesus, Savior, Friend;\nAnd I know that Thou art with me,\nWilt be with me to the end."
+      ],
+      "chorus": "[G]Jesus, Jesus, [D7]how I [G]trust [D]Him!\n[G]How I've proved Him [D]o'er and o'er;\n[G]Jesus, Jesus, [C]precious [G]Jesus!\nOh, for [C]grace to [D]trust Him [G]more!",
+      "sources": [
+        "https://library.timelesstruths.org/music/Tis_So_Sweet_to_Trust_in_Jesus/",
+        "https://library.timelesstruths.org/library/music/T/Tis_So_Sweet_to_Trust_in_Jesus/Tis_So_Sweet_to_Trust_in_Jesus.xml",
+        "https://hymnary.org/text/tis_so_sweet_to_trust_in_jesus_just_to",
+        "https://hymnary.org/tune/trust_in_jesus_kirkpatrick"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths, with one correction from TT's own score: TT's text page prints stanza 1 line 4 as 'And to know', but the lyric under the notes in its MusicXML reads 'Just to know', which is the 1882 reading and the one the Cyber Hymnal prints; the score is followed. Hymnary's representative text (United Methodist Hymnal #462) is a modernised three-stanza version ('and to take him at his word', lower-case pronouns, stanza 4 dropped) and was NOT followed; its notes confirm four stanzas. Tune TRUST IN JESUS (Kirkpatrick), meter 8.7.8.7 with refrain. Key: hymnary's instances run 40 G to 25 A-flat; TT prints A-flat. G is both the commoner hymnal key and a guitar key, so the chart is in G and the A-flat score was transposed down a semitone. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed A-flat to G. Stanza: I, IV (with its /E and /G inversions walking the bass, dropped), I; 'at His Word' is V with a II7/E approach dropped; line 4 IV-V-I. Refrain bar 2 is V7-vi-I6/4-V under 'how I trust Him', written V7-I-V; the 6/4 under 'trust' is the only I in the bar."
+}

@@ -1,0 +1,29 @@
+{
+  "id": "love-lifted-me",
+  "number": 103,
+  "tune": "SAFETY",
+  "meter": "7.6.7.6.7.6.7.4 with refrain",
+  "key": "A",
+  "texts": {
+    "en": {
+      "title": "Love Lifted Me",
+      "author": "James Rowe",
+      "translator": null,
+      "year": 1912,
+      "stanzas": [
+        "[A]I was sinking deep in sin, far from the peaceful [E7]shore,\nVery deeply stained within, sinking to rise no [A]more,\nBut the Master of the sea heard my despairing [D]cry,\nFrom the waters [A]lifted me, [D]now [E7]safe am [A]I.",
+        "All my heart to Him I give, ever to Him I'll cling,\nIn His blessed presence live, ever His praises sing,\nLove so mighty and so true, merits my soul's best songs,\nFaithful, loving service, too, to Him belongs.",
+        "Souls in danger, look above, Jesus completely saves,\nHe will lift you by His love, out of the angry waves;\nHe's the Master of the sea, billows His will obey,\nHe your Savior wants to be, be saved today."
+      ],
+      "chorus": "[A]Love [E7]lifted [A]me!\nLove lifted [D]me!\nWhen nothing [A]else could help,\n[B7]Love lifted [E]me!\n[A]Love [E7]lifted [A]me!\nLove lifted [D]me!\nWhen nothing [A]else could help,\n[A]Love [E7]lifted [A]me.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Love_Lifted_Me/",
+        "https://library.timelesstruths.org/library/music/L/Love_Lifted_Me/Love_Lifted_Me.xml",
+        "https://hymnary.org/text/i_was_sinking_deep_in_sin",
+        "https://hymnary.org/tune/safety_smith"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (Evening Light Songs #506), which prints each 7.6 pair on one line; hymnary's representative text (One Lord, One Faith, One Baptism #494) breaks them in two and differs only in line-initial capitals and a few line-end marks. TT's four-line refrain is the short form; the score repeats it (first ending on V, second on I), and hymnary prints the eight-line form, so the eight lines ship, with the two endings charted as the score has them: B7-E the first time, A-E7-A the second. Tune SAFETY (Howard E. Smith, 1912), meter 7.6.7.6.7.6.7.4 with refrain. Key: hymnary's instances run 46 B-flat to 1 A-flat; TT prints B-flat. Moved to A for guitar per the key rule. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed B-flat to A. The stanza is I for three lines with 6th and maj7 colour tones dropped, V7 at 'shore', I at 'more', IV at 'cry', then I-IV-V7-I through 'lifted me, now safe am I'. Refrain bars 'Love lifted me! (even me)' carry a vii-dim7 and ii under the echo that were dropped. COPYRIGHT: words and music 1912, public domain in the United States; Rowe died 1933 and Smith 1918, so both have been clear under life-plus-70 terms since 2004."
+}

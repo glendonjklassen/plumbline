@@ -1,0 +1,31 @@
+{
+  "id": "near-the-cross",
+  "number": 115,
+  "tune": "NEAR THE CROSS",
+  "meter": "7.6.7.6 with refrain",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "Near the Cross",
+      "author": "Fanny J. Crosby",
+      "translator": null,
+      "year": 1869,
+      "stanzas": [
+        "[E]Jesus, keep me [C#m]near the [A]cross,\n[E]There a precious [B]fountain—\n[E]Free to all, a [C#m]healing [A]stream—\n[B7]Flows from Calv'ry's [E]mountain.",
+        "Near the cross, a trembling soul,\nLove and Mercy found me;\nThere the bright and morning star\nSheds its beams around me.",
+        "Near the cross! O Lamb of God,\nBring its scenes before me;\nHelp me walk from day to day,\nWith its shadows o'er me.",
+        "Near the cross I'll watch and wait\nHoping, trusting ever,\nTill I reach the golden strand,\nJust beyond the river."
+      ],
+      "chorus": "[E]In the cross, [A]in the cross,\n[E]Be my glory [B]ever;\n[E]Till my raptured [C#m]soul shall [A]find\n[B7]Rest beyond the [E]river.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Near_the_Cross/",
+        "https://library.timelesstruths.org/library/music/N/Near_the_Cross/Near_the_Cross.xml",
+        "http://www.hymntime.com/tch/htm/n/e/r/c/nercross.htm",
+        "https://hymnary.org/text/jesus_keep_me_near_the_cross",
+        "https://hymnary.org/tune/near_the_cross_doane"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths (Songs and Music, 1922), which cites the Cyber Hymnal's transcription of Bright Jewels (New York 1869); the two agree word for word (TT adds dashes in stanza 1 and capitalises 'Mercy'). Hymnary's representative text (Baptist Hymnal 1991) is an altered form, 'Till my ransomed soul shall find', 'Shed His beams around me', 'With its shadow o'er me', and was NOT followed; 'raptured', 'Sheds its beams' and 'shadows' are Crosby's 1869 readings. Four stanzas everywhere. Tune NEAR THE CROSS (W. Howard Doane, 1869), meter 7.6.7.6 with refrain. Key: hymnary's instances run 79 F (53 plus 26 'F or modal') to 2 E-flat; TT prints F. Moved to E for guitar per the key rule. Chords derived from the Timeless Truths MusicXML score by reading the four-part chord on every beat, transposed F to E. 'Jesus, keep me' is I with a IV/E neighbour and a one-beat V7 on 'me' (dropped); the score harmonises 'near' with vi before IV on 'the cross', and the chart keeps that vi because the melody's held note sits on it; 'There a precious fountain' I to V; 'Flows from Calv'ry's mountain' a 6/4 over B into V7 and I, written B7 then E. Refrain: I, IV, I, V; 'Till my raptured soul' I with a ii7 neighbour and a V/vi (G#7) passing chord dropped, vi, IV; V7, I."
+}
