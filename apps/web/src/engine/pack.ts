@@ -89,8 +89,19 @@ export async function fetchManifest(): Promise<PackManifest> {
   // Network first, depot as the fallback: the manifest is the one pack file with
   // no version in its URL, so a stored copy can be stale. Offline, that stored copy
   // is what lets the rest of the pack be found at all.
+  //
+  // `no-cache`: revalidate with the server, whatever its headers said last time.
+  // Without it the browser's HTTP cache answers — and a host that marks all of
+  // /pack/ immutable (plumblinebible.org did, 2026-10-18 to v0.81.0) turns "network
+  // first" into "the manifest of the release this device first saw", for a year.
+  // The pin then never advanced and no data release reached an installed device.
+  // The site is for anyone to host, so the headers are not ours to rely on. Not
+  // `no-store`: a 304 against the ETag is the cheap answer, and the one a warm
+  // launch on an unchanged release gets. Offline it fails like any fetch, and the
+  // depot copy below answers as before. sw.js never handles /pack/, so no
+  // service worker sits between this and the server.
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: "no-cache" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const bytes = new Uint8Array(await res.arrayBuffer());
     void depotPut(url, bytes, "application/json");
