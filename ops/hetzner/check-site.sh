@@ -95,6 +95,18 @@ for path in "" "no-such-page-$$"; do
     fail "$origin/$path: no X-Content-Type-Options header"
 done
 
+# The pack manifest is the one file under /pack/ with no hash in its URL, and
+# the one the app asks for to learn that a release happened. Served with the
+# year-long `immutable` header the rest of /pack/ gets, the browser answers
+# that question from its own cache and a data release never reaches an
+# installed device (live 2026-10-18 to v0.81.0: the app updated, the data did
+# not). The app now revalidates regardless; this holds the box to the same.
+curl -sS $resolve --max-time 30 -D "$tmp/headers" -o /dev/null "$origin/pack/manifest.json" ||
+  fail "$origin/pack/manifest.json: no response"
+got_cc=$(tr -d '\r' < "$tmp/headers" | sed -n 's/^[Cc]ache-[Cc]ontrol: //p')
+[ "$got_cc" = "no-cache" ] ||
+  fail "$origin/pack/manifest.json: Cache-Control [$got_cc] must be [no-cache] — the box is not running the Caddyfile in cloud-init.yaml"
+
 if [ -n "$sums" ]; then
   # Every file at once, then one comparison that names what differs. No
   # Accept-Encoding is sent, so Caddy serves the stored bytes.

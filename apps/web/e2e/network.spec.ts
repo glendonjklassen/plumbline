@@ -233,12 +233,16 @@ test("boots offline after ONE visit — the whole promise of the thing", async (
  *  `mutate` receives the parsed manifest and returns the one to serve; everything
  *  else is proxied verbatim. This is how a "new deploy" is simulated without a
  *  second server: page.route() would bypass the service worker. */
-function rewritingOrigin(): Promise<{
+function rewritingOrigin(opts: { manifestCacheControl?: string } = {}): Promise<{
   url: string;
   mutate: (f: ((m: any) => any) | null) => void;
   close: () => Promise<void>;
 }> {
   let mutate: ((m: any) => any) | null = null;
+  // What every manifest response says about caching, rewritten or not. The default
+  // forbids the browser's HTTP cache, so a rewrite cannot be hidden by an earlier
+  // copy; a test whose subject IS that cache passes the production header instead.
+  const manifestCache = opts.manifestCacheControl ?? "no-store";
   const server = http.createServer((req, res) => {
     const isManifest = req.url?.startsWith("/pack/manifest.json");
     const headers = { ...req.headers, host: "localhost:4173" };
@@ -258,7 +262,10 @@ function rewritingOrigin(): Promise<{
       { method: req.method, headers },
       (ur) => {
         if (!(isManifest && mutate)) {
-          res.writeHead(ur.statusCode ?? 502, ur.headers);
+          res.writeHead(
+            ur.statusCode ?? 502,
+            isManifest ? { ...ur.headers, "cache-control": manifestCache } : ur.headers,
+          );
           ur.pipe(res);
           return;
         }
@@ -279,9 +286,9 @@ function rewritingOrigin(): Promise<{
           res.writeHead(ur.statusCode ?? 502, {
             ...upHeaders,
             "content-type": "application/json",
-            // So the browser cannot answer a later request for this from its own
-            // HTTP cache and hide the rewrite.
-            "cache-control": "no-store",
+            // By default, so the browser cannot answer a later request for this from
+            // its own HTTP cache and hide the rewrite.
+            "cache-control": manifestCache,
           });
           res.end(body);
         });
@@ -362,6 +369,65 @@ test("a data update re-pins without re-downloading what did not change", async (
       packRequests,
       "a version bump with no content change re-downloaded pack files — per-file hashing is not working",
     ).toEqual([]);
+  } finally {
+    await origin.close();
+  }
+});
+
+test.setTimeout(240_000);
+test("a deploy lands even where the host marks the manifest immutable", async ({ page }) => {
+  // What plumblinebible.org served from 2026-10-18 to v0.81.0: Caddy gave everything
+  // under /pack/ a one-year `immutable` header, because pack URLs are
+  // content-addressed — and `pack/manifest.json`, the one pack file with no hash
+  // in its URL, got the same header. The reconciler's "network first" fetch then
+  // never reached the network: the browser answered it from its HTTP cache with
+  // the manifest of the release the device first saw, whose file hashes the depot
+  // already held, so no data release ever reached an installed device (the hymns
+  // added in v0.81.0 were the one a reader noticed). The shell kept updating,
+  // because its own manifest is served `no-cache`, which made it look like an app
+  // that was current.
+  //
+  // The app cannot rely on the host's headers — the site tarball is for anyone
+  // to host — so `fetchManifest` must ask the browser to revalidate regardless.
+  //
+  // This test can fail against the bug: the origin serves the manifest with the
+  // production header on BOTH visits, so a plain fetch on the second visit is
+  // answered from the HTTP cache with the first visit's manifest, and the pin
+  // never reaches the rewritten version. `page.goto`, not `page.reload()`: a
+  // reload revalidates the document's own requests, and whether that reaches a
+  // worker's fetch is the browser's business — a fresh navigation is what a
+  // relaunch is. The server strips If-None-Match for the manifest, so a
+  // revalidating fetch always receives a full body and cannot pass by luck.
+  const origin = await rewritingOrigin({ manifestCacheControl: "public, max-age=31536000, immutable" });
+  try {
+    await firstVisit(page, origin.url);
+    const before = await page.evaluate(async () => {
+      const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
+        ignoreVary: true,
+      });
+      return (await hit!.json()).packVersion as string;
+    });
+    expect(before).not.toBe("1mmutab1edeploy0");
+
+    origin.mutate((m) => ({ ...m, version: "1mmutab1edeploy0" }));
+    await page.goto(origin.url);
+    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () => {
+            const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
+              ignoreVary: true,
+            });
+            return hit ? ((await hit.json()).packVersion as string) : null;
+          }),
+        {
+          timeout: 90_000,
+          message: "the pin never advanced: the manifest fetch was answered from the browser's HTTP cache",
+        },
+      )
+      .toBe("1mmutab1edeploy0");
   } finally {
     await origin.close();
   }
