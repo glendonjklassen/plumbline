@@ -100,6 +100,29 @@ test("a concept study is not a schedule, and never appears in the band", async (
   await expect(page.locator(".band")).toContainText("The whole Bible in a year");
 });
 
+// The Concept Study is a hub card of its own, and the sweep the reader is IN is a band
+// row — a run merely on file (the test above) is not. Dies if the card leaves the hub, if
+// the band stops reading `config.conceptStudy`, or if the row loses its tag and count.
+test("the Concept Study has its own card, and the active sweep sits in the band", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    await (window as any).__plumbline.startConceptStudy("grace");
+  });
+  await openStudy(page);
+
+  const band = page.locator(".band");
+  await expect(band).toContainText("Concept Study: “grace”", { timeout: 15_000 });
+  await expect(band).toContainText(/\d+ \/ \d+ chapters studied/);
+
+  const card = page.locator(".ex-card", { hasText: /^Concept Study/ });
+  await expect(card).toBeVisible();
+  await card.click();
+  const screen = page.getByRole("region", { name: "Concept Study" });
+  await expect(screen).toBeVisible();
+  await expect(screen.locator(".plan-card.concept-study", { hasText: "grace" })).toBeVisible();
+  await expect(screen.getByRole("button", { name: "Exit Concept Study" })).toBeVisible();
+});
+
 test("the tool cards count what is in them, and stay quiet at zero", async ({ page }) => {
   await boot(page);
   await openStudy(page);

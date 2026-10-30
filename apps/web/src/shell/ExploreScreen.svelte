@@ -145,6 +145,16 @@
     s.screen = "memorize";
     s.memorize = { view: "hub" };
   }
+  function openConceptStudy(): void {
+    s.screen = "conceptStudy";
+  }
+  /** The concept study the reader is IN, for the band: the run behind
+   *  `config.conceptStudy`, with its sweep count. Null outside the mode — a
+   *  run merely on file is not in progress, it is on the Concept Study screen. */
+  const activeStudy = $derived.by(() => {
+    if (!s.inConceptStudy) return null;
+    return (((plansQ?.running ?? []) as any[]).find((p) => p.id === s.conceptStudyId) as any) ?? null;
+  });
   /** refKey → the core's `go:` verb, split on the LAST space, as core `go_uri`
    *  does. Same helper PlansScreen and MemorizeHost carry. */
   const goUri = (refKey: string): string => `go:${refKey.replace(/ (?=\S*$)/, ":")}`;
@@ -164,6 +174,9 @@
     // starting a second booklet and stopping this one.
     { id: "plans", count: null as number | null, go: openPlans },
     { id: "memorize", count: null as number | null, go: openMemorize },
+    // Its own door, not a section of Plans (maintainer, 2026-10-29): a sweep for
+    // a theme is a study activity in its own right, with its own reader mode.
+    { id: "conceptStudy", count: null as number | null, go: openConceptStudy },
     {
       id: "notes",
       count: ((s.qStale("userNotes")?.notes ?? []) as any[]).length,
@@ -238,6 +251,16 @@
               <span class="row-note">{t("devotional.dayOf", { day: d.today.day, total: d.daysTotal })}</span>
             </button>
           {/each}
+          <!-- The sweep under way: a tap returns to the text, where the sweep
+               happens. Its tag and chapter count are what the banner says. -->
+          {#if activeStudy}
+            <button class="row" onclick={() => s.goRead()}>
+              <span class="row-name">{t("plans.conceptStudyTag", { tag: activeStudy.tag })}</span>
+              <span class="row-note">
+                {t("plans.sweepProgress", { done: activeStudy.sweepProgress[0], total: activeStudy.sweepProgress[1] })}
+              </span>
+            </button>
+          {/if}
           {#if dueCount > 0}
             <button class="row" onclick={openMemorize}>
               <span class="row-name">{t("explore.memorize")}</span>
@@ -250,7 +273,7 @@
               <span class="row-note">{plural("explore.toReview.one", "explore.toReview.other", suggestedCount)}</span>
             </button>
           {/if}
-          {#if todays.length === 0 && devotionals.length === 0 && dueCount === 0 && suggestedCount === 0}
+          {#if todays.length === 0 && devotionals.length === 0 && !activeStudy && dueCount === 0 && suggestedCount === 0}
             <button class="row invite" onclick={openPlans}>
               <span class="row-note">{t("explore.nothingRunning")}</span>
             </button>

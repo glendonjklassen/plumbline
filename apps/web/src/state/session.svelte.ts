@@ -355,6 +355,7 @@ export class Session {
     | "explore"
     | "memorize"
     | "plans"
+    | "conceptStudy"
     | "viz"
     | "tags"
     | "weaves"
@@ -611,7 +612,13 @@ export class Session {
     else if (this.panel) {
       this.panel = null;
       this.clearSearch();
-    } else if (this.screen === "tags" || this.screen === "weaves" || this.screen === "viz" || this.screen === "plans") {
+    } else if (
+      this.screen === "tags" ||
+      this.screen === "weaves" ||
+      this.screen === "viz" ||
+      this.screen === "plans" ||
+      this.screen === "conceptStudy"
+    ) {
       this.screen = "explore";
     } else if (this.screen === "memorize") {
       // Same shape as MemorizeHost's own close(): leaving `screen` on
@@ -2299,7 +2306,7 @@ export class Session {
     this.showToast(t("conceptStudy.entered", { tag }));
   }
 
-  /** Re-enter an existing concept study (from the Plans screen) without re-seeding. */
+  /** Re-enter an existing concept study (from the Concept Study screen) without re-seeding. */
   enterConceptStudy(id: string): void {
     this.config.conceptStudy = id;
     this.saveConfig();
