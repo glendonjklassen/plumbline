@@ -274,7 +274,7 @@
       {#if spotTile}
         <!-- The lightbulb and the feature's short name; the card does the explaining. -->
         <button
-          class="bm-tile spot-chip"
+          class="spot-chip"
           data-spotlight={spotTile}
           aria-label="{t('spotlight.title')} · {t(`spotlight.${spotTile}.name`)}"
           title="{t('spotlight.title')} · {t(`spotlight.${spotTile}.name`)}"
@@ -316,7 +316,8 @@
     margin-inline-end: auto;
   }
   .plan-chip,
-  .bm-tile {
+  .bm-tile,
+  .spot-chip {
     flex: 0 0 auto;
     /* The 44px touch floor (app.css), scaled with the chrome; the pill grows
        sideways with its passage and never wraps it. */
@@ -333,7 +334,8 @@
     white-space: nowrap;
   }
   .plan-chip svg,
-  .bm-tile svg {
+  .bm-tile svg,
+  .spot-chip svg {
     flex: 0 0 auto;
     width: calc(20px * var(--uiScale, 1));
     height: calc(20px * var(--uiScale, 1));
@@ -347,7 +349,8 @@
     font-variant-numeric: tabular-nums;
   }
   .plan-chip:hover,
-  .bm-tile:hover {
+  .bm-tile:hover,
+  .spot-chip:hover {
     border-color: var(--gold, #9e7d38);
   }
 </style>
