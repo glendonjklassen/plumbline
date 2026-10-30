@@ -341,6 +341,9 @@ export class Session {
   showSettings = $state(false);
   /** Backup and restore (BackupDialog), raised from the ≡ menu. */
   showBackup = $state(false);
+  /** The weekly feature card (shell/spotlight.ts): the feature id it is open
+   *  on, or null. The chip itself reads `config.spotlight`. */
+  spotlight = $state<string | null>(null);
   /** The ≡ utilities menu (History · Guide & about · shortcuts · Settings).
    *  Session state, not Shell-local, so every destination's ScreenBar can raise
    *  the same menu — Settings must not cost a trip back to Read. */
@@ -546,6 +549,7 @@ export class Session {
     ["showHistory", false],
     ["showSettings", false],
     ["showBackup", false],
+    ["spotlight", null],
     ["showShortcuts", false],
     ["showPresent", false],
     ["menuOpen", false],
@@ -603,6 +607,7 @@ export class Session {
     else if (this.memorizePassageFrom) this.memorizePassageFrom = null;
     else if (this.showSettings) this.showSettings = false;
     else if (this.showBackup) this.showBackup = false;
+    else if (this.spotlight) this.spotlight = null;
     else if (this.showHistory) this.showHistory = false;
     else if (this.showShortcuts) this.showShortcuts = false;
     else if (this.hymnSinging) this.hymnSinging = false;
@@ -2096,6 +2101,15 @@ export class Session {
   }
 
   /** Persist config (debounced) — pane set, zoom, theme, gates, history. */
+  /** The week's feature tile is dealt with — Done, or Open — and the chip
+   *  stands down until the next week picks another. */
+  spotlightDone(): void {
+    const sp = this.config.spotlight;
+    if (!sp) return;
+    this.config.spotlight = { ...sp, done: true };
+    this.saveConfig();
+  }
+
   saveConfig(): void {
     // The seating first — write-side only, no restore — so the snapshot 300 ms
     // from now is filed under the seating it is being made in. The answer is a

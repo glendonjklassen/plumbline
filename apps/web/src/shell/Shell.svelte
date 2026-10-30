@@ -28,6 +28,7 @@
   import MemorizeHost from "../memorize/MemorizeHost.svelte";
   import PassagePicker from "../memorize/PassagePicker.svelte";
   import ConceptStudyScreen from "./ConceptStudyScreen.svelte";
+  import SpotlightCard from "./SpotlightCard.svelte";
   import PresentHost from "../present/PresentHost.svelte";
   import ConnectorsOverlay from "./ConnectorsOverlay.svelte";
   import MapsHost from "../maps/MapsHost.svelte";
@@ -507,6 +508,7 @@
 <BookNav />
 <MarkReadDialog />
 <ThreadPicker />
+<SpotlightCard />
 <ConfirmDialog />
 <PickDialog />
 

@@ -25,6 +25,7 @@
   import { getSession } from "../state/session.svelte";
   import { chapterSpan, firstUnread, remaining, todayPlans } from "./planToday";
   import { SEATING_ICONS } from "./seatingIcons";
+  import { FEATURE_BY_ID, nextFeature, weekKey, type SpotlightState } from "./spotlight";
   import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
@@ -71,6 +72,9 @@
       "M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8z",
     // The named seatings, shared with the History sheet (seatingIcons.ts).
     ...SEATING_ICONS,
+    // lightbulb — the weekly feature tile
+    spotlight:
+      "M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z",
     // flag — a running reading plan
     plan: "M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z",
     // school — today's memorization
@@ -181,6 +185,22 @@
     });
   });
 
+  // The weekly feature tile (shell/spotlight.ts). Picked once per local week,
+  // the first time the row renders in it, and only once every usage read has
+  // answered — a tile pinned before the answers could name a feature the reader
+  // already uses. Within the week the chip stays until Done.
+  const week = weekKey();
+  const spot = $derived((s.config.spotlight ?? null) as SpotlightState | null);
+  const needsPick = $derived(spot?.week !== week);
+  $effect(() => {
+    if (!needsPick) return;
+    const id = nextFeature(spot?.id ?? null, s);
+    if (id == null) return;
+    s.config.spotlight = { week, id, done: false };
+    s.saveConfig();
+  });
+  const spotTile = $derived(!needsPick && spot && !spot.done && FEATURE_BY_ID[spot.id] ? spot.id : null);
+
   function goPlan(tile: (typeof planTiles)[number]): void {
     s.showToast(t("bookmarks.going", { name: t("bookmarks.plan") }));
     s.navigate(s.activePane, tile.target.book, tile.target.chapter);
@@ -206,7 +226,7 @@
   }
 </script>
 
-{#if (planTiles.length > 0 || devotionalTiles.length > 0 || slotTiles.length > 0 || memoryTile) && !s.inConceptStudy}
+{#if (planTiles.length > 0 || devotionalTiles.length > 0 || slotTiles.length > 0 || memoryTile || spotTile) && !s.inConceptStudy}
   <div class="plan-chip-row">
     <div class="tiles">
       {#each planTiles as p (p.key)}
@@ -251,6 +271,19 @@
           <span class="ref">{tile.passage}</span>
         </button>
       {/each}
+      {#if spotTile}
+        <!-- The lightbulb and the feature's short name; the card does the explaining. -->
+        <button
+          class="bm-tile spot-chip"
+          data-spotlight={spotTile}
+          aria-label="{t('spotlight.title')} · {t(`spotlight.${spotTile}.name`)}"
+          title="{t('spotlight.title')} · {t(`spotlight.${spotTile}.name`)}"
+          onclick={() => (s.spotlight = spotTile)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.spotlight} /></svg>
+          <span class="ref">{t(`spotlight.${spotTile}.name`)}</span>
+        </button>
+      {/if}
     </div>
   </div>
 {/if}

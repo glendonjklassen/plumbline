@@ -166,6 +166,26 @@ pub struct Config {
     /// share links name. Empty = the first, not stored as such: a reader who
     /// never chose keeps following the default if it ever moves.
     pub share_origin: String,
+    /// Where the weekly feature tile is in its cycle (the shell's
+    /// `shell/spotlight.ts`): the local Monday it was picked for, the feature's
+    /// id, and whether the reader has dealt with it. `None` until the first pick.
+    /// In the config so it rides in the backup and a restore does not start the
+    /// cycle over. The core only carries it; the shell owns the cycle.
+    pub spotlight: Option<Spotlight>,
+}
+
+/// The weekly feature tile's position — see [`Config::spotlight`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Spotlight {
+    /// The local Monday of the week, `YYYY-MM-DD`.
+    pub week: String,
+    /// The shell's feature id (`wordStudy`, `tags`, …); an id a build does not
+    /// know is simply skipped past on the next pick.
+    pub id: String,
+    /// Done, or opened: the chip stands down until the next week.
+    #[serde(default)]
+    pub done: bool,
 }
 
 /// One saved share-link preset: a name and the palette choices it restores.
@@ -296,6 +316,7 @@ impl Default for Config {
             gospel_thread: String::new(),
             share_presets: Vec::new(),
             share_origin: String::new(),
+            spotlight: None,
         }
     }
 }
@@ -393,6 +414,8 @@ struct ConfigWire {
     share_presets: Vec<SharePreset>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     share_origin: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    spotlight: Option<Spotlight>,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -560,6 +583,7 @@ impl Config {
             // Normalized on the way IN, so a hand-edited file and a restored
             // backup get exactly what a shell's save gets.
             share_presets: clean_presets(&w.share_presets),
+            spotlight: w.spotlight,
             // One of ours or nothing: a hand-edited address is not shared.
             share_origin: crate::church::clean_share_origin(w.share_origin.as_deref().unwrap_or("")),
             // A minute outside the day is corrupt; read it as "never set".
@@ -643,6 +667,7 @@ impl Config {
             gospel_thread: (!self.gospel_thread.is_empty()).then(|| self.gospel_thread.clone()),
             share_presets: self.share_presets.clone(),
             share_origin: (!self.share_origin.is_empty()).then(|| self.share_origin.clone()),
+            spotlight: self.spotlight.clone(),
             church: (!self.church.is_empty()).then(|| ChurchWire {
                 name: self.church.name.clone(),
                 service: self.church.service,
@@ -903,6 +928,7 @@ mod tests {
             localized_lexicon_off: true,
             // The non-default address, which is the one that must survive.
             share_origin: "https://plumblinebible.ch/".to_string(),
+            spotlight: Some(Spotlight { week: "2026-10-26".into(), id: "tags".into(), done: true }),
             church: Church {
                 name: "Grace Bible Church".into(),
                 service: Some(10 * 60),
@@ -1029,6 +1055,36 @@ mod tests {
 
     /// The active concept study's plan id must survive a load/save/load, or a
     /// save drops the reader out of a days-long sweep on the next launch. Absent
+    /// The weekly feature tile's position goes through the file as a whole and
+    /// is absent until the first pick — a shell writing it through a build that
+    /// did not carry it is how it got lost the first time (the spotlight spec).
+    #[test]
+    fn the_spotlight_position_survives_a_load_save_load() {
+        let dir = scratch("spotlight");
+        let path = dir.join("config.json");
+
+        std::fs::write(&path, r#"{"studyMode":"simple","spotlight":{"week":"2026-10-26","id":"tags","done":true}}"#)
+            .unwrap();
+        let (cfg, _) = load_from(&path);
+        assert_eq!(cfg.spotlight, Some(Spotlight { week: "2026-10-26".into(), id: "tags".into(), done: true }));
+
+        save_to(&path, &cfg).unwrap();
+        let json = std::fs::read_to_string(&path).unwrap();
+        assert!(json.contains(r#""id": "tags""#), "the save dropped the spotlight: {json}");
+        assert_eq!(load_from(&path).0.spotlight, cfg.spotlight);
+
+        // `done` is optional in the file; absent means not yet.
+        std::fs::write(&path, r#"{"studyMode":"simple","spotlight":{"week":"2026-10-26","id":"search"}}"#).unwrap();
+        assert!(!load_from(&path).0.spotlight.unwrap().done);
+
+        // Never picked: absent, and not written.
+        std::fs::write(&path, r#"{"studyMode":"simple"}"#).unwrap();
+        let (cfg, _) = load_from(&path);
+        assert!(cfg.spotlight.is_none());
+        save_to(&path, &cfg).unwrap();
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("spotlight"), "unset must not write the key");
+    }
+
     /// means normal reading mode; the value is trimmed but never validated away.
     #[test]
     fn concept_study_mode_survives_a_load_save_load() {
