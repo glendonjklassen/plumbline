@@ -33,7 +33,7 @@ const tagCount = (page: Page, tag: string): Promise<number> =>
 test("a concept study tags on tap, suspends the tracker, and its tag outlives the run", async ({ page }) => {
   await boot(page);
 
-  // Enter the mode through the engine; the Plans-panel launcher has its own test.
+  // Enter the mode through the engine; the Concept Study screen's launcher has its own test.
   await page.evaluate(async () => {
     await (window as any).__plumbline.startConceptStudy("grace");
   });
@@ -155,12 +155,16 @@ test("the mode shows sweep progress — the banner counts and the navigator pain
   await expect(page.locator(".concept-study-banner .prog")).toHaveText(/^2 \/ \d+/);
 });
 
-// The Plans-screen path a reader walks. Dies if the launcher stops wiring its input
-// through startConceptStudy, or if the running card loses its Resume button.
-test("the Plans screen launches a concept study and re-enters it from its card", async ({ page }) => {
+// The path a reader walks: the Study hub's own Concept Study card, not a section
+// at the foot of Plans (maintainer, 2026-10-29). Dies if the hub loses the card, if
+// the launcher stops wiring its input through startConceptStudy, or if the running
+// card loses its Resume button.
+test("the Study hub's Concept Study card opens a screen that launches a study and re-enters it", async ({ page }) => {
   await boot(page);
 
-  await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "explore"));
+  await page.locator(".ex-card", { hasText: /^Concept Study/ }).click();
+  await expect(page.getByRole("region", { name: "Concept Study" })).toBeVisible();
   await page.getByPlaceholder("Tag to add verses to (e.g. grace)").fill("faith");
   await page.getByRole("button", { name: "Start Concept Study" }).click();
 
@@ -170,7 +174,7 @@ test("the Plans screen launches a concept study and re-enters it from its card",
   // Leaving and re-entering from the card keeps the run and its coverage.
   await page.getByRole("button", { name: "Exit Concept Study" }).click();
   await expect(page.locator(".concept-study-banner")).toHaveCount(0);
-  await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "conceptStudy"));
   const card = page.locator(".plan-card.concept-study", { hasText: "faith" });
   await expect(card).toBeVisible();
   await card.getByRole("button", { name: "Resume" }).click();

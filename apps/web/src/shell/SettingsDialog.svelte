@@ -31,6 +31,11 @@
     return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
   }
 
+  /** The daily memorization cap (0 = no limit). Lived on the Plans screen's
+   *  Memorize card until 2026-10-29; a number the reader sets once belongs here. */
+  function setMemorizePerDay(e: Event): void {
+    s.setMemorizePerDay(Number((e.currentTarget as HTMLInputElement).value));
+  }
   function setServiceTime(e: Event): void {
     const v = (e.currentTarget as HTMLInputElement).value;
     if (!v) {
@@ -612,6 +617,26 @@
       </div>
       <p class="desc-note">{t("settings.defaultStyleDesc")}</p>
       <hr />
+      <!-- Everyday, not Advanced: the memorization cap is a number a reader
+           sets once and may revisit, and it used to sit on the Plans screen's
+           Memorize card where nobody expected a setting (maintainer, 2026-10-29). -->
+      <label class="toggle">
+        <span class="body">
+          <span class="name">{t("settings.memorizePerDay")}</span>
+          <span class="desc">{t("settings.memorizePerDayDesc")}</span>
+        </span>
+        <input
+          type="number"
+          class="num"
+          min="0"
+          max="500"
+          step="1"
+          value={s.memorizePerDay}
+          onchange={setMemorizePerDay}
+          data-surface="memorize-per-day"
+        />
+      </label>
+      <hr />
       <details class="advanced">
         <summary>{t("settings.advanced")}</summary>
         <p class="desc-note">{t("settings.advancedDesc")}</p>
@@ -1121,7 +1146,8 @@
   /* The time input is text-shaped, not a 17px checkbox square. `--popupPaper`,
      not `--popup`: the latter is not a palette variable, so it silently takes
      the light-cream fallback and vanishes on every dark theme. */
-  .toggle input.time {
+  .toggle input.time,
+  .toggle input.num {
     width: auto;
     height: auto;
     font: inherit;
@@ -1131,6 +1157,10 @@
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 6px;
     padding: 4px 6px;
+  }
+  .toggle input.num {
+    width: 5.5em;
+    font-variant-numeric: tabular-nums;
   }
   hr {
     border: none;

@@ -27,6 +27,8 @@
   import BackupDialog from "./BackupDialog.svelte";
   import MemorizeHost from "../memorize/MemorizeHost.svelte";
   import PassagePicker from "../memorize/PassagePicker.svelte";
+  import ConceptStudyScreen from "./ConceptStudyScreen.svelte";
+  import SpotlightCard from "./SpotlightCard.svelte";
   import PresentHost from "../present/PresentHost.svelte";
   import ConnectorsOverlay from "./ConnectorsOverlay.svelte";
   import MapsHost from "../maps/MapsHost.svelte";
@@ -194,6 +196,7 @@
       : s.screen === "explore" ||
           s.screen === "memorize" ||
           s.screen === "plans" ||
+          s.screen === "conceptStudy" ||
           s.screen === "devotional" ||
           s.screen === "viz" ||
           s.screen === "tags" ||
@@ -369,6 +372,8 @@
       <MemorizeHost />
     {:else if s.screen === "plans"}
       <PlansScreen />
+    {:else if s.screen === "conceptStudy"}
+      <ConceptStudyScreen />
     {:else if s.screen === "devotional"}
       <DevotionalScreen />
     {:else if s.screen === "viz"}
@@ -503,6 +508,7 @@
 <BookNav />
 <MarkReadDialog />
 <ThreadPicker />
+<SpotlightCard />
 <ConfirmDialog />
 <PickDialog />
 

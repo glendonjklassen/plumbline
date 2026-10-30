@@ -145,4 +145,23 @@ test("each part of the Bible is counted by its own least-read chapter", async ({
     "Old Testament", "Law", "History", "Psalms", "Wisdom", "Prophets",
     "New Testament", "Gospels & Acts", "Letters & Revelation", "Prophecy",
   ]);
+
+  // Each book under its part, folded until the part is tapped, and counted the
+  // same way (maintainer, 2026-10-29). Dies if the wire loses `books[].ahead` or
+  // `sections[].books`, or if the hub stops nesting them. A testament is not a
+  // leaf, so it has no books of its own to open.
+  await expect(page.locator(".book")).toHaveCount(0);
+  await expect(row("Old Testament").getByRole("button")).toHaveCount(0);
+  await row("Wisdom").getByRole("button").click();
+  const book = (name: string) => page.locator(".book", { has: page.locator(".book-name", { hasText: new RegExp(`^${name}$`) }) });
+  await expect(page.locator(".book-name")).toHaveText(["Job", "Proverbs", "Ecclesiastes", "Song of Solomon"]);
+  await expect(book("Job").locator(".book-n")).toHaveText("10");
+  await expect(book("Job").locator(".book-next")).toHaveText("0 of 42 chapters toward the next");
+  // Psalms is a part of one book, and that book says what the part said.
+  await row("Psalms").getByRole("button").click();
+  await expect(book("Psalms").locator(".book-n")).toHaveText("12");
+  await expect(book("Psalms").locator(".book-next")).toHaveText("1 of 150 chapters toward the next");
+  // Tapping again folds it.
+  await row("Psalms").getByRole("button").click();
+  await expect(book("Psalms")).toHaveCount(0);
 });

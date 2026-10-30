@@ -66,7 +66,8 @@ test("a pane reads German beside an English one, and the UI stays English", asyn
   // The pane beside it never changed: no reload, no re-language of the app.
   expect(await paneText(page, 0)).toBe(english);
   // The reader picked a Bible for one column, not a language for the app.
-  await expect(page.getByRole("button", { name: "Study" })).toBeVisible();
+  // `exact`: the weekly feature chip's name ("… · Word study") also contains it.
+  await expect(page.getByRole("button", { name: "Study", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.lang)).not.toBe("de");
 });
 

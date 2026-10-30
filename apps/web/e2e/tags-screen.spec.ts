@@ -93,10 +93,14 @@ test("renaming keeps the tag's members", async ({ page }) => {
 
   // The members came with it — the rename moved the file, it did not make a
   // new empty tag wearing the name.
-  const members = await page.evaluate(() =>
-    ((window as any).__plumbline.q("tags")?.tags ?? []).find((t: any) => t.name === "Zeta favour")?.members?.length,
-  );
-  expect(members).toBe(1);
+  //
+  // Polled: `q` answers null while the post-write refetch is in flight, and on a
+  // slow runner a one-shot read landed in that window and reported "undefined"
+  // for a rename that had happened. Polling cannot hide the defect it guards —
+  // a lost member stays lost, and the poll times out on 0.
+  await expect
+    .poll(() => page.evaluate(() => ((window as any).__plumbline.q("tags")?.tags ?? []).find((t: any) => t.name === "Zeta favour")?.members?.length ?? null), { timeout: 15_000 })
+    .toBe(1);
 });
 
 test("merging asks first, names both sides, and deletes the source", async ({ page }) => {
@@ -119,10 +123,14 @@ test("merging asks first, names both sides, and deletes the source", async ({ pa
   await expect
     .poll(async () => (await tagNames(page)).includes("Zeta mercy"), { timeout: 15_000 })
     .toBe(false);
-  const survivor = await page.evaluate(() =>
-    ((window as any).__plumbline.q("tags")?.tags ?? []).find((t: any) => t.name === "Zeta grace")?.members?.length,
-  );
-  expect(survivor, "both verses ended up in the tag that was kept").toBe(2);
+  // Polled, for the reason the rename test gives: CI read this during the
+  // refetch (2026-10-30, three runs) and saw undefined for a merge that had landed.
+  await expect
+    .poll(() => page.evaluate(() => ((window as any).__plumbline.q("tags")?.tags ?? []).find((t: any) => t.name === "Zeta grace")?.members?.length ?? null), {
+      message: "both verses ended up in the tag that was kept",
+      timeout: 15_000,
+    })
+    .toBe(2);
 });
 
 test("backing out of the merge question changes nothing", async ({ page }) => {

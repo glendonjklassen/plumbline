@@ -311,11 +311,6 @@
     color: var(--faded, #8a8276);
     font-size: calc(13.5px * var(--uiScale, 1));
   }
-  .plan-actions button:disabled,
-  .concept-study-launch button:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
   .nb-note {
     border-bottom: 1px solid color-mix(in srgb, var(--rule, #d8cba8) 55%, transparent);
     padding: 6px 0;

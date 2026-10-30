@@ -4,6 +4,10 @@
   // jobs (running schedules, concept studies, the catalogue) into a 380px
   // sidebar column (maintainer UAT call, 2026-08-11: "crammed, not luxurious").
   // A destination replaces the reader; each job gets its own section and room.
+  // The concept study has since moved out altogether, to its own screen
+  // (ConceptStudyScreen.svelte): it is filed as a plan kind in the engine, but a
+  // sweep for a theme is not a schedule, and a reader should not have to know
+  // the filing to find it.
   //
   // Bespoke, not blocks — it is interactive (start/stop/enter), which a block
   // list is not.
@@ -20,12 +24,10 @@
     return s.q("plans", "");
   });
 
-  // The two kinds of running plan are DIFFERENT THINGS and get their own
-  // sections: a schedule is a calendar you keep, a concept study is a sweep
-  // you are in the middle of. Interleaving them in one list is what made the
-  // panel unreadable.
+  // Schedules only: the engine lists concept studies among the running plans,
+  // but they are a different thing (a sweep, not a calendar) and have their own
+  // screen. Interleaving them in one list is what made the old panel unreadable.
   const schedules = $derived(((plans?.running ?? []) as any[]).filter((p) => p.kind !== "conceptStudy"));
-  const conceptStudies = $derived(((plans?.running ?? []) as any[]).filter((p) => p.kind === "conceptStudy"));
 
   /** Devotionals — running and offered. A THIRD kind of thing on this screen
    *  and so a third section, for the reason the two above are separate: a
@@ -63,18 +65,6 @@
     if (todayRefs.length === 0) return;
     s.memorize = { view: "review", queue: todayRefs };
     s.screen = "memorize";
-  }
-
-  function onPerDay(e: Event): void {
-    s.setMemorizePerDay(Number((e.currentTarget as HTMLInputElement).value));
-  }
-
-  let conceptStudyTag = $state("");
-  async function launchConceptStudy(): Promise<void> {
-    const tag = conceptStudyTag.trim();
-    if (!tag) return;
-    conceptStudyTag = "";
-    await s.startConceptStudy(tag);
   }
 
   /** The plans still worth offering: a builtin whose CLASS is already occupied
@@ -212,8 +202,9 @@
       {/each}
 
       <h3 class="sub">{t("memorize.title")}</h3>
-      <!-- One card, always: the cap is set here, so the card has to exist even
-           with nothing memorized yet. -->
+      <!-- One card, always, even with nothing memorized yet: it is where today's
+           memorization is accounted for. The per-day cap itself is a setting
+           (Settings ▸ Verses to memorize per day), not a control on this card. -->
       <div class="plan-card" data-surface="memory-today">
         <div class="plan-head">
           <span class="plan-name">{t("memorize.title")}</span>
@@ -234,39 +225,6 @@
         {:else}
           <p class="plan-done">{t("memorize.nothingDue")}</p>
         {/if}
-        <label class="per-day">
-          <span>{t("memorize.perDay")}</span>
-          <input type="number" min="0" max="500" step="1" value={s.memorizePerDay} onchange={onPerDay} />
-          {#if s.memorizePerDay === 0}<span class="per-day-note">{t("memorize.noLimit")}</span>{/if}
-        </label>
-      </div>
-
-      <h3 class="sub">{t("plans.conceptStudyHeading")}</h3>
-      <p class="hint">{t("plans.conceptStudyHint")}</p>
-      {#each conceptStudies as p (p.id)}
-        <div class="plan-card concept-study">
-          <div class="plan-head">
-            <span class="plan-name">{t("plans.conceptStudyTag", { tag: p.tag })}</span>
-            <span class="plan-prog">{t("plans.sweepProgress", { done: p.sweepProgress[0], total: p.sweepProgress[1] })}</span>
-          </div>
-          <div class="plan-actions">
-            {#if s.conceptStudyId !== p.id}
-              <button onclick={() => s.enterConceptStudy(p.id)}>{t("plans.enter")}</button>
-            {:else}
-              <button onclick={() => s.exitConceptStudy()}>{t("conceptStudy.exit")}</button>
-            {/if}
-            <button class="danger" onclick={() => s.stopPlan(p.id, p.tag)}>{t("plans.stop")}</button>
-          </div>
-        </div>
-      {/each}
-      <div class="concept-study-launch">
-        <input
-          type="text"
-          bind:value={conceptStudyTag}
-          placeholder={t("plans.conceptStudyPlaceholder")}
-          onkeydown={(e) => e.key === "Enter" && launchConceptStudy()}
-        />
-        <button disabled={!conceptStudyTag.trim()} onclick={launchConceptStudy}>{t("plans.conceptStudyStart")}</button>
       </div>
 
       <h3 class="sub">{t("plans.available")}</h3>
@@ -330,10 +288,6 @@
     gap: 10px;
     background: var(--popupPaper, #f2eee6);
   }
-  .plan-card.concept-study {
-    border-color: var(--tier-research, #b04a3a);
-    background: color-mix(in srgb, var(--tier-research, #b04a3a) 8%, transparent);
-  }
   /* Set aside: visibly at rest, not disabled — Resume is right there. */
   .plan-card.paused {
     background: transparent;
@@ -378,28 +332,7 @@
     display: flex;
     gap: 10px;
   }
-  .per-day {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--faded, #8a8276);
-    font-size: calc(13.5px * var(--uiScale, 1));
-  }
-  .per-day input {
-    width: 5em;
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 6px;
-    padding: 6px 10px;
-    background: var(--paper, #fcf9f4);
-    color: var(--ink, #211f1a);
-    font: inherit;
-    font-variant-numeric: tabular-nums;
-  }
-  .per-day-note {
-    font-size: calc(12.5px * var(--uiScale, 1));
-  }
   .plan-actions button,
-  .concept-study-launch button,
   .plan-builtin {
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 6px;
@@ -412,22 +345,6 @@
   .plan-actions button.danger {
     color: var(--tier-research, #b04a3a);
     border-color: color-mix(in srgb, var(--tier-research, #b04a3a) 60%, var(--rule, #d8cba8));
-  }
-  .concept-study-launch {
-    display: flex;
-    gap: 10px;
-    margin-top: 4px;
-  }
-  .concept-study-launch input {
-    flex: 1;
-    min-width: 0;
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 6px;
-    padding: 8px 12px;
-    background: var(--paper, #fcf9f4);
-    color: var(--ink, #211f1a);
-    font: inherit;
-    font-size: calc(13.5px * var(--uiScale, 1));
   }
   .plan-builtin {
     display: flex;

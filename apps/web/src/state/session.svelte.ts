@@ -341,6 +341,9 @@ export class Session {
   showSettings = $state(false);
   /** Backup and restore (BackupDialog), raised from the ≡ menu. */
   showBackup = $state(false);
+  /** The weekly feature card (shell/spotlight.ts): the feature id it is open
+   *  on, or null. The chip itself reads `config.spotlight`. */
+  spotlight = $state<string | null>(null);
   /** The ≡ utilities menu (History · Guide & about · shortcuts · Settings).
    *  Session state, not Shell-local, so every destination's ScreenBar can raise
    *  the same menu — Settings must not cost a trip back to Read. */
@@ -355,6 +358,7 @@ export class Session {
     | "explore"
     | "memorize"
     | "plans"
+    | "conceptStudy"
     | "viz"
     | "tags"
     | "weaves"
@@ -545,6 +549,7 @@ export class Session {
     ["showHistory", false],
     ["showSettings", false],
     ["showBackup", false],
+    ["spotlight", null],
     ["showShortcuts", false],
     ["showPresent", false],
     ["menuOpen", false],
@@ -602,6 +607,7 @@ export class Session {
     else if (this.memorizePassageFrom) this.memorizePassageFrom = null;
     else if (this.showSettings) this.showSettings = false;
     else if (this.showBackup) this.showBackup = false;
+    else if (this.spotlight) this.spotlight = null;
     else if (this.showHistory) this.showHistory = false;
     else if (this.showShortcuts) this.showShortcuts = false;
     else if (this.hymnSinging) this.hymnSinging = false;
@@ -611,7 +617,13 @@ export class Session {
     else if (this.panel) {
       this.panel = null;
       this.clearSearch();
-    } else if (this.screen === "tags" || this.screen === "weaves" || this.screen === "viz" || this.screen === "plans") {
+    } else if (
+      this.screen === "tags" ||
+      this.screen === "weaves" ||
+      this.screen === "viz" ||
+      this.screen === "plans" ||
+      this.screen === "conceptStudy"
+    ) {
       this.screen = "explore";
     } else if (this.screen === "memorize") {
       // Same shape as MemorizeHost's own close(): leaving `screen` on
@@ -1522,7 +1534,9 @@ export class Session {
     // arriving at a Sunday service reopens last Sunday's service rather than
     // Saturday night's study. Asked again on every return to the foreground —
     // see #reseat, which is also why the answer is not awaited here.
-    void this.#reseat(true);
+    void this.#reseat(true).finally(() => {
+      this.seated = true;
+    });
 
     const saved = loaded.openPanes?.length ? loaded.openPanes : [{ book: "John", chapter: 3 }];
     // Restore no more panes than fit — `addPane` guards the button, but a config
@@ -1754,6 +1768,14 @@ export class Session {
 
   /** A restore is pending reload — nothing may persist over it. */
   restoring = false;
+  /** Boot's seating question has been answered (`#reseat(true)` in the
+   *  constructor, whichever way it returned). Nothing that saves the config
+   *  may run before it: a save's snapshot files the live pane under the current
+   *  seating, and a save that lands before the stored seating has reopened
+   *  overwrites that seating with the plain last position (session-slots.spec,
+   *  red in CI 2026-10-30 when the weekly feature tile's first pick saved at
+   *  boot — it no longer saves at all, and waits for this anyway). */
+  seated = $state(false);
 
   #configSnapshot(): any {
     this.config.openPanes = this.panes.map((p, i) => ({
@@ -2089,6 +2111,15 @@ export class Session {
   }
 
   /** Persist config (debounced) — pane set, zoom, theme, gates, history. */
+  /** The week's feature tile is dealt with — Done, or Open — and the chip
+   *  stands down until the next week picks another. */
+  spotlightDone(): void {
+    const sp = this.config.spotlight;
+    if (!sp) return;
+    this.config.spotlight = { ...sp, done: true };
+    this.saveConfig();
+  }
+
   saveConfig(): void {
     // The seating first — write-side only, no restore — so the snapshot 300 ms
     // from now is filed under the seating it is being made in. The answer is a
@@ -2299,7 +2330,7 @@ export class Session {
     this.showToast(t("conceptStudy.entered", { tag }));
   }
 
-  /** Re-enter an existing concept study (from the Plans screen) without re-seeding. */
+  /** Re-enter an existing concept study (from the Concept Study screen) without re-seeding. */
   enterConceptStudy(id: string): void {
     this.config.conceptStudy = id;
     this.saveConfig();

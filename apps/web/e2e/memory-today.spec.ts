@@ -1,11 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // Memorization scheduled with the reading plans (maintainer, 2026-10-24): the
-// plans screen carries a Memorize card with today's capped queue and the
-// per-day cap, and the bookmark row a chip for the same queue; a review
-// launched from either walks exactly that slice, and grading it retires both
-// for the day. Dies if the card or chip stop reading `memoryToday`, if the cap
-// stops being honoured, or if a grade stops counting against it.
+// plans screen carries a Memorize card with today's capped queue, and the
+// bookmark row a chip for the same queue; a review launched from either walks
+// exactly that slice, and grading it retires both for the day. The per-day cap
+// itself is a Settings row (maintainer, 2026-10-29: "the memorize settings need
+// to live in settings"). Dies if the card or chip stop reading `memoryToday`,
+// if the cap stops being honoured, if a grade stops counting against it, or if
+// Settings loses the row.
 //
 // Can it fail? Drop the cap from the core's queue and the chip reads "3 to
 // review" against the asserted 2; stop counting today's grades and the card
@@ -38,7 +40,12 @@ test("today's memorization rides the plans surface under a daily cap", async ({ 
   await expect(card).toBeVisible();
   await expect(card).toContainText("2 verses to review today");
   await expect(card).toContainText("0 of 2 reviewed today");
-  await expect(card.locator('input[type="number"]')).toHaveValue("2");
+  // The cap is set in Settings, and shows the value the session holds.
+  await expect(card.locator('input[type="number"]')).toHaveCount(0);
+  await page.evaluate(() => (((window as any).__plumbline as any).showSettings = true));
+  const capInput = page.locator('[data-surface="settings"] [data-surface="memorize-per-day"]');
+  await expect(capInput).toHaveValue("2");
+  await page.evaluate(() => (((window as any).__plumbline as any).showSettings = false));
 
   // Review from the card: exactly the two scheduled cards, then the day is done.
   await card.getByRole("button", { name: /to review today/ }).click();
@@ -55,7 +62,10 @@ test("today's memorization rides the plans surface under a daily cap", async ({ 
   await page.evaluate(() => (((window as any).__plumbline as any).screen = "read"));
   await expect(page.locator(".plan-chip-row [data-memory]")).toHaveCount(0);
 
-  // No limit: the remaining card is offered again.
-  await page.evaluate(() => (window as any).__plumbline.setMemorizePerDay(0));
+  // No limit, set through the Settings row: the remaining card is offered again.
+  await page.evaluate(() => (((window as any).__plumbline as any).showSettings = true));
+  await capInput.fill("0");
+  await capInput.dispatchEvent("change");
+  await page.evaluate(() => (((window as any).__plumbline as any).showSettings = false));
   await expect(page.locator(".plan-chip-row [data-memory]")).toHaveAttribute("data-memory", "1");
 });
