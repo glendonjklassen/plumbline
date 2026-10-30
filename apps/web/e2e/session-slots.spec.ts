@@ -72,15 +72,18 @@ test("a stored seating is what reopens, over the plain last position", async ({ 
   // Seed: this seating remembers Romans 8, while the last position is elsewhere. Written straight
   // to the home (configSave), not through saveConfig — every shell save refreshes this seating's
   // slot from the live pane, so a divergent slot has to be planted below the snapshot, with
-  // `restoring` keeping the shell's own pagehide flush off it.
+  // `restoring` keeping the shell's own saves off it. `restoring` goes FIRST: the shell can have a
+  // debounced save pending from boot (the weekly feature tile's first pick saves one), and set
+  // after the plant it left a window in which that save re-filed John 3 under this seating
+  // (CI, 2026-10-30, twice).
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
+    s.restoring = true;
     const cfg = JSON.parse(JSON.stringify(s.config));
     cfg.slots = { ...(cfg.slots ?? {}), [s.slot]: { book: "Rom", chapter: 8 } };
     cfg.openPanes = [{ book: "John", chapter: 3 }];
     await s.rpc.static("configSave", cfg);
     await s.rpc.flush();
-    s.restoring = true;
   });
 
   await page.reload();
@@ -92,6 +95,7 @@ test("a seating never used falls through to the plain last position", async ({ p
   await boot(page);
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
+    s.restoring = true; // first, for the reason the test above gives
     // A slot table with an entry for a different seating than this one.
     const other = s.slot === "other" ? "sunday-morning" : "other";
     const cfg = JSON.parse(JSON.stringify(s.config));
@@ -99,7 +103,6 @@ test("a seating never used falls through to the plain last position", async ({ p
     cfg.openPanes = [{ book: "John", chapter: 3 }];
     await s.rpc.static("configSave", cfg);
     await s.rpc.flush();
-    s.restoring = true;
   });
 
   await page.reload();
