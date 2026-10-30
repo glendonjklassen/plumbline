@@ -13,8 +13,10 @@
 //   - After the last feature the cycle starts again from the top.
 //
 // The position lives in `config.spotlight` ({week, id, done}) so it rides in
-// the backup and a restore does not start the cycle over. The copy is in the
-// catalogue under `spotlight.<id>.{name,body,where}`.
+// the backup and a restore does not start the cycle over. The pick itself is
+// written in memory and reaches the home with the next ordinary save; Done
+// saves at once (PlanChip.svelte says why there is no save at pick time). The
+// copy is in the catalogue under `spotlight.<id>.{name,body,where}`.
 import { Session } from "../state/session.svelte";
 import { dayStamp } from "../engine/StudyEngine";
 

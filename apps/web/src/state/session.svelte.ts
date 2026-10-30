@@ -1769,11 +1769,12 @@ export class Session {
   /** A restore is pending reload — nothing may persist over it. */
   restoring = false;
   /** Boot's seating question has been answered (`#reseat(true)` in the
-   *  constructor, whichever way it returned). Until then NO config save may
-   *  run: a save's snapshot files the live pane under the current seating, and
-   *  a save that lands before the stored seating has reopened overwrites that
-   *  seating with the plain last position (session-slots.spec, red in CI
-   *  2026-10-30 when the weekly feature tile's first pick saved at boot). */
+   *  constructor, whichever way it returned). Nothing that saves the config
+   *  may run before it: a save's snapshot files the live pane under the current
+   *  seating, and a save that lands before the stored seating has reopened
+   *  overwrites that seating with the plain last position (session-slots.spec,
+   *  red in CI 2026-10-30 when the weekly feature tile's first pick saved at
+   *  boot — it no longer saves at all, and waits for this anyway). */
   seated = $state(false);
 
   #configSnapshot(): any {

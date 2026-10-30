@@ -189,18 +189,23 @@
   // the first time the row renders in it, and only once every usage read has
   // answered — a tile pinned before the answers could name a feature the reader
   // already uses. Within the week the chip stays until Done.
+  //
+  // The pick is written to the config IN MEMORY ONLY — no saveConfig here. A
+  // save at an unpredictable moment after boot is what broke two tests that
+  // plant state under the shell (session-slots, persist: CI 2026-10-30), and
+  // the pick does not need one: the next ordinary save carries it, Done saves
+  // explicitly, and a week whose pick was never written simply picks the same
+  // feature again next boot.
   const week = weekKey();
   const spot = $derived((s.config.spotlight ?? null) as SpotlightState | null);
   const needsPick = $derived(spot?.week !== week);
   $effect(() => {
-    // Not before boot has reopened the stored seating: the pick saves the
-    // config, and a save before that point overwrites the seating (see
-    // `Session.seated`).
+    // After boot has answered its seating question, so the usage reads queue
+    // behind boot's own work rather than ahead of it (see `Session.seated`).
     if (!needsPick || !s.seated) return;
     const id = nextFeature(spot?.id ?? null, s);
     if (id == null) return;
     s.config.spotlight = { week, id, done: false };
-    s.saveConfig();
   });
   const spotTile = $derived(!needsPick && spot && !spot.done && FEATURE_BY_ID[spot.id] ? spot.id : null);
 
