@@ -1391,6 +1391,10 @@ pub struct WireConfigState {
     /// silently losing the reader's choice.
     #[serde(default, alias = "strongsDeOff", skip_serializing_if = "Option::is_none")]
     pub localized_lexicon_off: Option<bool>,
+    /// The weekly feature tile's position (additive); absent until the shell's
+    /// first pick. See `core::config::Spotlight`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spotlight: Option<plumbline_core::config::Spotlight>,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1535,6 +1539,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             service: cfg.church.service,
             url: cfg.church.url.clone(),
         }),
+        spotlight: cfg.spotlight.clone(),
         first_run,
     }
 }
@@ -1628,6 +1633,13 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         // Through the core's clamps, not a local trim: the one place a shell's church
         // becomes the core's, so no shell has to remember the caps.
         church: w.church.as_ref().map(|c| church::clean(&c.to_core())).unwrap_or_default(),
+        // Trimmed, never validated: the shell owns the feature ids and the cycle,
+        // and an id this build does not know is skipped past on the next pick.
+        spotlight: w.spotlight.as_ref().map(|sp| plumbline_core::config::Spotlight {
+            week: sp.week.trim().to_string(),
+            id: sp.id.trim().to_string(),
+            done: sp.done,
+        }),
     }
 }
 
