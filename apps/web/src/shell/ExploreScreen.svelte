@@ -70,6 +70,22 @@
   const sections = $derived(((booksQ?.sections ?? []) as any[]) ?? []);
   const bible = $derived(sections.find((x) => x.id === "bible"));
 
+  // Each book's own count, under its section (maintainer, 2026-10-29). The wire
+  // already carries it — `books[].reads` is the fewest reads of the book's
+  // chapters, the same rule as a section — and each section names its books,
+  // so nothing here restates the canon's grouping. Books hang under the LEAF
+  // sections only (a part with no parts under it: Law, Psalms, Prophecy), since
+  // a testament's books are already listed under its parts. Folded per section
+  // until tapped, because 66 rows is a page of scrolling nobody asked for.
+  const bookById = $derived(new Map((((booksQ?.books ?? []) as any[]) ?? []).map((b) => [b.book, b])));
+  const parents = $derived(new Set(sections.filter((x, i) => (sections[i + 1]?.depth ?? 0) > x.depth).map((x) => x.id)));
+  let openBooks = $state<Set<string>>(new Set());
+  function toggleBooks(id: string): void {
+    const next = new Set(openBooks);
+    if (!next.delete(id)) next.add(id);
+    openBooks = next;
+  }
+
   // The reading map as one number and one bar. CHAPTERS, not a word-weighted
   // percentage: "412 of 1,189" is a thing a reader can hold. It is the time
   // through under way — chapters read more often than the least-read one — so
@@ -296,11 +312,40 @@
               <ul class="sections" aria-label={t("explore.sectionsTitle")}>
                 {#each sections.filter((x) => x.id !== "bible" && x.chapters > 0) as sec (sec.id)}
                   <li class="section" class:child={sec.depth > 0}>
-                    <span class="section-name">{sec.name}</span>
-                    <span class="section-n">{nf.format(base + Number(sec.reads))}</span>
-                    <span class="section-next">
-                      {t("explore.sectionNext", { ahead: nf.format(sec.ahead), total: nf.format(sec.chapters) })}
-                    </span>
+                    {#if parents.has(sec.id)}
+                      <div class="section-row">
+                        <span class="section-name">{sec.name}</span>
+                        <span class="section-n">{nf.format(base + Number(sec.reads))}</span>
+                        <span class="section-next">
+                          {t("explore.sectionNext", { ahead: nf.format(sec.ahead), total: nf.format(sec.chapters) })}
+                        </span>
+                      </div>
+                    {:else}
+                      <!-- A leaf part opens onto its books, each counted the same way. -->
+                      <button class="section-row" aria-expanded={openBooks.has(sec.id)} onclick={() => toggleBooks(sec.id)}>
+                        <span class="section-name">{sec.name}</span>
+                        <span class="section-n">{nf.format(base + Number(sec.reads))}</span>
+                        <svg class="books-fold" class:open={openBooks.has(sec.id)} viewBox="0 0 16 16" aria-hidden="true">
+                          <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <span class="section-next">
+                          {t("explore.sectionNext", { ahead: nf.format(sec.ahead), total: nf.format(sec.chapters) })}
+                        </span>
+                      </button>
+                      {#if openBooks.has(sec.id)}
+                        <ul class="books" aria-label={sec.name}>
+                          {#each ((sec.books ?? []) as string[]).map((id) => bookById.get(id)).filter((b) => b && b.chapters > 0) as b (b.book)}
+                            <li class="book">
+                              <span class="book-name">{b.name}</span>
+                              <span class="book-n">{nf.format(base + Number(b.reads))}</span>
+                              <span class="book-next">
+                                {t("explore.sectionNext", { ahead: nf.format(b.ahead ?? 0), total: nf.format(b.chapters) })}
+                              </span>
+                            </li>
+                          {/each}
+                        </ul>
+                      {/if}
+                    {/if}
                   </li>
                 {/each}
               </ul>
@@ -525,10 +570,71 @@
     background: var(--paper, #fcf9f4);
   }
   .section {
+    padding: 7px 0;
+  }
+  /* The row proper: name, count, and the way into the next time through. A
+     leaf part's row is a button (it opens the books) and must look like the
+     static rows beside it — same grid, no button chrome. */
+  .section-row {
     display: grid;
     grid-template-columns: 1fr auto;
     column-gap: 10px;
-    padding: 7px 0;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    text-align: start;
+    font: inherit;
+    color: inherit;
+    cursor: default;
+  }
+  button.section-row {
+    cursor: pointer;
+    grid-template-columns: 1fr auto auto;
+    align-items: baseline;
+  }
+  button.section-row:hover .section-name {
+    color: var(--gold, #9e7d38);
+  }
+  .books-fold {
+    align-self: center;
+    width: calc(14px * var(--uiScale, 1));
+    height: calc(14px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+    transition: transform 0.15s ease-out;
+  }
+  .books-fold.open {
+    transform: rotate(180deg);
+  }
+  .books {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0 0 0 16px;
+    border-inline-start: 2px solid color-mix(in srgb, var(--rule, #d8cba8) 70%, transparent);
+  }
+  .book {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 10px;
+    padding: 5px 0;
+  }
+  .book + .book {
+    border-top: 1px solid color-mix(in srgb, var(--rule, #d8cba8) 35%, transparent);
+  }
+  .book-name {
+    font-size: calc(14px * var(--uiScale, 1));
+    color: var(--ink, #211f1a);
+  }
+  .book-n {
+    font-size: calc(14.5px * var(--uiScale, 1));
+    font-weight: 600;
+    color: var(--gold, #9e7d38);
+    font-variant-numeric: tabular-nums;
+  }
+  .book-next {
+    grid-column: 1 / -1;
+    font-size: calc(12px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
   }
   .section + .section {
     border-top: 1px solid color-mix(in srgb, var(--rule, #d8cba8) 55%, transparent);

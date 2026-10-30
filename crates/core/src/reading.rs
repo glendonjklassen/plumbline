@@ -492,6 +492,9 @@ pub struct BookHeat {
     /// Times the whole book has been read through: the fewest reads of any of its
     /// chapters. See [`sections`].
     pub reads: u32,
+    /// Chapters already read more than `reads` times — the way into the next
+    /// time through, as [`SectionReads::ahead`] is for a section (additive).
+    pub ahead: u16,
     #[serde(flatten)]
     pub heat: Heat,
 }
@@ -589,6 +592,7 @@ pub fn books(corpus: &Corpus, words: &ChapterWords, store: &Store, now: &str) ->
             let real: Vec<&ChapterHeat> = chapters.iter().filter(|c| c.words > 0).collect();
             let read = real.iter().filter(|c| c.heat.standing == Standing::Read).count() as u16;
             let reads = real.iter().map(|c| c.reads).min().unwrap_or(0);
+            let ahead = real.iter().filter(|c| c.reads > reads).count() as u16;
             let days = chapters.iter().filter_map(|c| c.heat.days).min();
             let last_read = chapters
                 .iter()
@@ -606,6 +610,7 @@ pub fn books(corpus: &Corpus, words: &ChapterWords, store: &Store, now: &str) ->
                 words: total,
                 read,
                 reads,
+                ahead,
                 heat: Heat { pct, standing, glow, days, last_read },
             }
         })
@@ -653,6 +658,10 @@ pub struct SectionReads {
     /// Chapters already read more than `reads` times — the way into the next
     /// time through.
     pub ahead: u16,
+    /// The books the section bundles, canon order, as OSIS ids — so a shell can
+    /// hang each book's own count (`books[].reads`) under its section without
+    /// knowing [`SECTIONS`] (additive).
+    pub books: Vec<&'static str>,
 }
 
 /// A section's name. Reuses the canon map's names where they mean the same books,
@@ -679,8 +688,10 @@ pub fn sections(words: &ChapterWords, store: &Store) -> Vec<SectionReads> {
         .iter()
         .map(|&(id, depth, ranges)| {
             let mut counts = Vec::new();
+            let mut books = Vec::new();
             for &(lo, hi) in ranges {
                 for book in &ids[lo..=hi] {
+                    books.push(*book);
                     let recs = store.get(*book);
                     for c in 1..=words.chapters(book) {
                         if words.words(book, c) == 0 {
@@ -699,6 +710,7 @@ pub fn sections(words: &ChapterWords, store: &Store) -> Vec<SectionReads> {
                 chapters: counts.len() as u16,
                 reads,
                 ahead: counts.iter().filter(|&&n| n > reads).count() as u16,
+                books,
             }
         })
         .collect()
@@ -1483,7 +1495,10 @@ mod tests {
         assert_eq!(all[0].id, "bible");
         assert_eq!(all[0].reads, 2);
         let gen = books(&c, &w, &store, NOW).into_iter().find(|b| b.book == "Gen").unwrap();
-        assert_eq!(gen.reads, 2);
+        // The book counts the same way as its section, and says what is ahead.
+        assert_eq!((gen.reads, gen.ahead), (2, 1));
+        // A section names its books, so a shell can nest them under it.
+        assert_eq!(law.books, ["Gen", "Exod", "Lev", "Num", "Deut"]);
         // A section with no text counts nothing, rather than "read" by vacuity.
         let ps = all.iter().find(|s| s.id == "psalms").unwrap();
         assert_eq!((ps.chapters, ps.reads), (0, 0));
