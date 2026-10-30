@@ -193,7 +193,10 @@
   const spot = $derived((s.config.spotlight ?? null) as SpotlightState | null);
   const needsPick = $derived(spot?.week !== week);
   $effect(() => {
-    if (!needsPick) return;
+    // Not before boot has reopened the stored seating: the pick saves the
+    // config, and a save before that point overwrites the seating (see
+    // `Session.seated`).
+    if (!needsPick || !s.seated) return;
     const id = nextFeature(spot?.id ?? null, s);
     if (id == null) return;
     s.config.spotlight = { week, id, done: false };

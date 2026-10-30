@@ -1534,7 +1534,9 @@ export class Session {
     // arriving at a Sunday service reopens last Sunday's service rather than
     // Saturday night's study. Asked again on every return to the foreground —
     // see #reseat, which is also why the answer is not awaited here.
-    void this.#reseat(true);
+    void this.#reseat(true).finally(() => {
+      this.seated = true;
+    });
 
     const saved = loaded.openPanes?.length ? loaded.openPanes : [{ book: "John", chapter: 3 }];
     // Restore no more panes than fit — `addPane` guards the button, but a config
@@ -1766,6 +1768,13 @@ export class Session {
 
   /** A restore is pending reload — nothing may persist over it. */
   restoring = false;
+  /** Boot's seating question has been answered (`#reseat(true)` in the
+   *  constructor, whichever way it returned). Until then NO config save may
+   *  run: a save's snapshot files the live pane under the current seating, and
+   *  a save that lands before the stored seating has reopened overwrites that
+   *  seating with the plain last position (session-slots.spec, red in CI
+   *  2026-10-30 when the weekly feature tile's first pick saved at boot). */
+  seated = $state(false);
 
   #configSnapshot(): any {
     this.config.openPanes = this.panes.map((p, i) => ({
