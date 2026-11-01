@@ -14,7 +14,7 @@ export interface TodayChapter {
 
 export interface TodayPlan {
   id: string;
-  /** The plan's display name, resolved from the builtin catalogue's nameKey. */
+  /** The plan's display name: a custom plan's own, else the builtin catalogue's nameKey. */
   name: string;
   day: number;
   chapters: TodayChapter[];
@@ -35,15 +35,18 @@ export interface TodayPlan {
  *  Concept studies never appear — they have no days. */
 export function todayPlans(plans: any): TodayPlan[] {
   const builtins = (plans?.builtins ?? []) as any[];
-  const nameOf = (id: string): string => {
-    const b = builtins.find((x) => x.id === id);
-    return b ? t(b.nameKey) : id;
+  // A custom plan carries its name on the wire (the engine spells it in the
+  // reader's language); a built-in's is its catalogue key.
+  const nameOf = (p: any): string => {
+    if (typeof p.name === "string" && p.name) return p.name;
+    const b = builtins.find((x) => x.id === p.id);
+    return b ? t(b.nameKey) : p.id;
   };
   return ((plans?.running ?? []) as any[])
     .filter((p) => p.kind === "schedule" && p.today && !p.paused)
     .map((p) => ({
       id: p.id,
-      name: nameOf(p.id),
+      name: nameOf(p),
       day: p.today.day,
       chapters: p.today.chapters,
       doneToday: p.doneToday === true,

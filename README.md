@@ -85,11 +85,14 @@ theme](assets/readme/themeable.png)
   log; chapters you have not visited lately glow
 - Mark a chapter or book read by hand, on a date you pick
 - Reading plans — the whole Bible in a year, 180 or 90 days, the New
-  Testament in 90, a chronological order, Psalms and Proverbs in 30 — and
-  devotional walks, with today's portion one tap away above the canon strip
-  and a finish date projected from your own pace
+  Testament in 90, a chronological order, Psalms and Proverbs in 30, or your
+  own: pick parts of the Bible or a range of chapters and the days to read them
+  in — and devotional walks, with today's portion one tap away above the canon
+  strip, a finish date projected from your own pace, and your pace itself in
+  words and chapters a day over the last week, month, or all time
 - Hymnal: public-domain hymns with chords the engine transposes, per-language
-  texts, and a sing mode that scrolls continuously
+  texts filtered by language, favourites that travel in the backup, and a sing
+  mode that scrolls continuously
 
 ### Sharing
 

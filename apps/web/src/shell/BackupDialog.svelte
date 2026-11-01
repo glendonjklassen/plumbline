@@ -38,7 +38,7 @@
   // Backup / restore: the authored home dirs as a zip. Must stay in step with
   // engine/home.ts's USER_DIRS — a dir missing from this restore filter exports
   // into the zip and is then silently dropped on the way back in.
-  const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", "reading/", "plans/", "devotionals/", "deleted/", ".config/"];
+  const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", "reading/", "plans/", "devotionals/", "hymnal/", "deleted/", ".config/"];
 
   // Pre-rename archives carry the config under ".config/pure-study/"; the live
   // home reads ".config/plumbline/". Remapped on restore only — nothing writes

@@ -1381,6 +1381,19 @@ char *plumbline_engine_plans_json(const struct PlumblineEngine *engine, const ch
 // `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 char *plumbline_engine_plan_start(struct PlumblineEngine *engine, const char *id, const char *now);
 
+// Start a custom schedule over `spans` — a JSON array of `[book, first, last]`
+// runs, `[["Isa",1,39],["Ps",1,150]]` — cut into `days`. No class: it runs
+// beside anything. Returns the new plan's id, or an error string prefixed with
+// `!` (which no plan id can start with). A scope naming no chapter the corpus
+// has, or zero days, is refused rather than started finished.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_plan_start_custom(struct PlumblineEngine *engine,
+                                         const char *spans,
+                                         uint32_t days,
+                                         const char *now);
+
 // Start (or resume) a concept study for `tag`, returning the run's plan id —
 // what the shell writes into `config.conceptStudy` to enter the mode. The id is
 // derived from the tag (`run-<slug>`), so re-starting a concept already being
@@ -1424,6 +1437,24 @@ char *plumbline_engine_plan_stop(struct PlumblineEngine *engine, const char *id)
 // # Safety
 // `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_plan_set_paused(struct PlumblineEngine *engine, const char *id, bool paused);
+
+// The favourite hymns as `{ids:[…]}`, earliest star first. Never null on a
+// live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *plumbline_engine_hymn_favourites_json(const struct PlumblineEngine *engine);
+
+// Star (`on`) or unstar a hymn by its hymnal `id` at `now`. Unstarring records
+// a deletion, so a restore does not bring the star back. Repeating the current
+// state is a harmless no-op. Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_hymn_favourite_set(struct PlumblineEngine *engine,
+                                          const char *id,
+                                          bool on,
+                                          const char *now);
 
 // Every book's reading standing at `now` (RFC3339), canon order, as
 // `{books:[…],since,spec,forecast?,sections:[…]}`. Never null on a live engine.

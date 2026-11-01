@@ -34,7 +34,7 @@
 //!
 //! Personal study data, so it rides in the backup zip like `memory/` and `notes/`.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -804,6 +804,176 @@ pub fn forecast(words: &ChapterWords, store: &Store, now: &str) -> Option<Foreca
     })
 }
 
+// ── the day ledger and the pace ──────────────────────────────────────────────
+
+/// The ledger's frozen format tag.
+pub const LEDGER_FORMAT: &str = "plumbline-reading-days-v1";
+/// The ledger's file name under `reading/`, beside `_since.json`.
+pub const LEDGER_FILE: &str = "_days.json";
+
+/// What one calendar day's completed reads add up to.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DayCount {
+    #[serde(rename = "w")]
+    pub words: u32,
+    #[serde(rename = "c")]
+    pub chapters: u16,
+}
+
+/// `YYYY-MM-DD` → that day's completed reading.
+pub type Ledger = BTreeMap<String, DayCount>;
+
+#[derive(Serialize, Deserialize)]
+struct LedgerDoc {
+    format: String,
+    #[serde(default)]
+    days: Ledger,
+}
+
+/// The ledger file as found: not there yet, there and unreadable, or read.
+pub enum LedgerFile {
+    Absent,
+    Damaged,
+    Read(Ledger),
+}
+
+fn ledger_path(home: impl AsRef<Path>) -> PathBuf {
+    home.as_ref().join("reading").join(LEDGER_FILE)
+}
+
+/// Parse a ledger's bytes; `None` for anything but the frozen shape.
+pub fn parse_ledger(bytes: &[u8]) -> Option<Ledger> {
+    serde_json::from_slice::<LedgerDoc>(bytes).ok().filter(|d| d.format == LEDGER_FORMAT).map(|d| d.days)
+}
+
+/// A ledger's bytes.
+pub fn ledger_to_bytes(days: &Ledger) -> Vec<u8> {
+    let doc = LedgerDoc { format: LEDGER_FORMAT.to_string(), days: days.clone() };
+    (serde_json::to_string_pretty(&doc).unwrap_or_default() + "\n").into_bytes()
+}
+
+pub fn read_ledger(home: impl AsRef<Path>) -> LedgerFile {
+    match std::fs::read(ledger_path(home)) {
+        Ok(b) => parse_ledger(&b).map_or(LedgerFile::Damaged, LedgerFile::Read),
+        Err(_) => LedgerFile::Absent,
+    }
+}
+
+/// The ledger a map from before the ledger existed implies: every chapter's
+/// last full read, dated by `lastRead`, one chapter and its words on that day.
+/// A chapter read twice before the ledger counts once — the record kept one
+/// date — so the numbers it gives are a floor, and the ledger is right from the
+/// day it is first written.
+pub fn backfill_ledger(store: &Store, words: &ChapterWords) -> Ledger {
+    let mut days = Ledger::new();
+    for book in canon::book_ids() {
+        for r in store.get(book).into_iter().flatten() {
+            let Some(day) = r.last_read.as_deref() else { continue };
+            let w = words.words(book, r.chapter);
+            if w == 0 {
+                continue;
+            }
+            let e = days.entry(day.to_string()).or_default();
+            e.words += w;
+            e.chapters += 1;
+        }
+    }
+    days
+}
+
+/// The ledger as it stands: the file, or — before one has been written — what
+/// the reading map implies ([`backfill_ledger`]). A damaged file reads as the
+/// backfill too, and is never written over (the book-file stance).
+pub fn ledger(home: impl AsRef<Path>, words: &ChapterWords) -> Ledger {
+    match read_ledger(&home) {
+        LedgerFile::Read(l) => l,
+        LedgerFile::Absent | LedgerFile::Damaged => backfill_ledger(&load(&home).0, words),
+    }
+}
+
+/// Add (`delta` > 0) or take back (`delta` < 0) one chapter of `chapter_words`
+/// on `day`. The first write backfills from the map first, so a reader with a
+/// year of reading does not start from zero. A damaged ledger is left alone.
+fn ledger_adjust(
+    home: impl AsRef<Path>,
+    words: &ChapterWords,
+    day: &str,
+    chapter_words: u32,
+    delta: i32,
+) -> Result<(), Error> {
+    let mut days = match read_ledger(&home) {
+        LedgerFile::Read(l) => l,
+        LedgerFile::Absent => backfill_ledger(&load(&home).0, words),
+        LedgerFile::Damaged => return Ok(()),
+    };
+    let e = days.entry(day.to_string()).or_default();
+    if delta > 0 {
+        e.words = e.words.saturating_add(chapter_words);
+        e.chapters = e.chapters.saturating_add(1);
+    } else {
+        e.words = e.words.saturating_sub(chapter_words);
+        e.chapters = e.chapters.saturating_sub(1);
+    }
+    if *e == DayCount::default() {
+        days.remove(day);
+    }
+    let path = ledger_path(&home);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| Error::Io { path: dir.display().to_string(), source: e })?;
+    }
+    crate::store::write_atomic_bytes(path, &ledger_to_bytes(&days))
+}
+
+/// One window of the pace: the last `days` calendar days through today.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaceWindow {
+    /// `week`, `month` or `all`.
+    pub id: &'static str,
+    /// Calendar days in the window, today included (never below 1).
+    pub days: i64,
+    pub words: u64,
+    pub chapters: u32,
+    pub words_per_day: f64,
+    pub chapters_per_day: f64,
+}
+
+/// The reader's pace over three windows, from the day ledger.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Pace {
+    pub windows: Vec<PaceWindow>,
+}
+
+/// Words and chapters a day over the last 7 days, the last 30, and since the
+/// first day on the ledger — each window ending today. `None` for an empty
+/// ledger. Entries dated after today (a hand-logged date, a clock put back)
+/// count in every window as if they were today's.
+pub fn pace(ledger: &Ledger, now: &str) -> Option<Pace> {
+    let today = date_to_days(&day_of(now))?;
+    let first = ledger.keys().filter_map(|d| date_to_days(d)).min()?;
+    let all = (today - first).max(0) + 1;
+    let window = |id: &'static str, days: i64| {
+        let from = today - days + 1;
+        let (mut words, mut chapters) = (0u64, 0u32);
+        for (d, c) in ledger {
+            let Some(d) = date_to_days(d) else { continue };
+            if d >= from {
+                words += u64::from(c.words);
+                chapters += u32::from(c.chapters);
+            }
+        }
+        PaceWindow {
+            id,
+            days,
+            words,
+            chapters,
+            words_per_day: words as f64 / days as f64,
+            chapters_per_day: f64::from(chapters) / days as f64,
+        }
+    };
+    Some(Pace { windows: vec![window("week", 7), window("month", 30), window("all", all)] })
+}
+
 // ── the dwell tracker ────────────────────────────────────────────────────────
 
 /// The most a single sample may credit. A tick that arrives very late means the
@@ -1007,6 +1177,11 @@ pub fn record(
         first_pass,
         last_read: rec.last_read.clone(),
     };
+    // The ledger before the book file: its first write backfills from the map
+    // on disk, which must not already carry this pass or the day counts it twice.
+    if completed {
+        ledger_adjust(&home, words, &day_of(now), total, 1)?;
+    }
     write_book(&home, book, &list)?;
     Ok(out)
 }
@@ -1016,21 +1191,44 @@ pub fn record(
 /// Answers whether this was the chapter's first full pass (see
 /// [`Recorded::first_pass`]).
 pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -> Result<bool, Error> {
+    mark_read_inner(home, None, book, chapter, date)
+}
+
+/// [`mark_read`], with the read counted on the day ledger too (the pace). What
+/// the ABI calls; the uncounted form stays for callers without word counts.
+pub fn mark_read_counted(
+    home: impl AsRef<Path>,
+    words: &ChapterWords,
+    book: &str,
+    chapter: u16,
+    date: &str,
+) -> Result<bool, Error> {
+    mark_read_inner(home, Some(words), book, chapter, date)
+}
+
+fn mark_read_inner(
+    home: impl AsRef<Path>,
+    words: Option<&ChapterWords>,
+    book: &str,
+    chapter: u16,
+    date: &str,
+) -> Result<bool, Error> {
     let mut list = load_book(&home, book)?;
     let day = day_of(date);
-    let first_pass = match list.iter_mut().find(|r| r.chapter == chapter) {
+    let (first_pass, added) = match list.iter_mut().find(|r| r.chapter == chapter) {
         Some(r) => {
             let first = r.last_read.is_none();
             // Setting the same day again is the dialog tapped twice, not a second
             // reading — it must not add one.
-            if r.last_read.as_deref() != Some(day.as_str()) {
+            let added = r.last_read.as_deref() != Some(day.as_str());
+            if added {
                 r.reads = r.times_read() + 1;
             }
             r.last_read = Some(day.clone());
-            r.touched = Some(day);
+            r.touched = Some(day.clone());
             r.reached = 0;
             r.dwell = 0.0;
-            first
+            (first, added)
         }
         None => {
             list.push(ChapterReading {
@@ -1038,13 +1236,18 @@ pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -
                 reached: 0,
                 dwell: 0.0,
                 last_read: Some(day.clone()),
-                touched: Some(day),
+                touched: Some(day.clone()),
                 reads: 1,
                 extra: Map::new(),
             });
-            true
+            (true, true)
         }
     };
+    if let (Some(words), true) = (words, added) {
+        // Before the book write, as in `record`: the ledger's first write
+        // backfills from the map on disk.
+        ledger_adjust(&home, words, &day, words.words(book, chapter), 1)?;
+    }
     write_book(&home, book, &list)?;
     Ok(first_pass)
 }
@@ -1052,7 +1255,25 @@ pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -
 /// Drop a chapter's reading record entirely — the way back out of a date set by
 /// mistake. The chapter returns to unread.
 pub fn forget(home: impl AsRef<Path>, book: &str, chapter: u16) -> Result<(), Error> {
+    forget_inner(home, None, book, chapter)
+}
+
+/// [`forget`], with the chapter's last read taken back off the day ledger — a
+/// date set by mistake should not stand in the pace either. Earlier reads of the
+/// chapter stay on the ledger: the record kept one date, and they happened.
+pub fn forget_counted(home: impl AsRef<Path>, words: &ChapterWords, book: &str, chapter: u16) -> Result<(), Error> {
+    forget_inner(home, Some(words), book, chapter)
+}
+
+fn forget_inner(home: impl AsRef<Path>, words: Option<&ChapterWords>, book: &str, chapter: u16) -> Result<(), Error> {
     let mut list = load_book(&home, book)?;
+    if let Some(words) = words {
+        if let Some(day) = list.iter().find(|r| r.chapter == chapter).and_then(|r| r.last_read.clone()) {
+            // Before the retain and the book write: the backfill must still see
+            // the read it is about to take back, or it is taken back twice.
+            ledger_adjust(&home, words, &day, words.words(book, chapter), -1)?;
+        }
+    }
     list.retain(|r| r.chapter != chapter);
     write_book(&home, book, &list)
 }
@@ -1929,6 +2150,65 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&home);
     }
+    #[test]
+    fn the_ledger_backfills_once_then_counts_every_pass_and_forgets_a_mistake() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        let home = scratch("ledger");
+        // A year of reading before the ledger existed: two chapters by hand.
+        mark_read(&home, "Gen", 1, "2026-01-10").unwrap();
+        mark_read(&home, "Gen", 2, "2026-01-10").unwrap();
+        assert!(matches!(read_ledger(&home), LedgerFile::Absent));
+        // Read without a file, the map implies the ledger.
+        let implied = ledger(&home, &w);
+        assert_eq!(implied["2026-01-10"], DayCount { words: 30, chapters: 2 });
+
+        // The first counted write backfills and adds — not one, not the other.
+        mark_read_counted(&home, &w, "Gen", 3, "2026-01-11").unwrap();
+        let l = match read_ledger(&home) {
+            LedgerFile::Read(l) => l,
+            _ => panic!("ledger written"),
+        };
+        assert_eq!(l["2026-01-10"], DayCount { words: 30, chapters: 2 });
+        assert_eq!(l["2026-01-11"], DayCount { words: 5, chapters: 1 });
+
+        // A re-read is a second entry; the same day twice is the dialog tapped twice.
+        mark_read_counted(&home, &w, "Gen", 1, "2026-01-12").unwrap();
+        mark_read_counted(&home, &w, "Gen", 1, "2026-01-12").unwrap();
+        let l = ledger(&home, &w);
+        assert_eq!(l["2026-01-12"], DayCount { words: 10, chapters: 1 });
+        assert_eq!(l["2026-01-10"], DayCount { words: 30, chapters: 2 }, "the earlier read of Gen 1 stays");
+
+        // A pass completed by dwell lands too: Gen 3 is 5 words, read to its end.
+        record(&home, &c, &w, "Gen", 3, 1, 60.0, "2026-01-13T09:00:00Z").unwrap();
+        assert_eq!(ledger(&home, &w)["2026-01-13"], DayCount { words: 5, chapters: 1 });
+
+        // Forgetting takes the chapter's LAST read back off its day and no other.
+        forget_counted(&home, &w, "Gen", 1).unwrap();
+        let l = ledger(&home, &w);
+        assert!(!l.contains_key("2026-01-12"), "an emptied day is dropped: {l:?}");
+        assert_eq!(l["2026-01-10"], DayCount { words: 30, chapters: 2 });
+
+        // The pace: three windows ending today.
+        let p = pace(&l, "2026-01-16T12:00:00Z").unwrap();
+        let by = |id: &str| p.windows.iter().find(|x| x.id == id).unwrap().clone();
+        let week = by("week"); // 10th..16th: Jan 10 (30w/2c) + Jan 11 (5w/1c) + Jan 13 (5w/1c)
+        assert_eq!((week.days, week.words, week.chapters), (7, 40, 4));
+        assert_eq!(by("month").days, 30);
+        assert_eq!(by("month").words, 40);
+        let all = by("all");
+        assert_eq!((all.days, all.words, all.chapters), (7, 40, 4), "the first day on the ledger is the 10th");
+        assert!((all.words_per_day - 40.0 / 7.0).abs() < 1e-9);
+        // Nothing on the ledger: no pace at all, rather than zeros.
+        assert!(pace(&Ledger::new(), "2026-01-16T12:00:00Z").is_none());
+        // A damaged ledger is left where it lies and never written over.
+        std::fs::write(ledger_path(&home), b"{not json").unwrap();
+        mark_read_counted(&home, &w, "Gen", 2, "2026-01-20").unwrap();
+        assert_eq!(std::fs::read(ledger_path(&home)).unwrap(), b"{not json");
+        assert!(matches!(read_ledger(&home), LedgerFile::Damaged));
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
     #[test]
     fn forecast_measures_pace_from_the_first_read_and_projects_the_rest() {
         let c = toy();

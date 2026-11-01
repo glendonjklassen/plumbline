@@ -5,6 +5,7 @@
 
 use super::*;
 // The reading-map and plan endpoints are their own modules; `use super::*` does not reach them.
+use crate::hymn_favourites::*;
 use crate::plans::*;
 use crate::reading_map::*;
 use crate::share::*;
@@ -2246,6 +2247,32 @@ fn reading_map_round_trip_via_abi() {
         assert_eq!(john["read"], 1);
         assert_eq!(john["days"], 573);
 
+        // The pace rides the same read, off the day ledger: the dwell pass on the
+        // 28th was forgotten and the hand-logged read is the one on the ledger
+        // (9 words of John 3 in this toy corpus), so the week and month windows
+        // are empty and "all" runs from 2025-01-01 to today.
+        let pace = &books["pace"];
+        let window = |id: &str| pace["windows"].as_array().unwrap().iter().find(|w| w["id"] == id).unwrap().clone();
+        assert_eq!(window("week")["days"], 7);
+        assert_eq!(window("week")["chapters"], 0);
+        assert_eq!(window("month")["days"], 30);
+        assert_eq!(window("all")["chapters"], 1);
+        assert_eq!(window("all")["words"], 9);
+        assert_eq!(window("all")["days"], 574);
+        // Before anything is read through there is no pace at all.
+        let fresh = std::env::temp_dir().join(format!("plumbline-ffi-reading-fresh-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&fresh);
+        std::fs::create_dir_all(fresh.join("data")).unwrap();
+        std::fs::write(fresh.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(fresh.join("data").join("strongs.json"), STRONGS).unwrap();
+        let fresh_c = CString::new(fresh.to_str().unwrap()).unwrap();
+        let f = plumbline_engine_open(fresh_c.as_ptr(), ptr::null_mut());
+        let none: Value =
+            serde_json::from_str(&take(plumbline_engine_reading_books_json(f, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(none.get("pace"), None);
+        plumbline_engine_free(f);
+        let _ = std::fs::remove_dir_all(&fresh);
+
         // Unknown books are refused rather than invented.
         assert!(plumbline_engine_reading_chapters_json(e, c("Nope").as_ptr(), now.as_ptr()).is_null());
         assert!(!plumbline_engine_reading_mark_read(e, c("Nope").as_ptr(), 1, c("2026-01-01").as_ptr()).is_null());
@@ -2817,6 +2844,113 @@ fn hymnal_round_trip_via_abi() {
         let far: Value =
             serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"amazing-grace".as_ptr(), 15)).unwrap()).unwrap();
         assert_eq!(far["transposedKey"], "Bb", "15 semitones is 3");
+
+        // Favourites: starred in order, unstarred with a deletion record behind it.
+        let favs = |e| -> Vec<String> {
+            let v: Value = serde_json::from_str(&take(plumbline_engine_hymn_favourites_json(e)).unwrap()).unwrap();
+            v["ids"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_string()).collect()
+        };
+        assert!(favs(e).is_empty());
+        let t1 = c"2026-11-01T10:00:00Z";
+        let t2 = c"2026-11-01T11:00:00Z";
+        assert!(plumbline_engine_hymn_favourite_set(e, c"ein-feste-burg".as_ptr(), true, t1.as_ptr()).is_null());
+        assert!(plumbline_engine_hymn_favourite_set(e, c"amazing-grace".as_ptr(), true, t2.as_ptr()).is_null());
+        assert_eq!(favs(e), ["ein-feste-burg", "amazing-grace"], "earliest star first, not book order");
+        assert!(
+            plumbline_engine_hymn_favourite_set(e, c"ein-feste-burg".as_ptr(), true, t2.as_ptr()).is_null(),
+            "a double tap is a no-op"
+        );
+        assert!(plumbline_engine_hymn_favourite_set(e, c"ein-feste-burg".as_ptr(), false, t2.as_ptr()).is_null());
+        assert_eq!(favs(e), ["amazing-grace"]);
+        let records = plumbline_core::tombstone::load(&home);
+        assert!(
+            records.contains_key(&plumbline_core::tombstone::hymn_favourite("ein-feste-burg")),
+            "unstarring records a deletion, or a restore stars it again: {records:?}"
+        );
+        assert!(
+            !plumbline_engine_hymn_favourite_set(e, c"".as_ptr(), true, t2.as_ptr()).is_null(),
+            "an empty id is refused"
+        );
+        // The file is in the home, so it rides the backup, under the frozen tag.
+        let raw = std::fs::read_to_string(home.join(plumbline_core::hymnal::FAVOURITES_REL_PATH)).unwrap();
+        assert!(raw.contains(plumbline_core::hymnal::FAVOURITES_FORMAT));
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+#[test]
+fn a_custom_plan_starts_from_spans_and_is_named_over_the_abi() {
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-custom-plan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let e = plumbline_engine_open(home_c.as_ptr(), ptr::null_mut());
+        assert!(!e.is_null());
+        let now = c"2026-11-01T12:00:00Z";
+
+        // The builder's parts ride the plans wire: the canon's sections less the whole Bible.
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        let parts = v["parts"].as_array().unwrap();
+        assert!(parts
+            .iter()
+            .any(|p| p["id"] == "prophets" && p["books"].as_array().unwrap().iter().any(|b| b == "Isa")));
+        assert!(!parts.iter().any(|p| p["id"] == "bible"));
+        assert!(parts.iter().all(|p| p["name"].as_str().is_some_and(|n| !n.is_empty())));
+
+        // Refusals come back with the `!` prefix, and nothing is written.
+        let bad = take(plumbline_engine_plan_start_custom(e, c"not json".as_ptr(), 3, now.as_ptr())).unwrap();
+        assert!(bad.starts_with('!'), "{bad}");
+        let empty = take(plumbline_engine_plan_start_custom(e, c"[[\"Rev\",1,22]]".as_ptr(), 3, now.as_ptr())).unwrap();
+        assert!(empty.starts_with('!'), "no chapter the corpus has: {empty}");
+        let zero = take(plumbline_engine_plan_start_custom(e, c"[[\"John\",3,3]]".as_ptr(), 0, now.as_ptr())).unwrap();
+        assert!(zero.starts_with('!'), "{zero}");
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"].as_array().unwrap().len(), 0);
+
+        // A real one: the toy corpus has text in John 3 only, so the clamp makes
+        // "John 1–99" into John 1–3 and one day holds it all.
+        let id = take(plumbline_engine_plan_start_custom(e, c"[[\"John\",1,99]]".as_ptr(), 1, now.as_ptr())).unwrap();
+        assert!(id.starts_with("custom-"), "{id}");
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        let run = &v["running"][0];
+        assert_eq!(run["id"], id);
+        assert_eq!(run["kind"], "schedule");
+        assert_eq!(run["class"], Value::Null, "no class: custom plans run beside anything");
+        assert_eq!(run["name"], "John · 1 day", "the whole book is its name");
+        assert_eq!(run["today"]["chapters"].as_array().unwrap().len(), 3);
+        assert_eq!(run["scheduleProgress"], serde_json::json!([0, 1]));
+        // A second custom plan runs beside the first — and beside a built-in.
+        let id2 = take(plumbline_engine_plan_start_custom(e, c"[[\"John\",3,3]]".as_ptr(), 5, now.as_ptr())).unwrap();
+        assert!(id2.starts_with("custom-") && id2 != id);
+        assert!(plumbline_engine_plan_start(e, c"nt-90".as_ptr(), now.as_ptr()).is_null());
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"].as_array().unwrap().len(), 3);
+        let two = v["running"].as_array().unwrap().iter().find(|p| p["id"] == id2).unwrap();
+        // Five days asked of one chapter: the schedule clamps to one day, and the
+        // name keeps the days as asked.
+        assert_eq!(two["name"], "John 3 · 5 days");
+        assert_eq!(two["scheduleProgress"], serde_json::json!([0, 1]));
+        // Built-ins carry no name of their own; the shell has their nameKey.
+        let nt = v["running"].as_array().unwrap().iter().find(|p| p["id"] == "nt-90").unwrap();
+        assert_eq!(nt.get("name"), None);
+        // The file keeps the spans as written, under the frozen flat shape.
+        let dir = home.join("plans");
+        let file = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .find(|f| f.file_name().to_str().unwrap().contains(&id))
+            .unwrap();
+        let text = std::fs::read_to_string(file.path()).unwrap();
+        assert!(text.contains(r#""scope":"spans""#) && text.contains(r#"["John",1,99]"#), "{text}");
+        // Stopping one is the ordinary stop.
+        assert!(plumbline_engine_plan_stop(e, CString::new(id.clone()).unwrap().as_ptr()).is_null());
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"].as_array().unwrap().len(), 2);
 
         plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);

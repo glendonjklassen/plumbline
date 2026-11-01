@@ -51,14 +51,22 @@ pub enum Kind {
     ConceptStudy,
 }
 
+/// One run of chapters: `(book, first, last)`, inclusive. Serialized as a
+/// three-element array, `["Isa", 1, 39]`.
+pub type Span = (String, u16, u16);
+
 /// What a generated schedule walks. Serialized flat into the generator object:
-/// `{"scope":"canon"}` / `{"scope":"nt"}` / `{"scope":"books","books":["Ps","Prov"]}`.
+/// `{"scope":"canon"}` / `{"scope":"nt"}` / `{"scope":"books","books":["Ps","Prov"]}` /
+/// `{"scope":"spans","spans":[["Isa",1,39],["Ps",1,150]]}`. `Spans` is the
+/// reader's own plan (v0.83.0, additive): a build before it reports the file
+/// unreadable and leaves it where it lies, like any plan it cannot parse.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "scope", rename_all = "camelCase")]
 pub enum Scope {
     Canon,
     Nt,
     Books { books: Vec<String> },
+    Spans { spans: Vec<Span> },
 }
 
 /// The parameters a schedule is regenerated from on every load.
@@ -229,15 +237,23 @@ pub fn load_table(home: impl AsRef<Path>, id: &str) -> Option<PlanTable> {
 // ── the schedule walk ─────────────────────────────────────────────────────────
 
 /// The chapters a scope names, in canon order — a `Books` list is re-ordered
-/// whatever order it was written in. Books the corpus does not know are skipped
-/// rather than erred.
+/// whatever order it was written in, and so are `Spans` (see
+/// [`normalize_spans`]). Books the corpus does not know are skipped rather than
+/// erred.
 pub fn scope_chapters(scope: &Scope, words: &ChapterWords) -> Vec<(String, u16)> {
+    if let Scope::Spans { spans } = scope {
+        return normalize_spans(spans, words)
+            .into_iter()
+            .flat_map(|(b, first, last)| (first..=last).map(move |c| (b.clone(), c)))
+            .collect();
+    }
     let books: Vec<&str> = match scope {
         Scope::Canon => canon::BOOKS.iter().map(|b| b.id).collect(),
         Scope::Nt => canon::BOOKS[OT_NT_DIVIDE..].iter().map(|b| b.id).collect(),
         Scope::Books { books } => {
             canon::BOOKS.iter().map(|b| b.id).filter(|id| books.iter().any(|w| w == id)).collect()
         }
+        Scope::Spans { .. } => unreachable!("handled above"),
     };
     let mut out = Vec::new();
     for b in books {
@@ -246,6 +262,122 @@ pub fn scope_chapters(scope: &Scope, words: &ChapterWords) -> Vec<(String, u16)>
         }
     }
     out
+}
+
+/// A reader's spans made into a walk: canon order, each clamped to the chapters
+/// the corpus has, unknown books and empty runs dropped, and runs in one book
+/// that overlap or touch joined — so "Psalms 1–75" and "Psalms 50–150" added
+/// separately read every psalm once. Deterministic given the corpus, which is
+/// what lets the plan file keep the spans as written.
+pub fn normalize_spans(spans: &[Span], words: &ChapterWords) -> Vec<Span> {
+    let index = |b: &str| canon::BOOKS.iter().position(|x| x.id == b);
+    let mut clean: Vec<(usize, u16, u16)> = spans
+        .iter()
+        .filter_map(|(b, first, last)| {
+            let i = index(b)?;
+            let n = words.chapters(b);
+            let first = (*first).max(1);
+            let last = (*last).min(n);
+            (n > 0 && first <= last).then_some((i, first, last))
+        })
+        .collect();
+    clean.sort_unstable();
+    let mut out: Vec<(usize, u16, u16)> = Vec::new();
+    for (i, first, last) in clean {
+        match out.last_mut() {
+            Some((pi, _, plast)) if *pi == i && first <= plast.saturating_add(1) => *plast = (*plast).max(last),
+            _ => out.push((i, first, last)),
+        }
+    }
+    out.into_iter().map(|(i, first, last)| (canon::BOOKS[i].id.to_string(), first, last)).collect()
+}
+
+/// What a spans scope covers, in the reader's language: whole books collapse
+/// to "Isaiah–Malachi", a part of a book reads "Psalms 1–75", and the groups
+/// join with " · ". Empty for a scope that names no chapter the corpus has.
+pub fn describe_spans(spans: &[Span], words: &ChapterWords, lang: crate::i18n::Lang) -> String {
+    let index = |b: &str| canon::BOOKS.iter().position(|x| x.id == b).unwrap_or(usize::MAX);
+    let whole = |(b, first, last): &Span| *first == 1 && *last == words.chapters(b);
+    let mut groups: Vec<String> = Vec::new();
+    // Runs of consecutive whole books collapse into one "first–last" group.
+    let mut run: Option<(usize, usize)> = None; // canon indices of the run's ends
+    let flush = |run: &mut Option<(usize, usize)>, groups: &mut Vec<String>| {
+        if let Some((a, z)) = run.take() {
+            let name = |i: usize| crate::i18n::book_name(lang, canon::BOOKS[i].id);
+            groups.push(if a == z { name(a) } else { format!("{}–{}", name(a), name(z)) });
+        }
+    };
+    for span in normalize_spans(spans, words) {
+        let i = index(&span.0);
+        if whole(&span) {
+            match run {
+                Some((a, z)) if z + 1 == i => run = Some((a, i)),
+                _ => {
+                    flush(&mut run, &mut groups);
+                    run = Some((i, i));
+                }
+            }
+        } else {
+            flush(&mut run, &mut groups);
+            let (b, first, last) = &span;
+            let book = crate::i18n::book_name(lang, b);
+            groups.push(if first == last {
+                crate::i18n::t(lang, "ref.chapter", &[("book", &book), ("chapter", &first.to_string())])
+            } else {
+                format!("{book} {first}–{last}")
+            });
+        }
+    }
+    flush(&mut run, &mut groups);
+    groups.join(" · ")
+}
+
+/// A custom plan's display name — "Isaiah–Malachi · 60 days" — in the reader's
+/// language. Not stored: the file keeps the spans and the day count, and the
+/// name follows the interface language.
+pub fn custom_name(g: &Generator, words: &ChapterWords, lang: crate::i18n::Lang) -> Option<String> {
+    let Scope::Spans { spans } = &g.scope else { return None };
+    let scope = describe_spans(spans, words, lang);
+    Some(crate::i18n::plural(
+        lang,
+        "plans.customName.one",
+        "plans.customName.other",
+        u64::from(g.days),
+        &[("scope", &scope)],
+    ))
+}
+
+/// A reader's own schedule over `spans`, cut into `days`. No class: custom plans
+/// do not compete with the built-ins or each other. Refuses a scope with no
+/// chapter the corpus has, or no days — a plan that would start finished.
+pub fn custom(
+    spans: Vec<Span>,
+    days: u32,
+    words: &ChapterWords,
+    now: &str,
+    lang: Option<String>,
+) -> Result<Plan, Error> {
+    if days == 0 {
+        return Err(Error::Parse("a plan needs at least one day".into()));
+    }
+    if scope_chapters(&Scope::Spans { spans: spans.clone() }, words).is_empty() {
+        return Err(Error::Parse("a plan needs at least one chapter".into()));
+    }
+    Ok(Plan {
+        format: FORMAT.to_string(),
+        id: format!("custom-{}", store::new_id()),
+        kind: Kind::Schedule,
+        class: None,
+        generator: Some(Generator { scope: Scope::Spans { spans }, days }),
+        table: None,
+        started: now.to_string(),
+        lang,
+        done: Vec::new(),
+        done_on: Default::default(),
+        tag: None,
+        swept: Default::default(),
+        paused: false,
+    })
 }
 
 /// Cut an ordered chapter walk into `days` word-balanced days.
@@ -564,6 +696,50 @@ mod tests {
         let order = scope_chapters(&Scope::Books { books: vec!["Rev".into(), "Gen".into()] }, &w);
         assert_eq!(order.len(), 3);
         assert!(order.iter().all(|(b, _)| b == "Gen"));
+    }
+
+    #[test]
+    fn spans_normalize_to_a_canon_ordered_walk_with_no_chapter_twice() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        // Only Gen 1–3 exists here. Written out of order, overlapping, past the
+        // end, with an unknown book and an inverted run: one clean walk.
+        let spans: Vec<Span> =
+            vec![("Gen".into(), 2, 9), ("Rev".into(), 1, 22), ("Gen".into(), 1, 1), ("Gen".into(), 3, 2)];
+        assert_eq!(normalize_spans(&spans, &w), vec![("Gen".to_string(), 1, 3)]);
+        let order = scope_chapters(&Scope::Spans { spans: spans.clone() }, &w);
+        assert_eq!(order, vec![("Gen".to_string(), 1), ("Gen".to_string(), 2), ("Gen".to_string(), 3)]);
+        // Disjoint runs in one book stay two runs.
+        let two: Vec<Span> = vec![("Gen".into(), 1, 1), ("Gen".into(), 3, 3)];
+        assert_eq!(normalize_spans(&two, &w), vec![("Gen".to_string(), 1, 1), ("Gen".to_string(), 3, 3)]);
+        // The serialized shape is the frozen flat form.
+        let g = Generator { scope: Scope::Spans { spans: two }, days: 2 };
+        assert_eq!(
+            serde_json::to_string(&g).unwrap(),
+            r#"{"scope":"spans","spans":[["Gen",1,1],["Gen",3,3]],"days":2}"#
+        );
+    }
+
+    #[test]
+    fn a_custom_plan_is_named_from_its_spans_and_refuses_an_empty_one() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        let en = crate::i18n::Lang::En;
+        // A whole book is its name; a part names its chapters; one chapter is a chapter.
+        assert_eq!(describe_spans(&[("Gen".into(), 1, 3)], &w, en), "Genesis");
+        assert_eq!(describe_spans(&[("Gen".into(), 1, 2)], &w, en), "Genesis 1–2");
+        assert_eq!(describe_spans(&[("Gen".into(), 3, 3)], &w, en), "Genesis 3");
+        let p = custom(vec![("Gen".into(), 1, 2)], 2, &w, "2026-11-01T12:00:00Z", None).unwrap();
+        assert!(p.id.starts_with("custom-"));
+        assert_eq!(p.class, None, "no class: custom plans do not compete");
+        assert_eq!(custom_name(p.generator.as_ref().unwrap(), &w, en).unwrap(), "Genesis 1–2 · 2 days");
+        let one = custom(vec![("Gen".into(), 1, 2)], 1, &w, "2026-11-01T12:00:00Z", None).unwrap();
+        assert_eq!(custom_name(one.generator.as_ref().unwrap(), &w, en).unwrap(), "Genesis 1–2 · 1 day");
+        // The built-ins have no custom name.
+        assert_eq!(custom_name(&Generator { scope: Scope::Nt, days: 90 }, &w, en), None);
+        // Nothing to read, or no day to read it on, is refused — not started finished.
+        assert!(custom(vec![("Rev".into(), 1, 22)], 10, &w, "2026-11-01T12:00:00Z", None).is_err());
+        assert!(custom(vec![("Gen".into(), 1, 2)], 0, &w, "2026-11-01T12:00:00Z", None).is_err());
     }
 
     #[test]

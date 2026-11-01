@@ -29,6 +29,20 @@ struct WirePlans {
     running: Vec<WireRunning>,
     /// The catalogue the picker offers, with the class each occupies.
     builtins: Vec<WireBuiltin>,
+    /// The parts of the Bible a custom plan may be built from (additive):
+    /// `core::reading::SECTIONS` less the whole Bible, which is a built-in.
+    parts: Vec<WirePart>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WirePart {
+    /// Stable id (`law`, `psalms`, `gospelsActs`, …).
+    id: String,
+    /// Its name in the reader's language.
+    name: String,
+    /// The books it bundles, canon order, as OSIS ids.
+    books: Vec<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -40,6 +54,10 @@ struct WireRunning {
     class: Option<String>,
     /// When the plan was started; shown with the name for a set-aside plan.
     started: String,
+    /// A custom plan's display name in the reader's language — "Isaiah–Malachi ·
+    /// 60 days" (additive). Absent on a built-in, whose name is its `nameKey`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
     /// Set aside: holds its place, asks nothing (no chip, no today card —
     /// shells filter on this).
     paused: bool,
@@ -136,6 +154,7 @@ fn running_state(
         kind: plan.kind,
         class: plan.class.clone(),
         started: plan.started.clone(),
+        name: plan.generator.as_ref().and_then(|g| plan::custom_name(g, words, i18n::active())),
         paused: plan.paused,
         tag: plan.tag.clone(),
         done_today: None,
@@ -249,7 +268,12 @@ pub unsafe extern "C" fn plumbline_engine_plans_json(
                 kind: b.kind,
             })
             .collect();
-        out_json(&WirePlans { running, builtins })
+        let parts = reading::sections(words, &store)
+            .into_iter()
+            .filter(|sec| sec.id != "bible")
+            .map(|sec| WirePart { id: sec.id.to_string(), name: sec.name, books: sec.books })
+            .collect();
+        out_json(&WirePlans { running, builtins, parts })
     })
 }
 
@@ -311,6 +335,44 @@ pub unsafe extern "C" fn plumbline_engine_plan_start(
         match plan::write_plan(&home, &started) {
             Ok(()) => ptr::null_mut(),
             Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Start a custom schedule over `spans` — a JSON array of `[book, first, last]`
+/// runs, `[["Isa",1,39],["Ps",1,150]]` — cut into `days`. No class: it runs
+/// beside anything. Returns the new plan's id, or an error string prefixed with
+/// `!` (which no plan id can start with). A scope naming no chapter the corpus
+/// has, or zero days, is refused rather than started finished.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_plan_start_custom(
+    engine: *mut PlumblineEngine,
+    spans: *const c_char,
+    days: u32,
+    now: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let Some(engine) = engine.as_mut() else { return out_string("!null engine".into()) };
+        let Some(home) = engine.home.clone() else {
+            return out_string("!engine has no home directory (opened from bytes); cannot author".into());
+        };
+        let (Some(spans), Some(now)) = (opt_str(spans), opt_str(now)) else {
+            return out_string("!null or invalid argument".into());
+        };
+        let Ok(spans) = serde_json::from_str::<Vec<plan::Span>>(spans) else {
+            return out_string("!spans must be a JSON array of [book, first, last]".into());
+        };
+        let words = engine.reading_words();
+        let created = match plan::custom(spans, days, words, now, lang_stamp()) {
+            Ok(p) => p,
+            Err(e) => return out_string(format!("!{e}")),
+        };
+        match plan::write_plan(&home, &created) {
+            Ok(()) => out_string(created.id),
+            Err(e) => out_string(format!("!{e}")),
         }
     })
 }

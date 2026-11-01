@@ -322,3 +322,54 @@ fn merging_is_order_free_and_safe_to_repeat() {
     assert_eq!(merge(&ab, &laptop), Merged::default(), "restoring the same backup twice changed something");
     assert_eq!(merge(&ab, &ab), Merged::default());
 }
+
+#[test]
+fn hymn_favourites_union_and_honour_an_unstar() {
+    let path = crate::hymnal::FAVOURITES_REL_PATH;
+    let favs = |entries: &[(&str, &str)]| {
+        json!({"format": crate::hymnal::FAVOURITES_FORMAT,
+               "favourites": entries.iter().map(|(k, v)| (k.to_string(), Value::from(*v))).collect::<Map<_, _>>()})
+    };
+    // Each device starred one hymn; the laptop starred the phone's hymn too, later.
+    let phone = files(&[(path, favs(&[("amazing-grace", "2026-01-01T00:00:00Z")]))]);
+    let laptop = files(&[(
+        path,
+        favs(&[("amazing-grace", "2026-01-05T00:00:00Z"), ("ein-feste-burg", "2026-01-03T00:00:00Z")]),
+    )]);
+    let after = as_json(&apply(&phone, &merge(&phone, &laptop)));
+    let got = &after[path]["favourites"];
+    assert_eq!(got["amazing-grace"], "2026-01-01T00:00:00Z", "the earlier star is when it was starred");
+    assert_eq!(got["ein-feste-burg"], "2026-01-03T00:00:00Z", "a union: the laptop's star arrives");
+
+    // The phone unstarred Amazing Grace after the laptop starred it: the record
+    // wins, from either side.
+    let (tp, tv) = tombs(&[(&tomb::hymn_favourite("amazing-grace"), "2026-01-06T00:00:00Z")]);
+    let mut phone_unstarred = files(&[(path, favs(&[]))]);
+    phone_unstarred.insert(tp, pretty(&tv));
+    let after = as_json(&apply(&phone_unstarred, &merge(&phone_unstarred, &laptop)));
+    let got = &after[path]["favourites"];
+    assert!(got.get("amazing-grace").is_none(), "unstarred stays unstarred: {got}");
+    assert_eq!(got["ein-feste-burg"], "2026-01-03T00:00:00Z");
+
+    // Identical sides write nothing.
+    assert_eq!(merge(&laptop, &laptop), Merged::default());
+}
+
+#[test]
+fn the_day_ledger_takes_each_days_larger_count() {
+    let path = "reading/_days.json";
+    let ledger = |entries: &[(&str, u32, u16)]| {
+        json!({"format": crate::reading::LEDGER_FORMAT,
+               "days": entries.iter().map(|(d, w, c)| (d.to_string(), json!({"w": w, "c": c}))).collect::<Map<_, _>>()})
+    };
+    let phone = files(&[(path, ledger(&[("2026-01-01", 100, 2), ("2026-01-02", 50, 1)]))]);
+    let laptop = files(&[(path, ledger(&[("2026-01-02", 500, 4), ("2026-01-03", 20, 1)]))]);
+    let after = as_json(&apply(&phone, &merge(&phone, &laptop)));
+    let days = &after[path]["days"];
+    assert_eq!(days["2026-01-01"], json!({"w": 100, "c": 2}));
+    assert_eq!(days["2026-01-02"], json!({"w": 500, "c": 4}), "the larger, not the sum");
+    assert_eq!(days["2026-01-03"], json!({"w": 20, "c": 1}));
+    // Restoring the same backup again changes nothing.
+    let again = files(&after.iter().map(|(p, v)| (p.as_str(), v.clone())).collect::<Vec<_>>());
+    assert_eq!(merge(&again, &laptop), Merged::default());
+}

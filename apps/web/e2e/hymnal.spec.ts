@@ -108,6 +108,66 @@ test("the finder narrows by language — code, English name and endonym alike", 
   expect(combined).toBeLessThanOrEqual(german);
 });
 
+test("language chips narrow the book and pick the text; a star files a favourite", async ({ page }) => {
+  await boot(page);
+  await openHymnal(page);
+  const all = await page.locator(".row").count();
+  const german = await page.evaluate(async () => {
+    const ix = await (window as any).__plumbline.rpc.call("hymnal");
+    return (ix?.hymns ?? []).filter((h: any) => Object.keys(h.titles ?? {}).includes("de")).length;
+  });
+  expect(german).toBeGreaterThan(0);
+  expect(german).toBeLessThan(all);
+
+  // The chip row: All, one chip per language the book carries, and the stars.
+  const chips = page.locator(".filters .chip");
+  await expect(chips.first()).toHaveText("All");
+  await expect(chips.first()).toHaveClass(/on/);
+  await page.locator(".filters .chip", { hasText: "Deutsch" }).click();
+  await expect(page.locator(".row")).toHaveCount(german);
+  // Picking a language also picks that language's text: the rows now show the
+  // German titles, which is what the engine's index files under "de".
+  const firstDe = await page.evaluate(async () => {
+    const ix = await (window as any).__plumbline.rpc.call("hymnal");
+    return (ix?.hymns ?? []).find((h: any) => Object.keys(h.titles ?? {}).includes("de"))?.titles?.de ?? null;
+  });
+  await expect(page.locator(".row .rtitle").first()).toHaveText(firstDe as string);
+  // The finder still works inside the chip's slice.
+  await page.getByLabel("Find a hymn").fill("zzzznotahymn");
+  await expect(page.locator(".row")).toHaveCount(0);
+  await page.getByLabel("Find a hymn").fill("");
+  await page.locator(".filters .chip", { hasText: "All" }).click();
+  await expect(page.locator(".row")).toHaveCount(all);
+
+  // No favourites yet: the chip explains itself rather than showing an empty list.
+  const faves = page.locator(".filters .chip.faves");
+  await faves.click();
+  await expect(page.locator(".empty")).toHaveText(/No favourite hymns yet/);
+  await faves.click();
+
+  // Star the first hymn from its page, come back: it is marked, and the chip finds it.
+  const title = ((await page.locator(".row .rtitle").first().textContent()) ?? "").trim();
+  await page.locator(".row").first().click();
+  await expect(page.locator(".stanza").first()).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Add to favourites" }).click();
+  await expect(page.getByRole("button", { name: "Remove from favourites" })).toBeVisible();
+  await page.getByRole("button", { name: "Back to the hymn list" }).click();
+  await expect(page.locator(".row").first().locator(".rstar")).toBeVisible();
+  await faves.click();
+  await expect(page.locator(".row")).toHaveCount(1);
+  await expect(page.locator(".row .rtitle")).toHaveText(title);
+  // In the home, so it is what the backup carries — not browser storage.
+  const ids = await page.evaluate(async () => (await (window as any).__plumbline.rpc.call("hymnFavourites"))?.ids ?? []);
+  expect(ids).toHaveLength(1);
+
+  // Unstar from the page: the list empties again.
+  await page.locator(".row").first().click();
+  await page.getByRole("button", { name: "Remove from favourites" }).click();
+  await expect(page.getByRole("button", { name: "Add to favourites" })).toBeVisible();
+  await page.getByRole("button", { name: "Back to the hymn list" }).click();
+  await expect(page.locator(".empty")).toHaveText(/No favourite hymns yet/);
+});
+
 test("chords appear on request and transpose by a real interval", async ({ page }) => {
   await boot(page);
   await openHymnal(page);

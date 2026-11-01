@@ -159,6 +159,10 @@ pace (flipping past credits nothing, and neither does leaving it open), and 90%
 counts as read through. Read on paper? Long-press a chapter's first verse and
 choose **Mark chapter read…** to set the date yourself.
 
+The Study screen also shows your **pace** — words and chapters a day over the
+last 7 days, the last 30, or since your first read — counting chapters read
+through, the same way the map does.
+
 It all travels in the backup zip (`reading/`), and nobody but you ever sees it.
 
 ## Where everything lives
@@ -168,7 +172,8 @@ and plumblinebible.ch each keep their own. **≡ ▸ Backup** exports it all as 
 file and restores it on any device.
 
 Inside that store, **yours**: `weaves/`, `threads/`, `tags/`, `notes/`,
-`memory/`, `reading/`, `plans/`, `devotionals/`, `deleted/` (the deletion
+`memory/`, `reading/`, `plans/`, `devotionals/`, `hymnal/` (favourite hymns),
+`deleted/` (the deletion
 records a restore honours) and `.config/plumbline/config.json` (text size, open
 panes, theme). Shipped/regenerable: `data/` and the `*.idxcache` startup cache.
 
