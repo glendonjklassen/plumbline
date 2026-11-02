@@ -57,6 +57,7 @@ use plumbline_rnd::{bridge, burst, concept, morph};
 pub mod backup;
 pub mod devotionals;
 pub mod dwell;
+pub mod hymn_favourites;
 pub mod memory_today;
 pub mod notes_abi;
 pub mod plans;

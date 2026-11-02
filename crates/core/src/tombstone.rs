@@ -167,6 +167,10 @@ pub fn devotional(id: &str) -> String {
 pub fn reading(book: &str, chapter: u16) -> String {
     format!("reading:{}|{chapter}", book.to_lowercase())
 }
+/// A hymn taken out of the favourites, by its hymnal id.
+pub fn hymn_favourite(id: &str) -> String {
+    format!("hymnfav:{id}")
+}
 
 /// A tag member's target, spelled one way for both a deletion record and a
 /// merge: `verse:John 3:16` or `concept:H3068`.

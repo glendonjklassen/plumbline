@@ -114,6 +114,35 @@
     return new Date(y, m - 1, d).toLocaleDateString(dateLocale(), { day: "numeric", month: "short", year: "numeric" });
   }
 
+  // The reader's pace, from the core's day ledger (`reading::pace`): words and
+  // chapters a day over three windows ending today. Absent until something has
+  // been read through. The window picked is a per-viewer convenience, so it
+  // lives in this browser and a failure to store it is harmless.
+  type PaceWindow = { id: string; days: number; words: number; chapters: number; wordsPerDay: number; chaptersPerDay: number };
+  const paceWindows = $derived((booksQ?.pace?.windows ?? []) as PaceWindow[]);
+  const PACE_KEY = "plumbline:paceWindow";
+  const PACE_IDS = ["week", "month", "all"] as const;
+  function readPaceWindow(): string {
+    try {
+      const v = localStorage.getItem(PACE_KEY);
+      return v && (PACE_IDS as readonly string[]).includes(v) ? v : "month";
+    } catch {
+      return "month";
+    }
+  }
+  let paceId = $state(readPaceWindow());
+  function pickPace(id: string): void {
+    paceId = id;
+    try {
+      localStorage.setItem(PACE_KEY, id);
+    } catch {
+      /* per-viewer convenience only */
+    }
+  }
+  const pace = $derived(paceWindows.find((w) => w.id === paceId) ?? paceWindows[0] ?? null);
+  const nf0 = $derived(new Intl.NumberFormat(lang(), { maximumFractionDigits: 0 }));
+  const nf1 = $derived(new Intl.NumberFormat(lang(), { maximumFractionDigits: 1 }));
+
   // The lifetime counter: how many times this reader has been through the whole
   // Bible. `bibleReads` is what they had read BEFORE the map's own count, asked
   // once and added to every part alike; everything after is the map's. -1 is
@@ -369,6 +398,24 @@
                 <span class="cov-pace">{t("explore.finishPace", { start: dayLabel(forecast.start) })}</span>
               {/if}
             </button>
+          {/if}
+          {#if pace}
+            <!-- Its own block, not inside the coverage button: a chip row cannot
+                 sit inside a button. Chapters read through only, as the map counts. -->
+            <div class="pace" data-surface="pace">
+              <div class="pace-head">
+                <span class="pace-title">{t("explore.pace")}</span>
+                <div class="pace-chips" role="group" aria-label={t("explore.pace")}>
+                  {#each paceWindows as w (w.id)}
+                    <button class="chip" class:on={w.id === pace.id} aria-pressed={w.id === pace.id} onclick={() => pickPace(w.id)}>
+                      {t(w.id === "week" ? "explore.paceWeek" : w.id === "month" ? "explore.paceMonth" : "explore.paceAll")}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+              <p class="pace-line">{t("explore.paceWords", { n: nf0.format(pace.wordsPerDay) })}</p>
+              <p class="pace-line">{t("explore.paceChapters", { n: nf1.format(pace.chaptersPerDay) })}</p>
+            </div>
           {/if}
         </div>
       {/if}
@@ -681,6 +728,52 @@
     height: 100%;
     border-radius: 999px;
     background: var(--readDone, #6f8f6a);
+  }
+  /* The pace block: a title and its window chips, then two plain lines. */
+  .pace {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 10px;
+    background: var(--popupPaper, #f2eee6);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .pace-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .pace-title {
+    font-size: calc(13.5px * var(--uiScale, 1));
+    color: var(--section-header, #a0894a);
+    font-variant: small-caps;
+    letter-spacing: 0.04em;
+  }
+  .pace-chips {
+    display: flex;
+    gap: 6px;
+  }
+  .pace .chip {
+    font-size: calc(12.5px * var(--uiScale, 1));
+    padding: 5px 9px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    background: var(--paper, #fcf9f4);
+    color: var(--faded, #8a8276);
+  }
+  .pace .chip.on {
+    color: var(--gold, #9e7d38);
+    border-color: var(--gold, #9e7d38);
+    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+  }
+  .pace-line {
+    margin: 0;
+    font-size: calc(15px * var(--uiScale, 1));
+    color: var(--ink, #211f1a);
   }
   /* The forecast under the bar: the date in ink, its basis quieter. */
   .cov-forecast {

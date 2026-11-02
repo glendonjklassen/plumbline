@@ -237,4 +237,26 @@ test("coverage counts the chapters actually read", async ({ page }) => {
   const width = await page.locator(".cov-fill").evaluate((el) => (el as HTMLElement).style.width);
   expect(Number.parseFloat(width)).toBeGreaterThan(3);
   expect(Number.parseFloat(width)).toBeLessThan(6);
+
+  // The pace rides the same read: fifty chapters logged on one day in 2026-08 lie
+  // outside the week and the month, so those windows read zero and "All time"
+  // carries them. Chapters a day is a real average over the days since that date.
+  const pace = page.locator('[data-surface="pace"]');
+  await expect(pace).toBeVisible();
+  await pace.locator(".chip", { hasText: "7 days" }).click();
+  await expect(pace).toContainText("0 chapters a day");
+  await pace.locator(".chip", { hasText: "All time" }).click();
+  const line = (await pace.locator(".pace-line").nth(1).textContent()) ?? "";
+  const perDay = Number.parseFloat(line.replace(",", "."));
+  expect(perDay).toBeGreaterThan(0);
+  expect(perDay).toBeLessThan(50);
+  // Words a day is the chapters' own words, not a constant: Genesis 1–50 is
+  // about 38,000 words, spread over the days since that date.
+  const words = Number.parseInt(((await pace.locator(".pace-line").nth(0).textContent()) ?? "").replace(/[^\d]/g, ""), 10);
+  expect(words).toBeGreaterThan(10);
+  expect(words).toBeLessThan(38_000);
+  // The window picked survives a revisit (a per-viewer convenience).
+  await page.reload();
+  await openStudy(page);
+  await expect(page.locator('[data-surface="pace"] .chip.on')).toHaveText("All time", { timeout: 15_000 });
 });

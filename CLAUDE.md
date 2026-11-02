@@ -45,8 +45,10 @@
   edited and deleted by id.
 - **Restore merges** (`crates/core/src/merge.rs`): it combines the backup with
   the device instead of writing over it — notes by id (newer edit wins, different
-  ids all kept), unions for tag members, weave links and plan days, per-chapter
-  maxima for reading, the backup's settings with both histories. Every deletion
+  ids all kept), unions for tag members, weave links, plan days and hymn
+  favourites, per-chapter maxima for reading (and per-day maxima for the
+  reading day ledger `reading/_days.json`, which the pace reads), the backup's
+  settings with both histories. Every deletion
   is recorded in `deleted/tombstones.json` (`crates/core/src/tombstone.rs`) by the
   ABI endpoint that did it, so a restore never brings it back. Records are kept,
   not pruned. A new delete path must record its tombstone, or merges will

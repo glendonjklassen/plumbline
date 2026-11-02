@@ -78,11 +78,107 @@
     return ((p?.builtins ?? []) as any[]).filter((b) => !runningClasses.has(b.class));
   }
 
-  /** A schedule plan's display name, from the builtin catalogue (its `nameKey`
-   *  is a catalogue id); falls back to the raw id for an unknown plan. */
-  function planName(id: string): string {
-    const b = ((plans?.builtins ?? []) as any[]).find((x) => x.id === id);
-    return b ? t(b.nameKey) : id;
+  /** A schedule plan's display name: a custom plan's own (the engine spells it
+   *  in the reader's language), else the builtin catalogue's `nameKey`; falls
+   *  back to the raw id for an unknown plan. */
+  function planName(p: any): string {
+    if (typeof p.name === "string" && p.name) return p.name;
+    const b = ((plans?.builtins ?? []) as any[]).find((x) => x.id === p.id);
+    return b ? t(b.nameKey) : p.id;
+  }
+
+  // ── the custom plan builder ─────────────────────────────────────────────────
+  //
+  // Parts of the Bible (the reading map's sections, off the plans wire) and
+  // chapter ranges, added up into spans, and a day count. The engine normalizes
+  // the spans — canon order, overlaps joined, clamped to the corpus — so the
+  // builder only has to collect what the reader points at.
+  let customOpen = $state(false);
+  let chosenParts = $state(new Set<string>());
+  let ranges = $state<[string, number, number][]>([]);
+  let fromBook = $state("Gen");
+  let fromCh = $state(1);
+  let toBook = $state("Gen");
+  let toCh = $state(1);
+  let days = $state(30);
+
+  type Book = { id: string; name: string; chapters: number };
+  const books = $derived(((s.q("toc")?.books ?? []) as Book[]) ?? []);
+  const parts = $derived(((plans?.parts ?? []) as { id: string; name: string; books: string[] }[]) ?? []);
+  const bookIndex = (id: string): number => books.findIndex((b) => b.id === id);
+  const bookName = (id: string): string => books.find((b) => b.id === id)?.name ?? id;
+  const chaptersOf = (id: string): number => books.find((b) => b.id === id)?.chapters ?? 0;
+
+  function togglePart(id: string): void {
+    const next = new Set(chosenParts);
+    if (!next.delete(id)) next.add(id);
+    chosenParts = next;
+  }
+
+  /** The range row as spans: one book, or the first book from its chapter,
+   *  every book between whole, the last book to its chapter. Ends given
+   *  backwards are swapped rather than refused. */
+  function addRange(): void {
+    let [a, ac, z, zc] = [fromBook, fromCh, toBook, toCh];
+    if (bookIndex(a) > bookIndex(z) || (a === z && ac > zc)) [a, ac, z, zc] = [z, zc, a, ac];
+    const clamp = (b: string, c: number) => Math.min(Math.max(1, Math.floor(c || 1)), chaptersOf(b) || 1);
+    ac = clamp(a, ac);
+    zc = clamp(z, zc);
+    const out: [string, number, number][] = [];
+    if (a === z) out.push([a, ac, zc]);
+    else {
+      out.push([a, ac, chaptersOf(a)]);
+      for (let i = bookIndex(a) + 1; i < bookIndex(z); i++) out.push([books[i].id, 1, books[i].chapters]);
+      out.push([z, 1, zc]);
+    }
+    ranges = [...ranges, ...out];
+  }
+  function removeRange(i: number): void {
+    ranges = ranges.filter((_, k) => k !== i);
+  }
+  /** "Isaiah" for a whole book, "Psalms 1–75" for part of one, "Psalms 23" for one chapter. */
+  function rangeLabel([b, f, l]: [string, number, number]): string {
+    if (f === 1 && l === chaptersOf(b)) return bookName(b);
+    if (f === l) return t("ref.chapter", { book: bookName(b), chapter: f });
+    return `${bookName(b)} ${f}–${l}`;
+  }
+
+  const spans = $derived.by((): [string, number, number][] => {
+    const out: [string, number, number][] = [];
+    for (const p of parts) {
+      if (!chosenParts.has(p.id)) continue;
+      for (const b of p.books) {
+        const n = chaptersOf(b);
+        if (n > 0) out.push([b, 1, n]);
+      }
+    }
+    return [...out, ...ranges];
+  });
+  /** Chapters the plan would hold, each counted once — a part and a range may overlap. */
+  const chapterTotal = $derived.by(() => {
+    const seen = new Set<string>();
+    for (const [b, f, l] of spans) for (let c = f; c <= l; c++) seen.add(`${b} ${c}`);
+    return seen.size;
+  });
+  const perDay = $derived(days >= 1 && chapterTotal > 0 ? chapterTotal / days : 0);
+  const nf = $derived(new Intl.NumberFormat(lang()));
+  const nf1 = $derived(new Intl.NumberFormat(lang(), { maximumFractionDigits: 1 }));
+  const canStart = $derived(chapterTotal > 0 && days >= 1);
+
+  function resetBuilder(): void {
+    customOpen = false;
+    chosenParts = new Set();
+    ranges = [];
+    days = 30;
+  }
+  async function startCustom(): Promise<void> {
+    if (!canStart) return;
+    const label = [...parts.filter((p) => chosenParts.has(p.id)).map((p) => p.name), ...ranges.map(rangeLabel)].join(" · ");
+    // Plain arrays, not the $state proxies `ranges` holds: the call crosses to
+    // the engine worker by structured clone, which cannot copy a Proxy.
+    const plain = spans.map(([b, f, l]): [string, number, number] => [b, Number(f), Number(l)]);
+    const ok = await s.startCustomPlan(plain, Math.floor(Number(days)), label);
+    if (ok) resetBuilder();
   }
 
   /** "3 Aug 2026" in the reader's language — how a run is told apart from any
@@ -168,7 +264,7 @@
       {#each schedules as p (p.id)}
         <div class="plan-card" class:paused={p.paused}>
           <div class="plan-head">
-            <span class="plan-name">{planName(p.id)}</span>
+            <span class="plan-name">{planName(p)}</span>
             <span class="plan-prog">{t("plans.dayProgress", { done: p.scheduleProgress[0], total: p.scheduleProgress[1] })}</span>
           </div>
           <!-- A run is its name plus the day it began — what tells "the NT in 90
@@ -191,12 +287,12 @@
           <div class="plan-actions">
             {#if p.today}
               {#if p.paused}
-                <button onclick={() => s.setPlanPaused(p.id, false, planName(p.id))}>{t("plans.resume")}</button>
+                <button onclick={() => s.setPlanPaused(p.id, false, planName(p))}>{t("plans.resume")}</button>
               {:else}
-                <button onclick={() => s.setPlanPaused(p.id, true, planName(p.id))}>{t("plans.pause")}</button>
+                <button onclick={() => s.setPlanPaused(p.id, true, planName(p))}>{t("plans.pause")}</button>
               {/if}
             {/if}
-            <button class="danger" onclick={() => s.stopPlan(p.id, planName(p.id))}>{t("plans.stop")}</button>
+            <button class="danger" onclick={() => s.stopPlan(p.id, planName(p))}>{t("plans.stop")}</button>
           </div>
         </div>
       {/each}
@@ -236,6 +332,68 @@
       {/each}
       {#if offerable(plans).length === 0}
         <p class="hint">{t("plans.classFull")}</p>
+      {/if}
+      {#if !customOpen}
+        <button class="plan-builtin" onclick={() => (customOpen = true)} data-surface="custom-plan-open">
+          <span class="plan-name">{t("plans.custom")}</span>
+          <span class="plan-add">{t("plans.start")}</span>
+        </button>
+      {:else}
+        <div class="plan-card builder" data-surface="custom-plan">
+          <div class="plan-head"><span class="plan-name">{t("plans.custom")}</span></div>
+          <p class="hint">{t("plans.customHint")}</p>
+
+          <h4 class="bsub">{t("plans.customParts")}</h4>
+          <div class="chips" role="group" aria-label={t("plans.customParts")}>
+            {#each parts as p (p.id)}
+              <button class="chip" class:on={chosenParts.has(p.id)} aria-pressed={chosenParts.has(p.id)} onclick={() => togglePart(p.id)}>
+                {p.name}
+              </button>
+            {/each}
+          </div>
+
+          <h4 class="bsub">{t("plans.customRange")}</h4>
+          <div class="range" role="group" aria-label={t("plans.customRange")}>
+            <label class="rlabel">{t("plans.customFrom")}
+              <select bind:value={fromBook} onchange={() => (fromCh = Math.min(fromCh, chaptersOf(fromBook) || 1))} aria-label={t("plans.customFrom")}>
+                {#each books as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
+              </select>
+              <input type="number" min="1" max={chaptersOf(fromBook) || 1} bind:value={fromCh} aria-label={t("plans.customFrom")} />
+            </label>
+            <label class="rlabel">{t("plans.customTo")}
+              <select bind:value={toBook} onchange={() => (toCh = Math.min(toCh, chaptersOf(toBook) || 1))} aria-label={t("plans.customTo")}>
+                {#each books as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
+              </select>
+              <input type="number" min="1" max={chaptersOf(toBook) || 1} bind:value={toCh} aria-label={t("plans.customTo")} />
+            </label>
+            <button class="badd" onclick={addRange}>{t("plans.customAdd")}</button>
+          </div>
+
+          <h4 class="bsub">{t("plans.customChosen")}</h4>
+          {#if spans.length === 0}
+            <p class="hint">{t("plans.customNone")}</p>
+          {:else}
+            <ul class="chosen">
+              {#each parts.filter((p) => chosenParts.has(p.id)) as p (p.id)}
+                <li><span>{p.name}</span><button class="bx" aria-label={t("plans.customRemove", { name: p.name })} onclick={() => togglePart(p.id)}>✕</button></li>
+              {/each}
+              {#each ranges as r, i (i)}
+                <li><span>{rangeLabel(r)}</span><button class="bx" aria-label={t("plans.customRemove", { name: rangeLabel(r) })} onclick={() => removeRange(i)}>✕</button></li>
+              {/each}
+            </ul>
+          {/if}
+
+          <label class="rlabel days">{t("plans.customDays")}
+            <input type="number" min="1" max="3650" bind:value={days} aria-label={t("plans.customDays")} />
+          </label>
+          {#if chapterTotal > 0}
+            <p class="summary">{t("plans.customSummary", { chapters: nf.format(chapterTotal), perDay: nf1.format(perDay) })}</p>
+          {/if}
+          <div class="plan-actions">
+            <button onclick={resetBuilder}>{t("plans.customCancel")}</button>
+            <button class="primary" disabled={!canStart} onclick={startCustom}>{t("plans.customStart")}</button>
+          </div>
+        </div>
       {/if}
     </div>
   </div>
@@ -371,5 +529,102 @@
     color: var(--gold, #9e7d38);
     font-size: calc(13px * var(--uiScale, 1));
     white-space: nowrap;
+  }
+  /* ── the custom plan builder ─────────────────────────────────────────── */
+  .builder .hint {
+    margin: 0;
+  }
+  .bsub {
+    margin: 6px 0 0;
+    font-size: calc(12.5px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .chip {
+    font-size: calc(13px * var(--uiScale, 1));
+    padding: 6px 10px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    background: var(--paper, #fcf9f4);
+    color: var(--faded, #8a8276);
+  }
+  .chip.on {
+    color: var(--gold, #9e7d38);
+    border-color: var(--gold, #9e7d38);
+    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+  }
+  .range {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 8px 12px;
+  }
+  .rlabel {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: calc(12.5px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+  }
+  .rlabel select,
+  .rlabel input {
+    font-size: calc(14px * var(--uiScale, 1));
+    padding: 6px 8px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
+  }
+  .rlabel input {
+    width: 5.5em;
+  }
+  .rlabel select {
+    max-width: 11em;
+  }
+  .badd,
+  .plan-actions button.primary {
+    border: 1px solid var(--gold, #9e7d38);
+    border-radius: 6px;
+    padding: 7px 14px;
+    background: var(--paper, #fcf9f4);
+    color: var(--gold, #9e7d38);
+    font-size: calc(13.5px * var(--uiScale, 1));
+  }
+  .plan-actions button.primary:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .chosen {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .chosen li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0 4px 8px;
+    border-inline-start: 2px solid var(--rule, #d8cba8);
+    font-size: calc(14px * var(--uiScale, 1));
+  }
+  .bx {
+    color: var(--faded, #8a8276);
+    padding: 4px 10px;
+    font-size: calc(13px * var(--uiScale, 1));
+  }
+  .summary {
+    margin: 0;
+    font-size: calc(13.5px * var(--uiScale, 1));
+    color: var(--ink, #211f1a);
   }
 </style>

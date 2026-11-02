@@ -20,7 +20,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::Error;
 
@@ -318,9 +318,98 @@ pub fn transpose_key(key: &str, semis: i32) -> String {
     out
 }
 
+// ── favourites ────────────────────────────────────────────────────────────────
+//
+// The reader's own hymns, in the home rather than the browser: they ride the
+// backup zip and merge on restore like a tag's members. One file, a map of hymn
+// id → the stamp it was starred at, so a merge is a union and a deletion record
+// ([`crate::tombstone::hymn_favourite`]) can outrank a star by date.
+
+/// The favourites file's frozen format tag.
+pub const FAVOURITES_FORMAT: &str = "plumbline-hymn-favourites-v1";
+/// Where the favourites live, home-relative.
+pub const FAVOURITES_REL_PATH: &str = "hymnal/favourites.json";
+
+#[derive(Serialize, Deserialize)]
+struct FavouritesDoc {
+    format: String,
+    /// Hymn id → `YYYY-MM-DDThh:mm:ssZ` when it was starred.
+    #[serde(default)]
+    favourites: BTreeMap<String, String>,
+}
+
+/// Parse a favourites file's bytes. Wrong tag or unreadable → empty.
+pub fn parse_favourites(bytes: &[u8]) -> BTreeMap<String, String> {
+    serde_json::from_slice::<FavouritesDoc>(bytes)
+        .ok()
+        .filter(|d| d.format == FAVOURITES_FORMAT)
+        .map(|d| d.favourites)
+        .unwrap_or_default()
+}
+
+/// The favourites file's bytes for a map.
+pub fn favourites_to_bytes(favourites: &BTreeMap<String, String>) -> Vec<u8> {
+    let doc = FavouritesDoc { format: FAVOURITES_FORMAT.to_string(), favourites: favourites.clone() };
+    (serde_json::to_string_pretty(&doc).unwrap_or_default() + "\n").into_bytes()
+}
+
+/// The reader's favourite hymns, id → stamp. A missing file is no favourites.
+pub fn load_favourites(home: impl AsRef<Path>) -> BTreeMap<String, String> {
+    std::fs::read(home.as_ref().join(FAVOURITES_REL_PATH)).map(|b| parse_favourites(&b)).unwrap_or_default()
+}
+
+/// Star (`on`) or unstar a hymn at `now`, persisting. Answers the stamp the entry
+/// had before, when something changed — `Some(old)` on an unstar is what the
+/// caller records a deletion against; `Some("")` on a fresh star. `None` when the
+/// file already said so (a double tap), and nothing was written.
+pub fn set_favourite(home: impl AsRef<Path>, id: &str, on: bool, now: &str) -> Result<Option<String>, Error> {
+    let home = home.as_ref();
+    let mut favs = load_favourites(home);
+    let before = match (favs.get(id).cloned(), on) {
+        (Some(_), true) | (None, false) => return Ok(None),
+        (None, true) => {
+            favs.insert(id.to_string(), now.to_string());
+            String::new()
+        }
+        (Some(old), false) => {
+            favs.remove(id);
+            old
+        }
+    };
+    let path = home.join(FAVOURITES_REL_PATH);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| Error::Io { path: dir.display().to_string(), source: e })?;
+    }
+    crate::store::write_atomic_bytes(path, &favourites_to_bytes(&favs))?;
+    Ok(Some(before))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn favourites_star_unstar_and_survive_a_round_trip() {
+        let home = std::env::temp_dir().join(format!("plumbline-hymnfav-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        assert!(load_favourites(&home).is_empty());
+        assert_eq!(set_favourite(&home, "amazing-grace", true, "2026-11-01T10:00:00Z").unwrap(), Some(String::new()));
+        // A second star is a double tap: nothing changes, nothing is written.
+        assert_eq!(set_favourite(&home, "amazing-grace", true, "2026-11-01T11:00:00Z").unwrap(), None);
+        assert_eq!(load_favourites(&home).get("amazing-grace").map(String::as_str), Some("2026-11-01T10:00:00Z"));
+        // Unstarring hands back the stamp the star had, for the deletion record.
+        assert_eq!(
+            set_favourite(&home, "amazing-grace", false, "2026-11-02T10:00:00Z").unwrap(),
+            Some("2026-11-01T10:00:00Z".to_string())
+        );
+        assert!(load_favourites(&home).is_empty());
+        assert_eq!(set_favourite(&home, "amazing-grace", false, "2026-11-02T10:00:00Z").unwrap(), None);
+        // The file is the frozen shape, and a wrong tag reads as no favourites.
+        let raw = std::fs::read(home.join(FAVOURITES_REL_PATH)).unwrap();
+        assert!(String::from_utf8_lossy(&raw).contains(FAVOURITES_FORMAT));
+        assert!(parse_favourites(br#"{"format":"plumbline-hymn-favourites-v9","favourites":{"x":"2026"}}"#).is_empty());
+        let _ = std::fs::remove_dir_all(&home);
+    }
 
     const SAMPLE: &str = r##"{
       "format": "hymnal-v1",

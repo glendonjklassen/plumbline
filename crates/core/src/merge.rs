@@ -11,7 +11,8 @@
 //! | weaves | matched by id (else name); links are a union |
 //! | threads, memory cards | the newer one wins, whole |
 //! | plans, devotional runs | done days are a union |
-//! | reading | per chapter: furthest reached, longest dwell, latest dates |
+//! | reading | per chapter: furthest reached, longest dwell, latest dates; the day ledger takes each day's larger count |
+//! | hymn favourites | a union, each star at its earlier stamp |
 //! | settings | the backup's, with both reading histories combined |
 //!
 //! Deletion records ([`crate::tombstone`]) from both sides are combined first,
@@ -85,6 +86,7 @@ pub fn merge(local: &Files, incoming: &Files) -> Merged {
             Kind::Plans => runs(&mut out, &records, l, i, crate::plan::FORMAT, tomb::plan, "doneOn"),
             Kind::Devotionals => runs(&mut out, &records, l, i, crate::devotional::RUN_FORMAT, tomb::devotional, ""),
             Kind::Reading => reading(&mut out, &records, l, i),
+            Kind::HymnFavourites => hymn_favourites(&mut out, &records, l, i),
             Kind::Config => other(&mut out, l, i, true),
             Kind::Other => other(&mut out, l, i, false),
         }
@@ -103,6 +105,7 @@ enum Kind {
     Plans,
     Devotionals,
     Reading,
+    HymnFavourites,
     Config,
     Other,
 }
@@ -122,6 +125,7 @@ fn kind_of(path: &str) -> Kind {
         _ if in_dir("plans/") => Kind::Plans,
         _ if in_dir("devotionals/") => Kind::Devotionals,
         _ if in_dir("reading/") => Kind::Reading,
+        _ if path == crate::hymnal::FAVOURITES_REL_PATH => Kind::HymnFavourites,
         _ => Kind::Other,
     }
 }
@@ -676,6 +680,30 @@ fn reading(out: &mut Out, records: &BTreeMap<String, String>, l: &[(&str, &[u8])
     for p in paths {
         let lv: Option<Value> = lm.get(p).and_then(|b| serde_json::from_slice(b).ok());
         let iv: Option<Value> = im.get(p).and_then(|b| serde_json::from_slice(b).ok());
+        if file_name(p) == crate::reading::LEDGER_FILE {
+            // The day ledger: each day's larger count. Not the sum — a backup
+            // restored twice would double every day — so two devices reading
+            // different chapters on one day under-count, and never over.
+            let lv = lm.get(p).and_then(|b| crate::reading::parse_ledger(b));
+            let iv = im.get(p).and_then(|b| crate::reading::parse_ledger(b));
+            match (lv, iv) {
+                (None, None) => {
+                    if let Some(b) = im.get(p) {
+                        unparsed(out, &local_paths, p, b);
+                    }
+                }
+                (lv, iv) => {
+                    let mut days = lv.unwrap_or_default();
+                    for (d, c) in iv.unwrap_or_default() {
+                        let e = days.entry(d).or_default();
+                        e.words = e.words.max(c.words);
+                        e.chapters = e.chapters.max(c.chapters);
+                    }
+                    out.put(p.to_string(), crate::reading::ledger_to_bytes(&days));
+                }
+            }
+            continue;
+        }
         if file_name(p) == "_since.json" {
             // When the reader started: the earlier of the two.
             match (&lv, &iv) {
@@ -720,6 +748,34 @@ fn reading(out: &mut Out, records: &BTreeMap<String, String>, l: &[(&str, &[u8])
         v.as_object_mut().unwrap().insert("chapters".into(), Value::Array(chapters));
         out.put_json(p.to_string(), &v);
     }
+}
+
+// ── hymn favourites ──────────────────────────────────────────────────────────
+
+/// One file, a map of hymn id → stamp. The union of both sides, each star at
+/// its earlier stamp (the first device to star it is when it was starred), minus
+/// any star a deletion record is at least as new as — so a hymn unstarred on the
+/// phone after the laptop starred it stays unstarred.
+fn hymn_favourites(out: &mut Out, records: &BTreeMap<String, String>, l: &[(&str, &[u8])], i: &[(&str, &[u8])]) {
+    let path = crate::hymnal::FAVOURITES_REL_PATH;
+    let lm = l.iter().find(|(p, _)| *p == path).map(|(_, b)| crate::hymnal::parse_favourites(b));
+    let im = i.iter().find(|(p, _)| *p == path).map(|(_, b)| crate::hymnal::parse_favourites(b));
+    if lm.is_none() && im.is_none() {
+        return;
+    }
+    let mut merged: BTreeMap<String, String> = BTreeMap::new();
+    for side in [&lm, &im] {
+        for (id, stamp) in side.iter().flatten() {
+            match merged.get(id) {
+                Some(have) if have <= stamp => {}
+                _ => {
+                    merged.insert(id.clone(), stamp.clone());
+                }
+            }
+        }
+    }
+    merged.retain(|id, stamp| !tomb::kills(records, &tomb::hymn_favourite(id), stamp));
+    out.put(path.to_string(), crate::hymnal::favourites_to_bytes(&merged));
 }
 
 /// One chapter read on two devices: the most passes and the latest dates. The

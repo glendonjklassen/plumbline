@@ -20,6 +20,35 @@
 
   let filter = $state("");
 
+  /** The chip row's narrowing, on top of the finder: one language the hymn
+   *  must carry a text in, and whether only starred hymns show. Not persisted —
+   *  a filter is for this visit, like the finder's text. */
+  let langFilter = $state<string | null>(null);
+  let favesOnly = $state(false);
+
+  /** The reader's starred hymns. In the home, not the browser (the backup
+   *  carries them), so they come through the engine like every other read. */
+  const favourites = $derived(new Set<string>((s.q("hymnFavourites")?.ids ?? []) as string[]));
+
+  /** Every language the book carries a text in: the app's own languages in
+   *  their central order first, then anything the hymn files carry that the
+   *  app does not ship an interface in. */
+  const bookLangs = $derived.by(() => {
+    const have = new Set<string>();
+    for (const h of index) for (const l of Object.keys(h.titles ?? {})) have.add(l);
+    const known = languages().map((l) => l.code).filter((c) => have.has(c));
+    const rest = [...have].filter((c) => !known.includes(c)).sort();
+    return [...known, ...rest];
+  });
+
+  /** A language chip narrows the list AND picks that language's text: someone
+   *  filtering to German hymns wants to see them in German. "All" only widens
+   *  the list — the text preference stands. */
+  function pickLang(code: string | null): void {
+    langFilter = code;
+    if (code) s.hymnLang = code;
+  }
+
   /** If a search token names a language this hymnal knows — its code ("de"),
    *  English name ("German") or endonym ("Deutsch") — the code it names, else
    *  null. Empty before the catalogue lands, which simply recognises no
@@ -40,7 +69,11 @@
    *  German hymn and "de jesu" the German ones whose text says "jesu". */
   const shown = $derived.by(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return index;
+    const base = index.filter(
+      (h: any) =>
+        (!favesOnly || favourites.has(h.id)) && (!langFilter || Object.keys(h.titles ?? {}).includes(langFilter)),
+    );
+    if (!q) return base;
     const langCodes: string[] = [];
     const textTokens: string[] = [];
     for (const tok of q.split(/\s+/)) {
@@ -49,7 +82,7 @@
       else textTokens.push(tok);
     }
     const textQ = textTokens.join(" ");
-    return index.filter((h: any) => {
+    return base.filter((h: any) => {
       const have = Object.keys(h.titles ?? {});
       if (!langCodes.every((c) => have.includes(c))) return false;
       if (!textQ) return true;
@@ -80,6 +113,12 @@
 
   function openHymn(id: string): void {
     s.hymn = { id, semis: 0 };
+  }
+
+  const isFavourite = $derived(open ? favourites.has(open.id) : false);
+  function toggleFavourite(): void {
+    if (!open) return;
+    void s.setHymnFavourite(open.id, !isFavourite);
   }
 
   // ── the automatic scroll ─────────────────────────────────────────────────
@@ -145,6 +184,13 @@
             {/each}
           </div>
         {/if}
+        <button
+          class="chip star"
+          class:on={isFavourite}
+          aria-pressed={isFavourite}
+          aria-label={t(isFavourite ? "hymnal.unfavourite" : "hymnal.favourite")}
+          onclick={toggleFavourite}>{isFavourite ? "★" : "☆"}</button
+        >
         <button class="chip" class:on={s.hymnChords} onclick={() => (s.hymnChords = !s.hymnChords)}>
           {t("hymnal.chords")}
         </button>
@@ -173,9 +219,25 @@
         aria-label={t("hymnal.findLabel")}
       />
     </div>
+    {#if index.length > 0}
+      <!-- The same chips the search screen narrows by: one per language the
+           book carries, and the reader's stars. A chip is a filter the finder
+           works inside of, not a replacement for it. -->
+      <div class="filters" role="group" aria-label={t("hymnal.filterLabel")}>
+        <button class="chip" class:on={langFilter === null} onclick={() => pickLang(null)}>{t("hymnal.allLanguages")}</button>
+        {#each bookLangs as code (code)}
+          <button class="chip" class:on={langFilter === code} onclick={() => pickLang(code)}>{endonym(code)}</button>
+        {/each}
+        <button class="chip faves" class:on={favesOnly} aria-pressed={favesOnly} onclick={() => (favesOnly = !favesOnly)}>
+          ★ {t("hymnal.favourites")}
+        </button>
+      </div>
+    {/if}
     <div class="content">
       {#if index.length === 0}
         <p class="empty">{t("hymnal.loading")}</p>
+      {:else if shown.length === 0 && favesOnly && favourites.size === 0}
+        <p class="empty">{t("hymnal.noFavourites")}</p>
       {:else if shown.length === 0}
         <p class="empty">{t("hymnal.noMatch", { query: filter })}</p>
       {:else}
@@ -187,6 +249,7 @@
               <span class="rtitle">{h.titles[l]}</span>
               <span class="rsub">{h.firstLines?.[l] ?? ""}</span>
             </span>
+            {#if favourites.has(h.id)}<span class="rstar" aria-label={t("hymnal.favourites")}>★</span>{/if}
           </button>
         {/each}
       {/if}
@@ -344,6 +407,22 @@
   }
   .find {
     padding: 10px 14px 0;
+  }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 14px 0;
+  }
+  .chip.star {
+    min-width: 2.4em;
+    font-size: calc(15px * var(--uiScale, 1));
+    line-height: 1;
+  }
+  .rstar {
+    align-self: center;
+    color: var(--gold, #9e7d38);
+    font-size: calc(14px * var(--uiScale, 1));
   }
   .find input {
     width: 100%;

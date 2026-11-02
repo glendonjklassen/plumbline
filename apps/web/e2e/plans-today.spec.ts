@@ -235,3 +235,53 @@ test("no Explore card spills its text past its border, at any text scale", async
     expect(spills, `cards overflow at uiScale ${scale}`).toEqual([]);
   }
 });
+
+// A custom plan built on the Plans screen: parts and a chapter range become spans,
+// the engine names and runs it beside the built-ins, and the chip rides it. Dies if
+// the builder stops reaching `planStartCustom`, if the engine stops naming custom
+// plans, or if the chip's naming falls back to the raw id.
+test("a custom plan is built from parts and a range, named by the engine, and rides the reader", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));
+  await page.getByRole("button", { name: "Custom plan" }).click();
+  const builder = page.locator('[data-surface="custom-plan"]');
+  await expect(builder).toBeVisible();
+  // Nothing chosen: Start is held back.
+  const start = builder.getByRole("button", { name: "Start plan" });
+  await expect(start).toBeDisabled();
+
+  // A part — the Gospels — and a range inside Genesis.
+  await builder.locator(".chip", { hasText: "Gospels" }).click();
+  await builder.getByLabel("From").first().selectOption("Gen");
+  await builder.getByLabel("From").nth(1).fill("1");
+  await builder.getByLabel("To").first().selectOption("Gen");
+  await builder.getByLabel("To").nth(1).fill("5");
+  await builder.getByRole("button", { name: "Add range" }).click();
+  await expect(builder.locator(".chosen li")).toHaveCount(2);
+  await expect(builder.locator(".chosen")).toContainText("Genesis 1–5");
+  // Gospels & Acts is 117 chapters; with Genesis 1–5 that is 122, over 10 days.
+  await builder.getByLabel("Days").fill("10");
+  await expect(builder.locator(".summary")).toContainText("122 chapters");
+  await expect(start).toBeEnabled();
+  await start.click();
+
+  // Running, with the engine's name — the parts collapse to book runs, and the
+  // name follows the spans in canon order: Genesis first, then Matthew–Acts.
+  const card = page.locator(".plan-card", { hasText: "Genesis 1–5 · Matthew–Acts · 10 days" });
+  await expect(card).toBeVisible({ timeout: 10_000 });
+  await expect(card).toContainText("0 / 10 days");
+  const run = await page.evaluate(async () => {
+    const plans = await (window as any).__plumbline.fetchQ("plans", "");
+    return plans.running.find((p: any) => p.id.startsWith("custom-"));
+  });
+  expect(run.class).toBeUndefined();
+  expect(run.today.chapters[0]).toMatchObject({ book: "Gen", chapter: 1 });
+  // Built-ins are still all on offer: a custom plan occupies no class.
+  await expect(page.getByRole("button", { name: /The whole Bible in a year/ })).toBeVisible();
+
+  // The chip names it the same way.
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "read"));
+  const chip = page.locator(".plan-chip-row .plan-chip").first();
+  await expect(chip).toBeVisible({ timeout: 10_000 });
+  await expect(chip).toHaveAttribute("aria-label", /Day 1 · /);
+});

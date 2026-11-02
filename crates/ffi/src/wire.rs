@@ -1746,6 +1746,11 @@ pub struct WireReadingBooks {
     /// Times through the Bible and each part of it, counted from the map alone —
     /// a shell adds the reader's hand count (`bibleReads`) to every row (additive).
     pub sections: Vec<reading::SectionReads>,
+    /// Words and chapters a day over the last week, month and since the first
+    /// read, from the day ledger (additive; absent until something has been
+    /// read through).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pace: Option<reading::Pace>,
 }
 
 /// One book's chapters, for the chapter grid.

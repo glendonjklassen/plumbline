@@ -54,6 +54,7 @@ pub unsafe extern "C" fn plumbline_engine_reading_books_json(
             spec: reading::spec(),
             forecast: reading::forecast(e.reading_words(), &store, now),
             sections: reading::sections(e.reading_words(), &store),
+            pace: e.home.as_ref().and_then(|h| reading::pace(&reading::ledger(h, e.reading_words()), now)),
         })
     })
 }
@@ -159,7 +160,8 @@ pub unsafe extern "C" fn plumbline_engine_reading_mark_read(
         if canon::book_by_id(book).is_none() {
             return out_string(format!("unknown book: {book}"));
         }
-        match reading::mark_read(&home, book, chapter as u16, date) {
+        let words = engine.reading_words();
+        match reading::mark_read_counted(&home, words, book, chapter as u16, date) {
             Ok(first_pass) => {
                 // A paper-Bible chapter closes a plan-day like any other first pass —
                 // dated the day the reader gave, which is the day it was read.
@@ -194,7 +196,8 @@ pub unsafe extern "C" fn plumbline_engine_reading_forget(
         let Some(book) = opt_str(book) else {
             return out_string("null or invalid argument".to_string());
         };
-        match reading::forget(&home, book, chapter as u16) {
+        let words = engine.reading_words();
+        match reading::forget_counted(&home, words, book, chapter as u16) {
             Ok(()) => {
                 crate::record_deleted(&engine.home, vec![plumbline_core::tombstone::reading(book, chapter as u16)], "");
                 ptr::null_mut()

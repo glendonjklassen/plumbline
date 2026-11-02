@@ -2396,6 +2396,26 @@ export class Session {
     this.showToast(err ?? t("plans.started", { name: b.name }));
   }
 
+  /** Start a custom schedule built on the Plans screen. No class and no
+   *  confirm: it runs beside anything, and nothing is replaced. The engine
+   *  answers the new id, or an error prefixed with `!`. */
+  async startCustomPlan(spans: [string, number, number][], days: number, name: string): Promise<boolean> {
+    const id = await this.rpc.call("planStartCustom", spans, days, nowStamp());
+    if (typeof id !== "string" || id.startsWith("!")) {
+      this.showToast(typeof id === "string" ? id.slice(1) : t("conceptStudy.startFailed"));
+      return false;
+    }
+    this.showToast(t("plans.started", { name }));
+    return true;
+  }
+
+  /** Star or unstar a hymn. The favourites live in the home, so the write is an
+   *  ordinary authoring call and the list re-reads through the cache. */
+  async setHymnFavourite(id: string, on: boolean): Promise<void> {
+    const err = await this.author("hymnFavouriteSet", id, on, nowStamp());
+    if (err) this.showToast(err);
+  }
+
   /** Pause or resume a plan. No confirm: nothing is lost either way, and the
    *  Plans screen states the plan's standing right where the button sits. */
   async setPlanPaused(id: string, paused: boolean, name: string): Promise<void> {

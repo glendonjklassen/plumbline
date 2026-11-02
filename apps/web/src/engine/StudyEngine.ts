@@ -280,6 +280,21 @@ export class StudyEngine {
     return s === null ? null : JSON.parse(s);
   }
 
+  /** The reader's favourite hymns, `{ids:[…]}`, earliest star first. Lives in
+   *  the home (`hymnal/favourites.json`), so it rides the backup and merges. */
+  hymnFavourites(): any {
+    return this.#json("plumbline_engine_hymn_favourites_json");
+  }
+  /** Star (`on`) or unstar a hymn. Unstarring records a deletion, so a restore
+   *  does not bring the star back. */
+  hymnFavouriteSet(id: string, on: boolean, now: string): string | null {
+    return this.#author(
+      "plumbline_engine_hymn_favourite_set",
+      (f, i, n) => f(this.#engine, i, on ? 1 : 0, n),
+      [id, now],
+    );
+  }
+
   // ── the plain-English overlay (the AKJV delta) ───────────────────────────────
 
   /** Switch the overlay on/off. Reader only — memorize, Present, copy and share
@@ -755,6 +770,22 @@ export class StudyEngine {
   /** Start a built-in schedule by id (replaces its class occupant). */
   planStart(id: string, now: string): string | null {
     return this.#author("plumbline_engine_plan_start", (f, i, n) => f(this.#engine, i, n), [id, now]);
+  }
+  /** Start a custom schedule over `spans` (`[book, first, last]` runs) cut
+   *  into `days`; returns the new plan's id, or an error prefixed with `!`
+   *  (no plan id can start with one). No class: it runs beside anything.
+   *  `days` crosses the ABI as a u32, so it is closed over (the `token()`
+   *  pattern) rather than passed through the pointer list. */
+  planStartCustom(spans: [string, number, number][], days: number, now: string): string | null {
+    const id = this.#call(
+      (sp, n) =>
+        this.#w.takeStr(
+          (this.#w.exports.plumbline_engine_plan_start_custom as Function)(this.#engine, sp, days, n) as number,
+        ),
+      [JSON.stringify(spans), now],
+    );
+    if (id !== null && !id.startsWith("!")) this.onAuthored();
+    return id;
   }
   /** Stop a plan (removes its file; a concept study's tag is untouched). */
   planStop(id: string): string | null {
