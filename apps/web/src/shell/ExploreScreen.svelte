@@ -12,6 +12,7 @@
   import { dispatchLink } from "../study/links";
   import { dayStamp, localDay } from "../engine/StudyEngine";
   import { chapterSpan, firstUnread, remaining, todayPlans } from "./planToday";
+  import { planColorStyle, planIconPath } from "./planLook";
   import { dateLocale, lang, plural, t } from "../lib/i18n.svelte";
 
   const s = getSession();
@@ -286,6 +287,7 @@
                day this is the next day's chapters, day-numbered. -->
           {#each todays as p (p.id)}
             <button class="row" onclick={(ev) => goPlan(p, ev)}>
+              <svg class="row-icon" viewBox="0 0 24 24" aria-hidden="true" style={planColorStyle(p.color)}><path d={planIconPath(p.icon)} /></svg>
               <span class="row-name">{p.name}</span>
               <span class="row-note">{t("plans.chip", { day: p.day, chapters: chapterSpan(remaining(p)) })}</span>
             </button>
@@ -531,6 +533,16 @@
   }
   .row:hover {
     border-color: var(--gold, #9e7d38);
+  }
+  /* The plan's own glyph in its own hue, gold by default — the same mark the
+     nav-strip chip wears, so the row and the chip read as one plan. */
+  .row-icon {
+    flex: 0 0 auto;
+    align-self: center;
+    width: calc(18px * var(--uiScale, 1));
+    height: calc(18px * var(--uiScale, 1));
+    fill: currentColor;
+    color: var(--gold, #9e7d38);
   }
   .row-name {
     font-size: calc(16px * var(--uiScale, 1));

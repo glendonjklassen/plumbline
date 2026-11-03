@@ -620,6 +620,15 @@ fn runs(
                 days.dedup();
                 let o = v.as_object_mut().unwrap();
                 o.insert("done".into(), Value::from(days));
+                // The plan's look (icon, colour; v0.84.0): the device's choice
+                // stands, and the backup's fills a device that never chose.
+                for key in ["icon", "color"] {
+                    if !o.contains_key(key) {
+                        if let Some(x) = iv.get(key) {
+                            o.insert(key.into(), x.clone());
+                        }
+                    }
+                }
                 if !done_on.is_empty() {
                     let mut m: Map<String, Value> = Map::new();
                     for x in [&iv, &lv] {

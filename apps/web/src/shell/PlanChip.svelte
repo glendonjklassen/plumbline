@@ -24,6 +24,7 @@
   // is a mode exit nobody asked for.
   import { getSession } from "../state/session.svelte";
   import { chapterSpan, firstUnread, remaining, todayPlans } from "./planToday";
+  import { planColorStyle, planIconPath } from "./planLook";
   import { SEATING_ICONS } from "./seatingIcons";
   import { FEATURE_BY_ID, nextFeature, weekKey, type SpotlightState } from "./spotlight";
   import { t } from "../lib/i18n.svelte";
@@ -75,7 +76,9 @@
     // lightbulb — the weekly feature tile
     spotlight:
       "M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z",
-    // flag — a running reading plan
+    // flag — a running reading plan's original glyph; each plan now wears its
+    // own (planLook.ts), so this is only the fallback for a glyph this build
+    // cannot draw.
     plan: "M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z",
     // school — today's memorization
     memory: "M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z",
@@ -134,6 +137,10 @@
           label: t("plans.chip", { day: p.day, chapters: passage }),
           passage,
           target,
+          // Its own glyph and hue (planLook.ts): two plans running are told
+          // apart on the row without reading either passage.
+          icon: p.icon as string,
+          color: p.color as string | null,
         },
       ];
     }),
@@ -238,8 +245,16 @@
   <div class="plan-chip-row">
     <div class="tiles">
       {#each planTiles as p (p.key)}
-        <button class="plan-chip" aria-label={p.label} title={p.label} onclick={() => goPlan(p)}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.plan} /></svg>
+        <button
+          class="plan-chip"
+          data-plan-icon={p.icon}
+          data-plan-color={p.color}
+          style={planColorStyle(p.color)}
+          aria-label={p.label}
+          title={p.label}
+          onclick={() => goPlan(p)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={planIconPath(p.icon)} /></svg>
           <span class="ref">{p.passage}</span>
         </button>
       {/each}

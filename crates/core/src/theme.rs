@@ -305,6 +305,17 @@ pub struct Palette {
     pub read_partial: String,
     /// A chapter read all the way through — sage.
     pub read_done: String,
+    /// The six colours a reading plan may wear (`plan::COLORS`, same order),
+    /// each tuned to this theme: text-grade (WCAG AA) on every surface, so a
+    /// plan's icon and chip read on paper, popup and nav strip alike. Six, not
+    /// a wheel: a few that are guaranteed to sit well on this paper beat a
+    /// picker that lets a reader choose one that does not.
+    pub plan_rose: String,
+    pub plan_amber: String,
+    pub plan_moss: String,
+    pub plan_teal: String,
+    pub plan_sky: String,
+    pub plan_violet: String,
 }
 
 impl Palette {
@@ -358,6 +369,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#c9a227".into(),
             read_partial: "#a8642c".into(),
             read_done: "#6f8f6a".into(),
+            plan_rose: "#ba213a".into(),
+            plan_amber: "#9e4512".into(),
+            plan_moss: "#2a6d13".into(),
+            plan_teal: "#136c65".into(),
+            plan_sky: "#1f61ad".into(),
+            plan_violet: "#8c26d5".into(),
         },
         // Candlelight-warm dark: brown-charcoal paper, near-white ink, a
         // brighter gold that holds contrast on the dark ground.
@@ -389,6 +406,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#e0bb45".into(),
             read_partial: "#c07a3c".into(),
             read_done: "#8fb389".into(),
+            plan_rose: "#dd7587".into(),
+            plan_amber: "#e37738".into(),
+            plan_moss: "#4aa82a".into(),
+            plan_teal: "#29a59b".into(),
+            plan_sky: "#6098d7".into(),
+            plan_violet: "#b67cde".into(),
         },
         // True-black night (OLED): pure-black paper, everything else tuned for it.
         Theme::Night => Palette {
@@ -417,6 +440,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#d8b23e".into(),
             read_partial: "#b87338".into(),
             read_done: "#86ac82".into(),
+            plan_rose: "#d5576c".into(),
+            plan_amber: "#d2601e".into(),
+            plan_moss: "#409325".into(),
+            plan_teal: "#249087".into(),
+            plan_sky: "#4184d0".into(),
+            plan_violet: "#a763d8".into(),
         },
         // ── named presets ─────────────────────────────────────────────────────
         // Muted roles are pushed lighter (dark themes) or darker (light) than
@@ -452,6 +481,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#8a6414".into(),
             read_partial: "#96481b".into(),
             read_done: "#567244".into(),
+            plan_rose: "#a11c33".into(),
+            plan_amber: "#8a3c0f".into(),
+            plan_moss: "#245f11".into(),
+            plan_teal: "#105d57".into(),
+            plan_sky: "#1a5394".into(),
+            plan_violet: "#7921b8".into(),
         },
         // A cyanotype: Prussian-blue paper, pale chalk ink, drafting lines in
         // lighter blue. Gold stays for the divine name and the God tier.
@@ -480,6 +515,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#f2c94c".into(),
             read_partial: "#ff9e64".into(),
             read_done: "#7fd0a0".into(),
+            plan_rose: "#e79fab".into(),
+            plan_amber: "#eba176".into(),
+            plan_moss: "#58ca32".into(),
+            plan_teal: "#31c6ba".into(),
+            plan_sky: "#8fb6e3".into(),
+            plan_violet: "#cba3e8".into(),
         },
         // A green-phosphor CRT with the amber second phosphor as the accent, so
         // links glow amber against green body text. Near-black paper with a
@@ -509,6 +550,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#d99a2b".into(),
             read_partial: "#ff8c42".into(),
             read_done: "#58c477".into(),
+            plan_rose: "#d86376".into(),
+            plan_amber: "#dd6520".into(),
+            plan_moss: "#449b27".into(),
+            plan_teal: "#26988e".into(),
+            plan_sky: "#4e8cd3".into(),
+            plan_violet: "#ad6ddb".into(),
         },
         // The low-vision option: pure white paper, pure black ink, every muted
         // role pulled far past AA — the quiet greys of the other light themes
@@ -538,6 +585,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#6b4e00".into(),
             read_partial: "#8f4700".into(),
             read_done: "#1d5c1d".into(),
+            plan_rose: "#b8213a".into(),
+            plan_amber: "#9e4512".into(),
+            plan_moss: "#2a6d13".into(),
+            plan_teal: "#136b64".into(),
+            plan_sky: "#1e60ab".into(),
+            plan_violet: "#8c25d4".into(),
         },
         Theme::SolarizedDark => Palette {
             dark: true,
@@ -564,6 +617,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#d0ab4d".into(),
             read_partial: "#e0a060".into(),
             read_done: "#93c37a".into(),
+            plan_rose: "#e18796".into(),
+            plan_amber: "#e78a54".into(),
+            plan_moss: "#50b72e".into(),
+            plan_teal: "#2db3a7".into(),
+            plan_sky: "#74a5dc".into(),
+            plan_violet: "#bf8de2".into(),
         },
         Theme::SolarizedLight => Palette {
             dark: false,
@@ -590,6 +649,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#6e5410".into(),
             read_partial: "#6e3f22".into(),
             read_done: "#425720".into(),
+            plan_rose: "#b42038".into(),
+            plan_amber: "#9a4311".into(),
+            plan_moss: "#296b13".into(),
+            plan_teal: "#126861".into(),
+            plan_sky: "#1d5ea7".into(),
+            plan_violet: "#8825cf".into(),
         },
         Theme::Gruvbox => Palette {
             dark: true,
@@ -616,6 +681,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#fabd2f".into(),
             read_partial: "#fe8019".into(),
             read_done: "#b8bb26".into(),
+            plan_rose: "#e18695".into(),
+            plan_amber: "#e68851".into(),
+            plan_moss: "#4fb62d".into(),
+            plan_teal: "#2db3a7".into(),
+            plan_sky: "#72a4dc".into(),
+            plan_violet: "#be8ce2".into(),
         },
         Theme::Nord => Palette {
             dark: true,
@@ -642,6 +713,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#ebcb8b".into(),
             read_partial: "#dc9a80".into(),
             read_done: "#a3be8c".into(),
+            plan_rose: "#e28c9a".into(),
+            plan_amber: "#e78e5a".into(),
+            plan_moss: "#51ba2e".into(),
+            plan_teal: "#2eb7ab".into(),
+            plan_sky: "#79a8de".into(),
+            plan_violet: "#c191e3".into(),
         },
         // Atom / VS Code "One Dark": blue-grey ground, soft red/green/yellow/blue.
         Theme::OneDark => Palette {
@@ -669,6 +746,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#e5c07b".into(),
             read_partial: "#d19a66".into(),
             read_done: "#98c379".into(),
+            plan_rose: "#e18695".into(),
+            plan_amber: "#e68953".into(),
+            plan_moss: "#4fb62d".into(),
+            plan_teal: "#2db3a7".into(),
+            plan_sky: "#72a4dc".into(),
+            plan_violet: "#be8ce2".into(),
         },
         // A warm-paper light theme for long reading.
         Theme::Sepia => Palette {
@@ -696,6 +779,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#7a5c1e".into(),
             read_partial: "#7a3f1c".into(),
             read_done: "#4a6030".into(),
+            plan_rose: "#b01f37".into(),
+            plan_amber: "#974211".into(),
+            plan_moss: "#286812".into(),
+            plan_teal: "#12665f".into(),
+            plan_sky: "#1d5ba3".into(),
+            plan_violet: "#8424ca".into(),
         },
         // Catppuccin "Mocha": pastel dark — lavender ground, peach/yellow/green/pink.
         Theme::CatppuccinMocha => Palette {
@@ -723,6 +812,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#f9e2af".into(),
             read_partial: "#fab387".into(),
             read_done: "#a6e3a1".into(),
+            plan_rose: "#dd7889".into(),
+            plan_amber: "#e37a3d".into(),
+            plan_moss: "#4bab2b".into(),
+            plan_teal: "#2aa79d".into(),
+            plan_sky: "#639ad8".into(),
+            plan_violet: "#b77fdf".into(),
         },
         // Catppuccin "Latte": the Mocha family on a bright ground, accents
         // darkened to clear AA on paper.
@@ -751,6 +846,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#705515".into(),
             read_partial: "#a03e08".into(),
             read_done: "#2f6a1c".into(),
+            plan_rose: "#b21f38".into(),
+            plan_amber: "#994311".into(),
+            plan_moss: "#296a13".into(),
+            plan_teal: "#126760".into(),
+            plan_sky: "#1d5da6".into(),
+            plan_violet: "#8724ce".into(),
         },
         // "Tokyo Night": deep indigo ground, orange/yellow/green/blue accents.
         Theme::TokyoNight => Palette {
@@ -778,6 +879,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#e0af68".into(),
             read_partial: "#ff9e64".into(),
             read_done: "#9ece6a".into(),
+            plan_rose: "#db7082".into(),
+            plan_amber: "#e27232".into(),
+            plan_moss: "#48a529".into(),
+            plan_teal: "#29a298".into(),
+            plan_sky: "#5b94d6".into(),
+            plan_violet: "#b479de".into(),
         },
         // "Rosé Pine": muted rose/pine on a soft-black ground; `read_done`
         // borrows the foam cyan, clearly apart from the gold and rose.
@@ -806,6 +913,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#f6c177".into(),
             read_partial: "#ebbcba".into(),
             read_done: "#9ccfd8".into(),
+            plan_rose: "#dc7183".into(),
+            plan_amber: "#e27333".into(),
+            plan_moss: "#49a62a".into(),
+            plan_teal: "#29a298".into(),
+            plan_sky: "#5c95d6".into(),
+            plan_violet: "#b479de".into(),
         },
         // Synthwave: deep indigo-violet night sky, amber for the divine name.
         Theme::Synthwave => Palette {
@@ -840,6 +953,12 @@ pub fn palette(theme: Theme) -> Palette {
             read_unread: "#ffc94d".into(),
             read_partial: "#ff9e64".into(),
             read_done: "#4ecca3".into(),
+            plan_rose: "#de7a8b".into(),
+            plan_amber: "#e47c40".into(),
+            plan_moss: "#4bac2b".into(),
+            plan_teal: "#2aa99f".into(),
+            plan_sky: "#659bd8".into(),
+            plan_violet: "#b881df".into(),
         },
     }
 }
@@ -997,6 +1116,14 @@ mod contrast {
             ("mono", &p.mono),
             ("morph", &p.morph),
             ("lemma", &p.lemma),
+            // A reading plan's icon and chip accent — glyph-sized, but held to
+            // body text's bar on purpose: a colour a reader picked must read.
+            ("planRose", &p.plan_rose),
+            ("planAmber", &p.plan_amber),
+            ("planMoss", &p.plan_moss),
+            ("planTeal", &p.plan_teal),
+            ("planSky", &p.plan_sky),
+            ("planViolet", &p.plan_violet),
         ]
     }
 

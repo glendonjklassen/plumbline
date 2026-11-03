@@ -42,6 +42,35 @@ pub const CLASS_WHOLE_BIBLE: &str = "wholeBible";
 pub const CLASS_NEW_TESTAMENT: &str = "newTestament";
 pub const CLASS_DEVOTIONAL: &str = "devotional";
 
+/// The icons a plan may wear, as stable tokens (v0.84.0, additive). A shell
+/// owns the glyphs; the core owns the vocabulary, so a token in a plan file
+/// always means the same picture on every shell. Every built-in carries its own
+/// default — unique among the built-ins, so two running plans are told apart at
+/// a glance — and a reader may pick any of these for any plan.
+pub const ICONS: &[&str] = &[
+    "flag",
+    "calendar",
+    "hourglass",
+    "bolt",
+    "cross",
+    "timeline",
+    "music",
+    "star",
+    "heart",
+    "book",
+    "leaf",
+    "mountain",
+];
+
+/// A plan with no icon of its own and no built-in default: the custom plan.
+pub const DEFAULT_ICON: &str = "flag";
+
+/// The colours a plan may wear, as hue tokens (v0.84.0, additive). Each theme
+/// tunes its own six (`theme::Palette::plan_*`) to clear WCAG AA on its paper,
+/// so the plan file stores the hue, never a hex, and a theme change recolours
+/// every plan to match. `None` is the theme's gold, the plan surfaces' default.
+pub const COLORS: &[&str] = &["rose", "amber", "moss", "teal", "sky", "violet"];
+
 /// What kind of plan a file describes. The serialized names are frozen with
 /// the rest of the format: `"schedule"` and `"conceptStudy"`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -120,6 +149,41 @@ pub struct Plan {
     /// moment a plan resumes.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub paused: bool,
+    /// The reader's icon for this plan, one of [`ICONS`]; absent means the
+    /// built-in's default, or [`DEFAULT_ICON`] (v0.84.0, additive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// The reader's colour for this plan, one of [`COLORS`]; absent means the
+    /// theme's gold (v0.84.0, additive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+/// The icon a plan shows: its own, else its built-in's default, else
+/// [`DEFAULT_ICON`]. A token this build does not know (a file from a later
+/// build) falls through to the default rather than naming a glyph no shell has.
+pub fn effective_icon(plan: &Plan) -> &'static str {
+    plan.icon
+        .as_deref()
+        .and_then(|i| ICONS.iter().copied().find(|k| *k == i))
+        .or_else(|| builtins().into_iter().find(|b| b.id == plan.id).map(|b| b.icon))
+        .unwrap_or(DEFAULT_ICON)
+}
+
+/// Set a plan's icon and colour in one stroke. `None` (or an empty string, which
+/// is how the ABI spells it) clears to the default; any other value must be in
+/// the vocabulary, so a shell cannot store a token no shell can draw.
+pub fn set_appearance(plan: &mut Plan, icon: Option<&str>, color: Option<&str>) -> Result<(), Error> {
+    let pick = |v: Option<&str>, vocab: &[&str], what: &str| -> Result<Option<String>, Error> {
+        match v.map(str::trim).filter(|s| !s.is_empty()) {
+            None => Ok(None),
+            Some(t) if vocab.contains(&t) => Ok(Some(t.to_string())),
+            Some(t) => Err(Error::Parse(format!("unknown plan {what}: {t}"))),
+        }
+    };
+    plan.icon = pick(icon, ICONS, "icon")?;
+    plan.color = pick(color, COLORS, "color")?;
+    Ok(())
 }
 
 /// A built-in plan the picker offers. `name_key` is an i18n catalogue id —
@@ -131,6 +195,8 @@ pub struct Builtin {
     pub kind: Kind,
     pub generator: Option<Generator>,
     pub table: Option<&'static str>,
+    /// Its default icon, one of [`ICONS`] and unique among the built-ins.
+    pub icon: &'static str,
 }
 
 /// The lineup the picker offers. Every entry must be START-ABLE into a non-empty
@@ -147,6 +213,7 @@ pub fn builtins() -> Vec<Builtin> {
             kind: Kind::Schedule,
             generator: gen(Scope::Canon, 365),
             table: None,
+            icon: "calendar",
         },
         Builtin {
             id: "bible-180",
@@ -155,6 +222,7 @@ pub fn builtins() -> Vec<Builtin> {
             kind: Kind::Schedule,
             generator: gen(Scope::Canon, 180),
             table: None,
+            icon: "hourglass",
         },
         Builtin {
             id: "bible-90",
@@ -163,6 +231,7 @@ pub fn builtins() -> Vec<Builtin> {
             kind: Kind::Schedule,
             generator: gen(Scope::Canon, 90),
             table: None,
+            icon: "bolt",
         },
         Builtin {
             id: "nt-90",
@@ -171,6 +240,7 @@ pub fn builtins() -> Vec<Builtin> {
             kind: Kind::Schedule,
             generator: gen(Scope::Nt, 90),
             table: None,
+            icon: "cross",
         },
         Builtin {
             id: "chronological",
@@ -179,6 +249,7 @@ pub fn builtins() -> Vec<Builtin> {
             kind: Kind::Schedule,
             generator: None,
             table: Some("chronological"),
+            icon: "timeline",
         },
         Builtin {
             id: "psalms-proverbs-30",
@@ -187,6 +258,7 @@ pub fn builtins() -> Vec<Builtin> {
             kind: Kind::Schedule,
             generator: gen(Scope::Books { books: vec!["Ps".into(), "Prov".into()] }, 30),
             table: None,
+            icon: "music",
         },
     ]
 }
@@ -377,6 +449,8 @@ pub fn custom(
         tag: None,
         swept: Default::default(),
         paused: false,
+        icon: None,
+        color: None,
     })
 }
 
@@ -658,7 +732,42 @@ mod tests {
             tag: None,
             swept: BTreeMap::new(),
             paused: false,
+            icon: None,
+            color: None,
         }
+    }
+
+    #[test]
+    fn every_builtin_wears_its_own_icon_from_the_vocabulary() {
+        let all = builtins();
+        for b in &all {
+            assert!(ICONS.contains(&b.icon), "{}: icon {:?} is not in ICONS", b.id, b.icon);
+            assert_eq!(all.iter().filter(|x| x.icon == b.icon).count(), 1, "{}: icon {:?} is shared", b.id, b.icon);
+        }
+        assert!(ICONS.contains(&DEFAULT_ICON));
+    }
+
+    #[test]
+    fn appearance_is_validated_stored_and_read_back_with_defaults() {
+        // A file from before v0.84.0 carries neither field: the built-in's own icon.
+        let mut p = plan("nt-90", Some(CLASS_NEW_TESTAMENT));
+        assert_eq!(effective_icon(&p), "cross");
+        assert_eq!(p.color, None);
+        assert!(!serde_json::to_string(&p).unwrap().contains("icon"), "absent fields stay off the disk");
+        // A chosen pair round-trips; an empty string clears; junk is refused whole.
+        set_appearance(&mut p, Some("star"), Some("rose")).unwrap();
+        let back: Plan = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!((effective_icon(&back), back.color.as_deref()), ("star", Some("rose")));
+        set_appearance(&mut p, Some(""), None).unwrap();
+        assert_eq!((effective_icon(&p), p.color.as_deref()), ("cross", None));
+        assert!(set_appearance(&mut p, Some("dragon"), None).is_err());
+        assert!(set_appearance(&mut p, None, Some("#ff0000")).is_err());
+        // A token from a later build falls through to the default, not to a hole.
+        p.icon = Some("telescope".into());
+        assert_eq!(effective_icon(&p), "cross");
+        // A custom plan with no icon of its own is the flag.
+        let c = plan("custom-abc", None);
+        assert_eq!(effective_icon(&c), DEFAULT_ICON);
     }
 
     #[test]

@@ -757,6 +757,30 @@ fn plans_and_concept_study_via_abi() {
             .unwrap()
             .contains("no running plan"));
 
+        // Appearance: the NT plan wears its own default icon until the reader
+        // picks; a pick rides the wire; empty clears; junk is refused and leaves
+        // the file as it was. The vocabularies ride beside the list.
+        assert_eq!(v["running"][0]["icon"], "cross");
+        assert!(v["running"][0].get("color").is_none());
+        assert_eq!(v["builtins"].as_array().unwrap().iter().find(|b| b["id"] == "nt-90").unwrap()["icon"], "cross");
+        assert!(v["icons"].as_array().unwrap().iter().any(|i| i == "star"));
+        assert!(v["colors"].as_array().unwrap().iter().any(|i| i == "rose"));
+        assert!(plumbline_engine_plan_set_appearance(e, c("nt-90").as_ptr(), c("star").as_ptr(), c("rose").as_ptr())
+            .is_null());
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"][0]["icon"], "star");
+        assert_eq!(v["running"][0]["color"], "rose");
+        assert!(take(plumbline_engine_plan_set_appearance(e, c("nt-90").as_ptr(), c("dragon").as_ptr(), ptr::null()))
+            .unwrap()
+            .contains("unknown plan icon"));
+        assert!(plumbline_engine_plan_set_appearance(e, c("nt-90").as_ptr(), c("").as_ptr(), ptr::null()).is_null());
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"][0]["icon"], "cross", "cleared back to the built-in's own");
+        assert!(v["running"][0].get("color").is_none());
+        assert!(take(plumbline_engine_plan_set_appearance(e, c("no-such").as_ptr(), ptr::null(), ptr::null()))
+            .unwrap()
+            .contains("no running plan"));
+
         // An unknown plan id is an error, not a silent no-op.
         assert!(take(plumbline_engine_plan_start(e, c("no-such-plan").as_ptr(), now.as_ptr()))
             .unwrap()

@@ -32,6 +32,12 @@ struct WirePlans {
     /// The parts of the Bible a custom plan may be built from (additive):
     /// `core::reading::SECTIONS` less the whole Bible, which is a built-in.
     parts: Vec<WirePart>,
+    /// The icon tokens a plan may wear (`plan::ICONS`; additive, v0.84.0). The
+    /// shell draws the glyphs and offers the ones it can draw.
+    icons: Vec<&'static str>,
+    /// The colour tokens a plan may wear (`plan::COLORS`), each a `plan*` role
+    /// of the theme palette.
+    colors: Vec<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -61,6 +67,12 @@ struct WireRunning {
     /// Set aside: holds its place, asks nothing (no chip, no today card —
     /// shells filter on this).
     paused: bool,
+    /// The icon it shows (additive, v0.84.0): the reader's, else the built-in's
+    /// own, else the flag — always a token the shell can draw.
+    icon: &'static str,
+    /// The reader's colour token, or absent for the theme's gold.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    color: Option<String>,
     /// Concept study only: the preset tag a tap files under.
     #[serde(skip_serializing_if = "Option::is_none")]
     tag: Option<String>,
@@ -111,6 +123,8 @@ struct WireBuiltin {
     name_key: String,
     class: String,
     kind: plan::Kind,
+    /// Its default icon — what a run of it shows until the reader picks another.
+    icon: &'static str,
 }
 
 /// Whether a chapter reads as a completed pass: the reading record carries a
@@ -156,6 +170,8 @@ fn running_state(
         started: plan.started.clone(),
         name: plan.generator.as_ref().and_then(|g| plan::custom_name(g, words, i18n::active())),
         paused: plan.paused,
+        icon: plan::effective_icon(plan),
+        color: plan.color.clone(),
         tag: plan.tag.clone(),
         done_today: None,
         today: None,
@@ -266,6 +282,7 @@ pub unsafe extern "C" fn plumbline_engine_plans_json(
                 name_key: b.name_key.to_string(),
                 class: b.class.to_string(),
                 kind: b.kind,
+                icon: b.icon,
             })
             .collect();
         let parts = reading::sections(words, &store)
@@ -273,7 +290,7 @@ pub unsafe extern "C" fn plumbline_engine_plans_json(
             .filter(|sec| sec.id != "bible")
             .map(|sec| WirePart { id: sec.id.to_string(), name: sec.name, books: sec.books })
             .collect();
-        out_json(&WirePlans { running, builtins, parts })
+        out_json(&WirePlans { running, builtins, parts, icons: plan::ICONS.to_vec(), colors: plan::COLORS.to_vec() })
     })
 }
 
@@ -331,6 +348,8 @@ pub unsafe extern "C" fn plumbline_engine_plan_start(
             tag: None,
             swept: Default::default(),
             paused: false,
+            icon: None,
+            color: None,
         };
         match plan::write_plan(&home, &started) {
             Ok(()) => ptr::null_mut(),
@@ -424,6 +443,8 @@ pub unsafe extern "C" fn plumbline_engine_concept_study_start(
             tag: Some(tag.trim().to_string()),
             swept: Default::default(),
             paused: false,
+            icon: None,
+            color: None,
         };
         match plan::write_plan(&home, &run) {
             Ok(()) => out_string(id),
@@ -524,6 +545,41 @@ pub unsafe extern "C" fn plumbline_engine_plan_set_paused(
             return ptr::null_mut(); // already there: a double-tap is not an error
         }
         found.paused = paused;
+        match plan::write_plan(&home, &found) {
+            Ok(()) => ptr::null_mut(),
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Set a plan's icon and colour (`plumbline_engine_plans_json` lists the
+/// vocabularies as `icons` and `colors`). Null or empty clears either to its
+/// default — the built-in's own icon or the flag, the theme's gold. A token
+/// outside the vocabulary is refused whole, so a plan file never names a glyph
+/// no shell draws. An absent id is an error, as for pause. Null on success,
+/// else an owned error string.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_plan_set_appearance(
+    engine: *mut PlumblineEngine,
+    id: *const c_char,
+    icon: *const c_char,
+    color: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else { return out_string("null engine".into()) };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".into());
+        };
+        let Some(id) = opt_str(id) else { return out_string("null or invalid argument".into()) };
+        let Some(mut found) = plan::load_plans(&home).0.into_iter().find(|p| p.id == id) else {
+            return out_string(format!("no running plan: {id}"));
+        };
+        if let Err(e) = plan::set_appearance(&mut found, opt_str(icon), opt_str(color)) {
+            return out_string(e.to_string());
+        }
         match plan::write_plan(&home, &found) {
             Ok(()) => ptr::null_mut(),
             Err(e) => out_string(e.to_string()),

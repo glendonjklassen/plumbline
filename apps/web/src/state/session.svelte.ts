@@ -2423,6 +2423,13 @@ export class Session {
     this.showToast(err ?? t(paused ? "plans.pausedToast" : "plans.resumedToast", { name }));
   }
 
+  /** Set a plan's icon and colour. No confirm and no toast: the card the
+   *  picker sits in repaints with the choice, which is the confirmation. */
+  async setPlanAppearance(id: string, icon: string | null, color: string | null): Promise<void> {
+    const err = await this.author("planSetAppearance", id, icon, color);
+    if (err) this.showToast(err);
+  }
+
   /** Stop a plan (schedule or concept study) — confirmed, since it removes the
    *  plan's record. A concept study's gathered tag is untouched. */
   async stopPlan(id: string, name: string): Promise<void> {

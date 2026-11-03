@@ -16,6 +16,7 @@
   import { modal } from "../lib/modal";
   import { readingTint, tintStyle, tintTitle, type ReadingHeat } from "./readingTint";
   import { todayPlans, type TodayPlan } from "./planToday";
+  import { planColorStyle, planIconPath } from "./planLook";
   import { lang, t } from "../lib/i18n.svelte";
 
   const s = getSession();
@@ -287,7 +288,10 @@
                card answers "where do I go?" with places to go, not a summary. -->
           <div class="today-card" data-surface="plan-today">
             {#each today as p (p.id)}
-              <p class="today-head">{t("plans.todayCard", { name: p.name, day: p.day })}</p>
+              <p class="today-head" style={planColorStyle(p.color)}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d={planIconPath(p.icon)} /></svg>
+                {t("plans.todayCard", { name: p.name, day: p.day })}
+              </p>
               <div class="today-chs">
                 {#each p.chapters as c (`${c.book} ${c.chapter}`)}
                   <button class:read={c.read} onclick={() => goToday(c.book, c.chapter)}>
@@ -469,6 +473,14 @@
     font-size: calc(12.5px * var(--uiScale, 1));
     font-weight: 600;
     color: var(--gold, #9e7d38);
+  }
+  /* The plan's glyph, in the head's colour (its own hue when it has one). */
+  .today-head svg {
+    width: calc(14px * var(--uiScale, 1));
+    height: calc(14px * var(--uiScale, 1));
+    fill: currentColor;
+    vertical-align: -2px;
+    margin-inline-end: 4px;
   }
   .today-chs:not(:last-child) {
     margin-bottom: 8px;
