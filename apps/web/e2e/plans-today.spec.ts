@@ -285,3 +285,56 @@ test("a custom plan is built from parts and a range, named by the engine, and ri
   await expect(chip).toBeVisible({ timeout: 10_000 });
   await expect(chip).toHaveAttribute("aria-label", /Day 1 · /);
 });
+
+// Each built-in wears its own glyph, and a reader may dress any plan in one of
+// the core's icons and one of the theme's six plan colours. The choice is written
+// by the engine and read back on the next plans fetch, so this dies if the file
+// stops carrying the tokens, if the chip stops wearing them, or if two built-ins
+// come to share a default. No mutation proof (CLAUDE.md): a chip painted from a
+// hard-coded flag would fail the `data-plan-icon` check, and a wire that dropped
+// `color` would fail the fetched run's assertion.
+test("a plan wears the icon and colour the reader picks, and the built-ins each wear their own", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    const now = new Date().toISOString();
+    await s.author("planStart", "nt-90", now);
+    await s.author("planStart", "psalms-proverbs-30", now);
+  });
+  const chips = page.locator(".plan-chip-row .plan-chip");
+  await expect(chips).toHaveCount(2, { timeout: 10_000 });
+  // Two running plans, two glyphs, neither the reader's doing.
+  await expect(page.locator(".plan-chip-row .plan-chip[data-plan-icon='cross']")).toHaveCount(1);
+  await expect(page.locator(".plan-chip-row .plan-chip[data-plan-icon='music']")).toHaveCount(1);
+
+  // A star in rose for the New Testament plan.
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));
+  const card = page.locator('.plan-card[data-plan="nt-90"]');
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "Icon and colour" }).click();
+  const look = card.locator('[data-surface="plan-look"]');
+  await expect(look).toBeVisible();
+  await expect(look.getByRole("button", { name: "Cross", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(look.getByRole("button", { name: "Default", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await look.getByRole("button", { name: "Star", exact: true }).click();
+  await expect(look.getByRole("button", { name: "Star", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await look.getByRole("button", { name: "Rose", exact: true }).click();
+  await expect(look.getByRole("button", { name: "Rose", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+  // The engine holds the tokens, and the theme's palette names the colour.
+  const run = await page.evaluate(async () => {
+    const plans = await (window as any).__plumbline.fetchQ("plans", "");
+    return plans.running.find((p: any) => p.id === "nt-90");
+  });
+  expect(run.icon).toBe("star");
+  expect(run.color).toBe("rose");
+  const rose = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--planRose").trim());
+  expect(rose).toMatch(/^#[0-9a-f]{6}$/);
+
+  // The chip wears them; the other plan is untouched.
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "read"));
+  const star = page.locator(".plan-chip-row .plan-chip[data-plan-icon='star']");
+  await expect(star).toBeVisible({ timeout: 10_000 });
+  await expect(star).toHaveAttribute("data-plan-color", "rose");
+  await expect(page.locator(".plan-chip-row .plan-chip[data-plan-icon='music']")).toHaveCount(1);
+});

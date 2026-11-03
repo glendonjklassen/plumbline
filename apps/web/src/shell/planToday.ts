@@ -18,6 +18,10 @@ export interface TodayPlan {
   name: string;
   day: number;
   chapters: TodayChapter[];
+  /** The icon it wears (a `plan::ICONS` token — the reader's pick, else the
+   *  built-in's own, else the flag) and its colour token, null for the gold. */
+  icon: string;
+  color: string | null;
   /** A plan-day THIS plan had reached was finished today (even yesterday's
    *  leftovers) — the core's own stamp on the day, not a re-derivation from the
    *  reading store, so a chapter re-read today or a day read ahead for another
@@ -49,6 +53,8 @@ export function todayPlans(plans: any): TodayPlan[] {
       name: nameOf(p),
       day: p.today.day,
       chapters: p.today.chapters,
+      icon: typeof p.icon === "string" ? p.icon : "flag",
+      color: typeof p.color === "string" ? p.color : null,
       doneToday: p.doneToday === true,
     }));
 }

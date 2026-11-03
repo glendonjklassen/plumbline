@@ -16,6 +16,7 @@
   import { dispatchLink } from "../study/links";
   import { dateLocale, lang, plural, t } from "../lib/i18n.svelte";
   import { localDay } from "../engine/StudyEngine";
+  import { PLAN_ICONS, planColorStyle, planIconPath } from "./planLook";
 
   const s = getSession();
 
@@ -85,6 +86,22 @@
     if (typeof p.name === "string" && p.name) return p.name;
     const b = ((plans?.builtins ?? []) as any[]).find((x) => x.id === p.id);
     return b ? t(b.nameKey) : p.id;
+  }
+
+  // ── icon and colour ─────────────────────────────────────────────────────────
+  //
+  // Each running schedule may wear one of the core's icons and one of the
+  // theme's six plan colours (planLook.ts). The vocabularies come off the plans
+  // wire, filtered to the glyphs this build can draw; the choice is written by
+  // the engine and read back on the next plans fetch, so the card and every
+  // chip repaint together. One card's picker is open at a time.
+  let lookOpen = $state<string | null>(null);
+  const iconTokens = $derived((((plans?.icons ?? []) as string[]) ?? []).filter((tok) => tok in PLAN_ICONS));
+  const colorTokens = $derived(((plans?.colors ?? []) as string[]) ?? []);
+  /** The icon a built-in's picker row shows for it — its own default. */
+  function builtinIcon(id: string): string {
+    const b = ((plans?.builtins ?? []) as any[]).find((x) => x.id === id);
+    return typeof b?.icon === "string" ? b.icon : "flag";
   }
 
   // ── the custom plan builder ─────────────────────────────────────────────────
@@ -262,9 +279,12 @@
         <p class="hint">{t("plans.empty")}</p>
       {/if}
       {#each schedules as p (p.id)}
-        <div class="plan-card" class:paused={p.paused}>
+        <div class="plan-card" class:paused={p.paused} data-plan={p.id}>
           <div class="plan-head">
-            <span class="plan-name">{planName(p)}</span>
+            <span class="plan-name">
+              <svg class="plan-icon" viewBox="0 0 24 24" aria-hidden="true" style={planColorStyle(p.color)}><path d={planIconPath(p.icon)} /></svg>
+              {planName(p)}
+            </span>
             <span class="plan-prog">{t("plans.dayProgress", { done: p.scheduleProgress[0], total: p.scheduleProgress[1] })}</span>
           </div>
           <!-- A run is its name plus the day it began — what tells "the NT in 90
@@ -292,8 +312,58 @@
                 <button onclick={() => s.setPlanPaused(p.id, true, planName(p))}>{t("plans.pause")}</button>
               {/if}
             {/if}
+            <button
+              aria-expanded={lookOpen === p.id}
+              aria-controls="plan-look-{p.id}"
+              onclick={() => (lookOpen = lookOpen === p.id ? null : p.id)}
+            >
+              {t("plans.appearance")}
+            </button>
             <button class="danger" onclick={() => s.stopPlan(p.id, planName(p))}>{t("plans.stop")}</button>
           </div>
+          {#if lookOpen === p.id}
+            <div class="look" id="plan-look-{p.id}" data-surface="plan-look">
+              <h4 class="bsub">{t("plans.icon")}</h4>
+              <div class="picks" role="group" aria-label={t("plans.icon")}>
+                {#each iconTokens as tok (tok)}
+                  <button
+                    class="pick"
+                    class:on={p.icon === tok}
+                    aria-pressed={p.icon === tok}
+                    aria-label={t(`plans.icon.${tok}`)}
+                    title={t(`plans.icon.${tok}`)}
+                    style={planColorStyle(p.color)}
+                    onclick={() => s.setPlanAppearance(p.id, tok, p.color ?? null)}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d={PLAN_ICONS[tok]} /></svg>
+                  </button>
+                {/each}
+              </div>
+              <h4 class="bsub">{t("plans.color")}</h4>
+              <div class="picks" role="group" aria-label={t("plans.color")}>
+                <!-- The gold first: the default, and the way back to it. -->
+                <button
+                  class="pick swatch"
+                  class:on={!p.color}
+                  aria-pressed={!p.color}
+                  aria-label={t("plans.colorDefault")}
+                  title={t("plans.colorDefault")}
+                  onclick={() => s.setPlanAppearance(p.id, p.icon, null)}
+                ></button>
+                {#each colorTokens as tok (tok)}
+                  <button
+                    class="pick swatch"
+                    class:on={p.color === tok}
+                    aria-pressed={p.color === tok}
+                    aria-label={t(`plans.color.${tok}`)}
+                    title={t(`plans.color.${tok}`)}
+                    style={planColorStyle(tok)}
+                    onclick={() => s.setPlanAppearance(p.id, p.icon, tok)}
+                  ></button>
+                {/each}
+              </div>
+            </div>
+          {/if}
         </div>
       {/each}
 
@@ -326,7 +396,10 @@
       <h3 class="sub">{t("plans.available")}</h3>
       {#each offerable(plans) as b (b.id)}
         <button class="plan-builtin" onclick={() => s.startPlan({ id: b.id, class: b.class, name: t(b.nameKey) })}>
-          <span class="plan-name">{t(b.nameKey)}</span>
+          <span class="plan-name">
+            <svg class="plan-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={planIconPath(builtinIcon(b.id))} /></svg>
+            {t(b.nameKey)}
+          </span>
           <span class="plan-add">{t("plans.start")}</span>
         </button>
       {/each}
@@ -466,6 +539,16 @@
     font-weight: 600;
     font-size: calc(15.5px * var(--uiScale, 1));
   }
+  /* The plan's glyph beside its name, in its own hue or the gold — the mark
+     its chip and Study row wear, so one plan looks like itself everywhere. */
+  .plan-icon {
+    width: calc(18px * var(--uiScale, 1));
+    height: calc(18px * var(--uiScale, 1));
+    fill: currentColor;
+    color: var(--gold, #9e7d38);
+    vertical-align: -3px;
+    margin-inline-end: 6px;
+  }
   .plan-prog {
     color: var(--faded, #8a8276);
     font-size: calc(13px * var(--uiScale, 1));
@@ -530,6 +613,54 @@
     font-size: calc(13px * var(--uiScale, 1));
     white-space: nowrap;
   }
+  /* ── icon and colour ─────────────────────────────────────────────────── */
+  .look {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 4px;
+    border-top: 1px solid var(--rule, #d8cba8);
+  }
+  .picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  /* A glyph in the plan's colour, or a disc of the colour itself; the chosen
+     one is ringed. `currentColor` carries the hue to both. */
+  .pick {
+    width: calc(40px * var(--uiScale, 1));
+    height: calc(40px * var(--uiScale, 1));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 8px;
+    background: var(--paper, #fcf9f4);
+    color: var(--gold, #9e7d38);
+    cursor: pointer;
+    padding: 0;
+  }
+  .pick svg {
+    width: calc(22px * var(--uiScale, 1));
+    height: calc(22px * var(--uiScale, 1));
+    fill: currentColor;
+  }
+  .pick.on {
+    border-color: currentColor;
+    box-shadow: inset 0 0 0 1px currentColor;
+  }
+  .swatch {
+    border-radius: 999px;
+  }
+  .swatch::before {
+    content: "";
+    width: calc(22px * var(--uiScale, 1));
+    height: calc(22px * var(--uiScale, 1));
+    border-radius: 999px;
+    background: currentColor;
+  }
+
   /* ── the custom plan builder ─────────────────────────────────────────── */
   .builder .hint {
     margin: 0;

@@ -261,6 +261,21 @@ fn a_plan_followed_on_two_devices_has_both_devices_days_done() {
 }
 
 #[test]
+fn a_plan_keeps_the_devices_look_and_takes_the_backups_where_it_had_none() {
+    let plan = |extra: Value| {
+        let mut v = json!({"format":"plumbline-plan-v1","id":"nt-90","kind":"schedule","started":"2026-01-01"});
+        v.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        v
+    };
+    // The device chose an icon; the backup chose an icon and a colour.
+    let device = files(&[("plans/nt-90.json", plan(json!({"icon":"star"})))]);
+    let backup = files(&[("plans/nt-90.json", plan(json!({"icon":"heart","color":"rose"})))]);
+    let after = as_json(&apply(&device, &merge(&device, &backup)));
+    assert_eq!(after["plans/nt-90.json"]["icon"], "star", "the device's choice stands");
+    assert_eq!(after["plans/nt-90.json"]["color"], "rose", "the backup fills what the device never chose");
+}
+
+#[test]
 fn a_memory_card_keeps_the_device_that_reviewed_it_last() {
     let card = |at: &str, ease: f64| json!({"format":"overlay-memory-v1","ref":"Ps 23:1","created":"2026-01-01T00:00:00Z","ease":ease,"reviews":[{"at":at,"grade":"good","intervalDays":1}]});
     let phone = files(&[("memory/ps-23-1.json", card("2026-02-01T00:00:00Z", 2.5))]);

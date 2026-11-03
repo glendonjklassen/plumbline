@@ -1456,6 +1456,20 @@ char *plumbline_engine_plan_stop(struct PlumblineEngine *engine, const char *id)
 // `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_plan_set_paused(struct PlumblineEngine *engine, const char *id, bool paused);
 
+// Set a plan's icon and colour (`plumbline_engine_plans_json` lists the
+// vocabularies as `icons` and `colors`). Null or empty clears either to its
+// default — the built-in's own icon or the flag, the theme's gold. A token
+// outside the vocabulary is refused whole, so a plan file never names a glyph
+// no shell draws. An absent id is an error, as for pause. Null on success,
+// else an owned error string.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_plan_set_appearance(struct PlumblineEngine *engine,
+                                           const char *id,
+                                           const char *icon,
+                                           const char *color);
+
 // Every book's reading standing at `now` (RFC3339), canon order, as
 // `{books:[…],since,spec,forecast?,sections:[…]}`. Never null on a live engine.
 //

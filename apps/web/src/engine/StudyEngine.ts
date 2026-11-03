@@ -796,6 +796,15 @@ export class StudyEngine {
   planSetPaused(id: string, paused: boolean): string | null {
     return this.#author("plumbline_engine_plan_set_paused", (f, i) => f(this.#engine, i, paused ? 1 : 0), [id]);
   }
+  /** Set a plan's icon and colour tokens (the plans wire lists the
+   *  vocabularies as `icons` and `colors`); null clears either to its default. */
+  planSetAppearance(id: string, icon: string | null, color: string | null): string | null {
+    return this.#author(
+      "plumbline_engine_plan_set_appearance",
+      (f, i, ic, co) => f(this.#engine, i, ic, co),
+      [id, icon, color],
+    );
+  }
   /** Start or resume a concept study for `tag`; returns the run's id — what the
    *  shell writes into `config.conceptStudy` to enter the mode. An error comes
    *  back prefixed with `!` (no plan id can start with one). Null only if the
