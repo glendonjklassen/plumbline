@@ -216,10 +216,7 @@ mod tests {
         let en = crate::i18n::Lang::En;
         assert_eq!(copy_text(&c, &v, CopyKind::Verse, en).unwrap(), "For God so loved");
         assert_eq!(copy_text(&c, &v, CopyKind::VerseRef, en).unwrap(), "For God so loved — John 3:16");
-        assert_eq!(
-            copy_text(&c, &v, CopyKind::VerseMarkdown, en).unwrap(),
-            "> For God so loved\n>\n> — *John 3:16*"
-        );
+        assert_eq!(copy_text(&c, &v, CopyKind::VerseMarkdown, en).unwrap(), "> For God so loved\n>\n> — *John 3:16*");
     }
 
     /// A run of verses pastes as one paragraph with a passage reference, in the
@@ -251,7 +248,9 @@ mod tests {
             copy_range_text(&c, &a, &VRef::new("John", 3, 19), CopyKind::Verse, en).unwrap(),
             "For God so loved For God sent He that believeth"
         );
-        assert!(copy_range_text(&c, &VRef::new("John", 3, 19), &VRef::new("John", 3, 20), CopyKind::Verse, en).is_none());
+        assert!(
+            copy_range_text(&c, &VRef::new("John", 3, 19), &VRef::new("John", 3, 20), CopyKind::Verse, en).is_none()
+        );
         assert!(copy_range_text(&c, &a, &b, CopyKind::Chapter, en).is_none());
     }
 

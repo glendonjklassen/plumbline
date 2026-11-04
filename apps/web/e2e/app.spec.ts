@@ -1345,6 +1345,11 @@ test("Copy passage… puts the run on the clipboard, with no edition after the r
   await page.getByRole("button", { name: "Copy Psalms 23:1–3" }).click();
   await expect(page.locator(".toast")).toHaveText("Copied");
 
+  // Waited on the recorder, not the toast: the toast is written AFTER the
+  // clipboard, and the second copy below would otherwise read a toast the first
+  // copy left on screen and look at the clipboard before anything was written.
+  const copies = () => page.evaluate(() => (window as any).__copied.length as number);
+  await expect.poll(copies).toBe(1);
   const copied: string = await page.evaluate(() => (window as any).__copied[0]);
   // One paragraph, first verse to last, the passage reference after it.
   expect(copied).toContain("The LORD is my shepherd");
@@ -1357,7 +1362,7 @@ test("Copy passage… puts the run on the clipboard, with no edition after the r
     (window as any).__plumbline.contextMenu = { x: 40, y: 180, refKey: "Ps 23:1" };
   });
   await page.locator(".menu").getByRole("button", { name: "Copy", exact: true }).click();
-  await expect(page.locator(".toast")).toHaveText("Copied");
+  await expect.poll(copies).toBe(2);
   const one: string = await page.evaluate(() => (window as any).__copied[1]);
   expect(one).toMatch(/ — Psalms 23:1$/);
 });
