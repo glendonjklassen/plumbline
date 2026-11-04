@@ -1409,8 +1409,25 @@ fn tier0_endpoints_via_abi() {
         let plain = take(plumbline_engine_copy_text(e, c("John 3:16").as_ptr(), c("verse").as_ptr())).unwrap();
         assert!(plain.starts_with("For God so loved"));
         let refd = take(plumbline_engine_copy_text(e, c("John 3:16").as_ptr(), c("verseRef").as_ptr())).unwrap();
-        assert!(refd.ends_with("— John 3:16 (KJV)"));
+        assert!(refd.ends_with("— John 3:16"), "{refd}");
         assert!(plumbline_engine_copy_text(e, c("John 3:16").as_ptr(), c("bogus").as_ptr()).is_null());
+        // A run of verses, and the same refusals.
+        let run = take(plumbline_engine_copy_range_text(
+            e,
+            c("John 3:16").as_ptr(),
+            c("John 3:18").as_ptr(),
+            c("verseRef").as_ptr(),
+        ))
+        .unwrap();
+        assert!(run.starts_with("For God so loved the world. He that believeth"), "{run}");
+        assert!(run.ends_with("— John 3:16\u{2013}18"), "{run}");
+        assert!(plumbline_engine_copy_range_text(
+            e,
+            c("John 3:17").as_ptr(),
+            c("John 3:16").as_ptr(),
+            c("verseRef").as_ptr()
+        )
+        .is_null());
 
         // Personal notes: two on one verse, each read, edited and deleted by id,
         // and every deletion recorded for the restore merge.

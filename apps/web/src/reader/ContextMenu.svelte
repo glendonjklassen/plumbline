@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Verse context menu (Tier-0 #1): Copy · Copy chapter · Share link · Note… ·
+  // Verse context menu (Tier-0 #1): Copy · Copy passage… · Copy chapter · Share link · Note… ·
   // Tag… / Add to thread… · Memorize · Mark chapter read…. Opened by right-click
   // or long-press; the target verse rides in session state.
   import { getSession } from "../state/session.svelte";
@@ -34,6 +34,14 @@
       await navigator.clipboard.writeText(text);
       s.showToast(t("menu.copied"));
     }
+  }
+
+  /** A run of verses as one copy — this verse starts it, the picker ends it,
+   *  the same sheet Memorize passage… uses. */
+  function copyPassage(): void {
+    const ref = menu!.refKey;
+    close();
+    s.copyPassageFrom = ref;
   }
 
   /** Hand someone THIS verse.
@@ -157,6 +165,7 @@
   <div class="menu" bind:this={el} style:left="{pos.x}px" style:top="{pos.y}px">
     <div class="ref">{shown}</div>
     <button onclick={() => copy(copyStyle)}>{t("menu.copy")}</button>
+    <button onclick={copyPassage}>{t("menu.copyPassage")}</button>
     <button onclick={() => copy("chapter")}>{t("menu.copyChapter")}</button>
     <button onclick={shareLink}>{t("menu.shareLink")}</button>
     <hr />

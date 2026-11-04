@@ -4102,6 +4102,40 @@ pub unsafe extern "C" fn plumbline_engine_copy_text(
     })
 }
 
+/// Clipboard text for the inclusive run of verses `start_ref`…`through_ref` (same chapter,
+/// forward) in one of the VERSE shapes (`verse` / `verseRef` / `verseMarkdown`); the bodies
+/// joined with spaces and the reference written as a passage (`John 3:16–18`). Plain text,
+/// not JSON; null on a bad ref, a chapter kind, a run that is not a forward same-chapter run,
+/// or a verse the corpus lacks. Caller-freed.
+///
+/// # Safety
+/// `engine` is a live engine; the string args are null or valid NUL-terminated
+/// UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_copy_range_text(
+    engine: *const PlumblineEngine,
+    start_ref: *const c_char,
+    through_ref: *const c_char,
+    kind: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(sr), Some(tr), Some(kind)) =
+            (engine.as_ref(), opt_str(start_ref), opt_str(through_ref), opt_str(kind))
+        else {
+            return ptr::null_mut();
+        };
+        let (Some(from), Some(through), Some(kind)) =
+            (VRef::parse_ref_key(sr), VRef::parse_ref_key(tr), export::parse_kind(kind))
+        else {
+            return ptr::null_mut();
+        };
+        match export::copy_range_text(&e.corpus, &from, &through, kind, i18n::active()) {
+            Some(s) => out_string(s),
+            None => ptr::null_mut(),
+        }
+    })
+}
+
 /// The colour palette for a theme (`light`/`dark`/`night`; unknown → light) as
 /// JSON — every semantic role as a `#rrggbb` hex. Engine-independent. Never null.
 ///

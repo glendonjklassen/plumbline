@@ -305,6 +305,8 @@ export class Session {
   /** Passage-memorize picker: the start verse, whose chapter's later verse
    *  numbers the reader taps to set the end. */
   memorizePassageFrom = $state<string | null>(null);
+  /** The same picker, ending a run of verses to copy. */
+  copyPassageFrom = $state<string | null>(null);
   /** Memorization surface (hub / review drill / coverage+activity stats). */
   memorize = $state<
     { view: "hub" } | { view: "review"; only?: string; queue?: string[] } | { view: "stats" } | null
@@ -544,6 +546,7 @@ export class Session {
     ["threadPickFor", null],
     ["tagWeaveFor", null],
     ["memorizePassageFrom", null],
+    ["copyPassageFrom", null],
     ["markReadFor", null],
     ["bookNavFor", null],
     ["showHistory", false],
@@ -605,6 +608,7 @@ export class Session {
     else if (this.tagPickFor) this.tagPickFor = null;
     else if (this.tagWeaveFor !== null) this.tagWeaveFor = null;
     else if (this.memorizePassageFrom) this.memorizePassageFrom = null;
+    else if (this.copyPassageFrom) this.copyPassageFrom = null;
     else if (this.showSettings) this.showSettings = false;
     else if (this.showBackup) this.showBackup = false;
     else if (this.spotlight) this.spotlight = null;

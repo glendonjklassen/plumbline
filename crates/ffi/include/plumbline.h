@@ -949,6 +949,20 @@ char *plumbline_engine_copy_text(const struct PlumblineEngine *engine,
                                  const char *ref_key,
                                  const char *kind);
 
+// Clipboard text for the inclusive run of verses `start_ref`…`through_ref` (same chapter,
+// forward) in one of the VERSE shapes (`verse` / `verseRef` / `verseMarkdown`); the bodies
+// joined with spaces and the reference written as a passage (`John 3:16–18`). Plain text,
+// not JSON; null on a bad ref, a chapter kind, a run that is not a forward same-chapter run,
+// or a verse the corpus lacks. Caller-freed.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated
+// UTF-8 for the call.
+char *plumbline_engine_copy_range_text(const struct PlumblineEngine *engine,
+                                       const char *start_ref,
+                                       const char *through_ref,
+                                       const char *kind);
+
 // The colour palette for a theme (`light`/`dark`/`night`; unknown → light) as
 // JSON — every semantic role as a `#rrggbb` hex. Engine-independent. Never null.
 //
