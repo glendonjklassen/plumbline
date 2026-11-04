@@ -7,15 +7,20 @@
 //!
 //! Three shapes, matching the context-menu affordances (Tier 0 #1):
 //! - **plain** — just the verse/chapter text;
-//! - **ref-suffixed** — `…text — John 3:16 (KJV)`;
+//! - **ref-suffixed** — `…text — John 3:16`;
 //! - **markdown** — a blockquote with an attribution line, for pasting into
 //!   notes apps and chat.
+//!
+//! No edition tag. The suffix used to read `— John 3:16 (KJV)`; the reader
+//! asked for the bracket to go (2026-11-03), and the German pane never was the
+//! KJV anyway.
+//!
+//! A run of verses ([`copy_range_text`]) takes the same three shapes: the
+//! bodies joined with spaces, as the memorize preview shows them, and the
+//! reference written as a passage (`John 3:16–18`).
 
 use crate::corpus::{render_tokens, Corpus, Verse};
 use crate::reference::VRef;
-
-/// The bundled edition — the attribution suffix on ref-suffixed / markdown copy.
-const EDITION: &str = "KJV";
 
 /// What to copy and in which shape. The shell maps each context-menu item to one
 /// variant; [`parse_kind`] turns the FFI token back into it.
@@ -23,7 +28,7 @@ const EDITION: &str = "KJV";
 pub enum CopyKind {
     /// The verse text alone.
     Verse,
-    /// The verse text followed by ` — <display> (KJV)`.
+    /// The verse text followed by ` — <display>`.
     VerseRef,
     /// The verse as a markdown blockquote with an attribution line.
     VerseMarkdown,
@@ -87,10 +92,8 @@ pub fn copy_text(corpus: &Corpus, vref: &VRef, kind: CopyKind, lang: crate::i18n
             let text = verse_text(v);
             Some(match kind {
                 CopyKind::Verse => text,
-                CopyKind::VerseRef => format!("{text} — {} ({EDITION})", vref.display_in(lang)),
-                CopyKind::VerseMarkdown => {
-                    format!("> {text}\n>\n> — *{}* ({EDITION})", vref.display_in(lang))
-                }
+                CopyKind::VerseRef => format!("{text} — {}", vref.display_in(lang)),
+                CopyKind::VerseMarkdown => format!("> {text}\n>\n> — *{}*", vref.display_in(lang)),
                 _ => unreachable!(),
             })
         }
@@ -124,16 +127,65 @@ pub fn copy_text(corpus: &Corpus, vref: &VRef, kind: CopyKind, lang: crate::i18n
                 }
             }
             Some(match kind {
-                CopyKind::Chapter => format!("{}\n— {chapter_ref} ({EDITION})", out.trim_end()),
+                CopyKind::Chapter => format!("{}\n— {chapter_ref}", out.trim_end()),
                 CopyKind::ChapterMarkdown => {
                     // A blockquote of the whole chapter.
                     let quoted = out.trim_end().lines().map(|l| format!("> {l}")).collect::<Vec<_>>().join("\n");
-                    format!("{quoted}\n>\n> — *{chapter_ref}* ({EDITION})")
+                    format!("{quoted}\n>\n> — *{chapter_ref}*")
                 }
                 _ => unreachable!(),
             })
         }
     }
+}
+
+/// Clipboard text for the inclusive run `from`…`through` in one of the VERSE
+/// shapes — the `Chapter*` kinds are refused, a range being its own thing.
+/// `None` when the run is not a forward, same-chapter run, or when the corpus
+/// has none of its verses; a run of one verse is the single-verse copy. A verse
+/// the corpus lacks inside the run is skipped, not fatal — the memorize preview
+/// does the same, and a translation numbered differently from the KJV may have
+/// a gap where the KJV has a verse.
+///
+/// The bodies are joined with spaces and NOT numbered, which is how the
+/// memorize picker previews the same run and how a quoted passage reads in a
+/// message. The reference is the passage form, `John 3:16–18`, an en dash
+/// after the start verse's display — the same shape `memory::Card::label`
+/// gives a passage card, localized here as the single-verse ref is.
+pub fn copy_range_text(
+    corpus: &Corpus,
+    from: &VRef,
+    through: &VRef,
+    kind: CopyKind,
+    lang: crate::i18n::Lang,
+) -> Option<String> {
+    if from.book != through.book || from.chapter != through.chapter || through.verse < from.verse {
+        return None;
+    }
+    if through.verse == from.verse {
+        return copy_text(corpus, from, kind, lang);
+    }
+    let mut bodies = Vec::new();
+    for v in from.verse..=through.verse {
+        let Some(verse) = corpus.verse(&VRef::new(from.book.clone(), from.chapter, v)) else {
+            continue;
+        };
+        let text = verse_text(verse);
+        if !text.is_empty() {
+            bodies.push(text);
+        }
+    }
+    if bodies.is_empty() {
+        return None;
+    }
+    let text = bodies.join(" ");
+    let shown = format!("{}\u{2013}{}", from.display_in(lang), through.verse);
+    Some(match kind {
+        CopyKind::Verse => text,
+        CopyKind::VerseRef => format!("{text} — {shown}"),
+        CopyKind::VerseMarkdown => format!("> {text}\n>\n> — *{shown}*"),
+        CopyKind::Chapter | CopyKind::ChapterMarkdown => return None,
+    })
 }
 
 /// Space-joined body of a run of verses (used by tests / callers wanting the raw
@@ -163,11 +215,43 @@ mod tests {
         let v = VRef::new("John", 3, 16);
         let en = crate::i18n::Lang::En;
         assert_eq!(copy_text(&c, &v, CopyKind::Verse, en).unwrap(), "For God so loved");
-        assert_eq!(copy_text(&c, &v, CopyKind::VerseRef, en).unwrap(), "For God so loved — John 3:16 (KJV)");
+        assert_eq!(copy_text(&c, &v, CopyKind::VerseRef, en).unwrap(), "For God so loved — John 3:16");
+        assert_eq!(copy_text(&c, &v, CopyKind::VerseMarkdown, en).unwrap(), "> For God so loved\n>\n> — *John 3:16*");
+    }
+
+    /// A run of verses pastes as one paragraph with a passage reference, in the
+    /// reader's chosen shape; a backwards or cross-chapter run is refused and a
+    /// run of one verse is the plain verse copy.
+    #[test]
+    fn range_shapes() {
+        let c = from_str(SAMPLE).unwrap();
+        let en = crate::i18n::Lang::En;
+        let a = VRef::new("John", 3, 16);
+        let b = VRef::new("John", 3, 18);
         assert_eq!(
-            copy_text(&c, &v, CopyKind::VerseMarkdown, en).unwrap(),
-            "> For God so loved\n>\n> — *John 3:16* (KJV)"
+            copy_range_text(&c, &a, &b, CopyKind::Verse, en).unwrap(),
+            "For God so loved For God sent He that believeth"
         );
+        assert_eq!(
+            copy_range_text(&c, &a, &b, CopyKind::VerseRef, en).unwrap(),
+            "For God so loved For God sent He that believeth — John 3:16\u{2013}18"
+        );
+        assert_eq!(
+            copy_range_text(&c, &a, &b, CopyKind::VerseMarkdown, en).unwrap(),
+            "> For God so loved For God sent He that believeth\n>\n> — *John 3:16\u{2013}18*"
+        );
+        assert_eq!(copy_range_text(&c, &a, &a, CopyKind::VerseRef, en).unwrap(), "For God so loved — John 3:16");
+        assert!(copy_range_text(&c, &b, &a, CopyKind::Verse, en).is_none());
+        assert!(copy_range_text(&c, &a, &VRef::new("John", 4, 1), CopyKind::Verse, en).is_none());
+        // Past the chapter's end: the verses it has are copied, the gap is not fatal.
+        assert_eq!(
+            copy_range_text(&c, &a, &VRef::new("John", 3, 19), CopyKind::Verse, en).unwrap(),
+            "For God so loved For God sent He that believeth"
+        );
+        assert!(
+            copy_range_text(&c, &VRef::new("John", 3, 19), &VRef::new("John", 3, 20), CopyKind::Verse, en).is_none()
+        );
+        assert!(copy_range_text(&c, &a, &b, CopyKind::Chapter, en).is_none());
     }
 
     #[test]
@@ -177,10 +261,10 @@ mod tests {
         let en = crate::i18n::Lang::En;
         let plain = copy_text(&c, &v, CopyKind::Chapter, en).unwrap();
         assert!(plain.starts_with("16 For God so loved\n17 For God sent\n18 He that believeth"));
-        assert!(plain.ends_with("— John 3 (KJV)"));
+        assert!(plain.ends_with("— John 3"));
         let md = copy_text(&c, &v, CopyKind::ChapterMarkdown, en).unwrap();
         assert!(md.starts_with("> **16** For God so loved"));
-        assert!(md.ends_with("> — *John 3* (KJV)"));
+        assert!(md.ends_with("> — *John 3*"));
     }
 
     /// A CHAPTER HEADER IS NAMED IN THE READER'S LANGUAGE, like the verse
@@ -203,7 +287,7 @@ mod tests {
         let plain = copy_text(&c, &v, CopyKind::Chapter, de).unwrap();
         // The same book name the VERSE forms use, and the German separator with
         // it — `ref.chapter` is a catalogue template, not a space.
-        assert!(plain.ends_with(&format!("— {} (KJV)", v.chapter_display_in(de))), "{plain}");
+        assert!(plain.ends_with(&format!("— {}", v.chapter_display_in(de))), "{plain}");
         assert!(!plain.contains("John 3"), "the English book name survived: {plain}");
         // And the verse forms agree with it, which is the half that was already
         // right and the reason the mismatch was visible on one screen.

@@ -629,6 +629,10 @@ export class StudyEngine {
   copyText(refKey: string, kind: string): string | null {
     return this.#text("plumbline_engine_copy_text", refKey, kind);
   }
+  /** A run of verses (`startRef`…`throughRef`, same chapter) in a verse shape. */
+  copyRangeText(startRef: string, throughRef: string, kind: string): string | null {
+    return this.#text("plumbline_engine_copy_range_text", startRef, throughRef, kind);
+  }
   /** One note by id, or null. */
   userNote(id: string): any {
     return this.#json("plumbline_engine_user_note_json", id);

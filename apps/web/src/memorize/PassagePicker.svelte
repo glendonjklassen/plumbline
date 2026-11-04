@@ -1,5 +1,7 @@
 <script lang="ts">
-  // Pick the end of a passage to memorize as one chunk (§Memorization).
+  // Pick the end of a passage — to memorize as one chunk (§Memorization), or
+  // to copy as one text (Copy passage…). The two share this sheet because the
+  // question is the same: this verse starts it, which verse ends it?
   //
   // The convention: the verse you long-pressed is the START, and you tap the
   // LAST verse from a grid of that chapter's remaining verse
@@ -11,10 +13,13 @@
   import { modal } from "../lib/modal";
   import { nowStamp } from "../engine/StudyEngine";
   import { t } from "../lib/i18n.svelte";
+  import { refDisplay } from "../reader/refname";
 
   const s = getSession();
 
-  const start = $derived(s.memorizePassageFrom);
+  /** Which verb the sheet ends with. Memorize wins if both are somehow set. */
+  const mode = $derived(s.memorizePassageFrom ? "memorize" : "copy");
+  const start = $derived(s.memorizePassageFrom ?? s.copyPassageFrom);
   /** `"Ps 23:1"` → `["Ps 23", 1]`. */
   const parts = $derived.by(() => {
     if (!start) return null;
@@ -35,7 +40,13 @@
   });
 
   const throughRef = $derived(parts && end !== null ? `${parts.book} ${parts.chapter}:${end}` : null);
-  const label = $derived(start && end !== null ? `${start}–${end}` : start);
+  /** The passage as the reader says it ("Johannes 3,16–18"); `start` and
+   *  `throughRef` stay the OSIS form wherever they are SENT. */
+  const label = $derived.by(() => {
+    if (!start) return "";
+    const said = refDisplay(s, start);
+    return end !== null ? `${said}–${end}` : said;
+  });
   // The text of the chunk as it will be drilled, so the reader sees what they
   // are taking on before committing to it.
   const preview = $derived.by(() => {
@@ -50,6 +61,7 @@
 
   function close(): void {
     s.memorizePassageFrom = null;
+    s.copyPassageFrom = null;
   }
 
   function commit(): void {
@@ -62,10 +74,28 @@
     const from = start;
     const through = throughRef;
     const named = label;
+    const which = mode;
     close();
+    if (which === "copy") {
+      void copyRun(from, through);
+      return;
+    }
     void s.author("memoryAddPassage", from, through, nowStamp()).then((err) => {
       s.showToast(err ?? t("menu.memorizing", { passage: named }));
     });
+  }
+
+  /** The run in the reader's copy shape (Settings ▸ Copy format), the way the
+   *  menu's Copy does one verse. */
+  async function copyRun(from: string, through: string): Promise<void> {
+    const text = await s.rpc.call("copyRangeText", from, through, s.config.copyStyle ?? "verseRef");
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      s.showToast(t("menu.copied"));
+    } catch {
+      s.showToast(t("settings.copyBlocked"));
+    }
   }
 </script>
 
@@ -76,12 +106,12 @@
     class="sheet"
     role="dialog"
     aria-modal="true"
-    aria-label={t("memorize.passageTitle")}
+    aria-label={t(mode === "copy" ? "copy.passageTitle" : "memorize.passageTitle")}
     data-surface="passage picker"
     use:modal={{ close }}
   >
     <div class="bar">
-      <span class="title">{t("memorize.passage", { passage: label })}</span>
+      <span class="title">{t(mode === "copy" ? "copy.passage" : "memorize.passage", { passage: label })}</span>
       <span class="spacer"></span>
       <button class="close" onclick={close} aria-label={t("common.close")}>✕</button>
     </div>
@@ -106,7 +136,7 @@
     <div class="foot">
       <button onclick={close}>{t("common.cancel")}</button>
       <button class="primary" disabled={end === null} onclick={commit}>
-        Memorize {end === null ? "passage" : label}
+        {t(mode === "copy" ? "copy.passage" : "memorize.passage", { passage: label })}
       </button>
     </div>
   </div>

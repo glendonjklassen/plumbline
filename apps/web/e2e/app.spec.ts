@@ -1311,10 +1311,12 @@ test("the passage picker actually files the card it names", async ({ page }) => 
   });
   await expect(page.getByText("Tap the verse this passage ends on.")).toBeVisible();
   await page.locator(".sheet .grid button", { hasText: /^3$/ }).click();
-  await page.getByRole("button", { name: /^Memorize Ps 23:1/ }).click();
+  // The button and the toast say the book's name, as the verse menu's Memorize
+  // does (e2e/display-names.spec.ts); the card below keeps the refKey.
+  await page.getByRole("button", { name: "Memorize Psalms 23:1–3" }).click();
 
   // The toast names the passage rather than reporting an engine error...
-  await expect(page.locator(".toast")).toHaveText("Memorizing Ps 23:1–3");
+  await expect(page.locator(".toast")).toHaveText("Memorizing Psalms 23:1–3");
   // ...and the card is really on disk, spanning the range that was picked.
   const cards = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
@@ -1322,6 +1324,47 @@ test("the passage picker actually files the card it names", async ({ page }) => 
     return (cov?.cards ?? []).map((c: any) => c.label ?? c.ref);
   });
   expect(cards).toEqual(["Ps 23:1–3"]);
+});
+
+// Copy passage…: the same picker, ending a run of verses that lands on the
+// clipboard in the reader's copy shape. Driven through the menu and the picker,
+// not the engine, so the copy mode's own commit path is what runs. Also the
+// place that checks a copied reference carries no edition in brackets — the
+// `(KJV)` suffix was dropped on 2026-11-03.
+test("Copy passage… puts the run on the clipboard, with no edition after the reference", async ({ page }) => {
+  await boot(page);
+  // Record what the copy hands over, without needing clipboard perms.
+  await page.evaluate(() => {
+    (window as any).__copied = [];
+    navigator.clipboard.writeText = async (t: string) => void (window as any).__copied.push(t);
+    (window as any).__plumbline.contextMenu = { x: 40, y: 180, refKey: "Ps 23:1" };
+  });
+  await page.locator(".menu").getByRole("button", { name: "Copy passage…" }).click();
+  await expect(page.getByText("Tap the verse this passage ends on.")).toBeVisible();
+  await page.locator(".sheet .grid button", { hasText: /^3$/ }).click();
+  await page.getByRole("button", { name: "Copy Psalms 23:1–3" }).click();
+  await expect(page.locator(".toast")).toHaveText("Copied");
+
+  // Waited on the recorder, not the toast: the toast is written AFTER the
+  // clipboard, and the second copy below would otherwise read a toast the first
+  // copy left on screen and look at the clipboard before anything was written.
+  const copies = () => page.evaluate(() => (window as any).__copied.length as number);
+  await expect.poll(copies).toBe(1);
+  const copied: string = await page.evaluate(() => (window as any).__copied[0]);
+  // One paragraph, first verse to last, the passage reference after it.
+  expect(copied).toContain("The LORD is my shepherd");
+  expect(copied).toContain("He restoreth my soul");
+  expect(copied).toMatch(/ — Psalms 23:1–3$/);
+  expect(copied).not.toContain("(KJV)");
+
+  // And the single-verse copy from the same menu, which shares the shape.
+  await page.evaluate(() => {
+    (window as any).__plumbline.contextMenu = { x: 40, y: 180, refKey: "Ps 23:1" };
+  });
+  await page.locator(".menu").getByRole("button", { name: "Copy", exact: true }).click();
+  await expect.poll(copies).toBe(2);
+  const one: string = await page.evaluate(() => (window as any).__copied[1]);
+  expect(one).toMatch(/ — Psalms 23:1$/);
 });
 
 // A whole section as one card: the hub lists one row labelled with the range, and
