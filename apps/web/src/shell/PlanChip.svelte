@@ -27,7 +27,8 @@
   import { planColorStyle, planIconPath } from "./planLook";
   import { SEATING_ICONS } from "./seatingIcons";
   import { FEATURE_BY_ID, nextFeature, weekKey, type SpotlightState } from "./spotlight";
-  import { t } from "../lib/i18n.svelte";
+  import { plural, t } from "../lib/i18n.svelte";
+  import { localDay } from "../engine/StudyEngine";
 
   const s = getSession();
 
@@ -80,6 +81,8 @@
     // own (planLook.ts), so this is only the fallback for a glyph this build
     // cannot draw.
     plan: "M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z",
+    // chat_bubble — the daily prayer reminder; the Pray tab's own glyph
+    prayer: "M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z",
     // school — today's memorization
     memory: "M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z",
     // auto_stories — a running devotional, the booklet it is
@@ -167,6 +170,50 @@
     return (heldMemory = refs.length > 0 ? { n: refs.length, refs } : null);
   });
 
+  /** A day with nothing to review: on about half of them, suggest finding a
+   *  verse to memorize, so most days hold some memory activity (maintainer,
+   *  2026-11-21). The coin is a hash of the local date, not `Math.random()` —
+   *  it must land the same way on every render and reload of one day, or the
+   *  chip would blink in and out. Hashed rather than odd/even days so it does
+   *  not read as a schedule. */
+  function coin(day: string): boolean {
+    let h = 2166136261;
+    for (let i = 0; i < day.length; i++) h = Math.imul(h ^ day.charCodeAt(i), 16777619);
+    return ((h >>> 0) % 2) === 0;
+  }
+  // Held through a refetch like the tile above, in a plain variable: writing
+  // `$state` from inside a `$derived` is an error in Svelte 5. False until the
+  // engine has answered, so "not asked yet" never reads as "nothing due".
+  let heldFind = false;
+  const memoryFind = $derived.by(() => {
+    const q = s.memoryToday();
+    if (q == null) return heldFind;
+    // Not once the day has had its memory activity: a verse added today is
+    // due at once (the review chip takes over) and reviewing it counts here.
+    const idle = ((q.refs ?? []) as string[]).length === 0 && Number(q.reviewedToday ?? 0) === 0;
+    return (heldFind = idle && coin(localDay()));
+  });
+
+  /** The daily prayer reminder. With prayers on the list it counts the ones not
+   *  yet prayed for today and retires once they all are, returning at the next
+   *  local midnight — the devotional's rule. With an empty list it asks for a
+   *  first prayer instead (maintainer, 2026-11-21). Held through a refetch like
+   *  the plans above; null before the first answer, so the chip never flashes
+   *  "Add a prayer" at a reader who has ten. */
+  let heldPrayer: { left: number } | { add: true } | null = null;
+  const prayerTile = $derived.by(() => {
+    void s.studyEpoch;
+    const q = s.q("prayers", localDay());
+    if (q == null) return heldPrayer;
+    const praying = (q.praying ?? []) as { prayedToday: boolean }[];
+    if (praying.length === 0) return (heldPrayer = { add: true });
+    const left = praying.filter((p) => !p.prayedToday).length;
+    return (heldPrayer = left > 0 ? { left } : null);
+  });
+  const prayerLabel = $derived(
+    !prayerTile ? "" : "add" in prayerTile ? t("prayer.chipAdd") : plural("prayer.chip.one", "prayer.chip.other", prayerTile.left),
+  );
+
   const devotionalTiles = $derived(
     (((s.devotionals()?.running ?? []) as any[]) ?? []).flatMap((r: any) => {
       if (r.paused || !r.today?.available) return [];
@@ -241,7 +288,7 @@
   }
 </script>
 
-{#if (planTiles.length > 0 || devotionalTiles.length > 0 || slotTiles.length > 0 || memoryTile || spotTile) && !s.inConceptStudy}
+{#if (planTiles.length > 0 || devotionalTiles.length > 0 || slotTiles.length > 0 || memoryTile || memoryFind || prayerTile || spotTile) && !s.inConceptStudy}
   <div class="plan-chip-row">
     <div class="tiles">
       {#each planTiles as p (p.key)}
@@ -280,6 +327,37 @@
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.memory} /></svg>
           <span class="ref">{t("memorize.chip", { n: memoryTile.n })}</span>
+        </button>
+      {/if}
+      {#if memoryFind}
+        <button
+          class="find-chip"
+          data-memory-find
+          aria-label="{t('memorize.title')} · {t('memorize.chipFind')}"
+          title="{t('memorize.title')} · {t('memorize.chipFind')}"
+          onclick={() => {
+            s.dismissTransient();
+            s.memorize = { view: "hub" };
+            s.screen = "memorize";
+          }}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.memory} /></svg>
+          <span class="ref">{t("memorize.chipFind")}</span>
+        </button>
+      {/if}
+      {#if prayerTile}
+        <button
+          class="prayer-chip"
+          data-prayer={"add" in prayerTile ? "add" : prayerTile.left}
+          aria-label="{t('prayer.title')} · {prayerLabel}"
+          title="{t('prayer.title')} · {prayerLabel}"
+          onclick={() => {
+            s.dismissTransient();
+            s.screen = "prayer";
+          }}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.prayer} /></svg>
+          <span class="ref">{prayerLabel}</span>
         </button>
       {/if}
       {#each slotTiles as tile (tile.token)}
@@ -338,7 +416,11 @@
   .tiles > :last-child {
     margin-inline-end: auto;
   }
+  /* `.prayer-chip` is its own class, not `.plan-chip`: the suite counts plan
+     chips by that class, and a reminder that is always there would be counted. */
   .plan-chip,
+  .prayer-chip,
+  .find-chip,
   .bm-tile,
   .spot-chip {
     flex: 0 0 auto;
@@ -357,6 +439,8 @@
     white-space: nowrap;
   }
   .plan-chip svg,
+  .prayer-chip svg,
+  .find-chip svg,
   .bm-tile svg,
   .spot-chip svg {
     flex: 0 0 auto;
@@ -372,6 +456,8 @@
     font-variant-numeric: tabular-nums;
   }
   .plan-chip:hover,
+  .prayer-chip:hover,
+  .find-chip:hover,
   .bm-tile:hover,
   .spot-chip:hover {
     border-color: var(--gold, #9e7d38);

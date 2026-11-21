@@ -11,8 +11,8 @@ test("phone: the five destinations are in the bottom bar, not the menu", async (
   const nav = page.locator(".bottom-nav");
   await expect(nav).toBeVisible();
   await expect(nav.locator("button")).toHaveCount(5);
-  for (const label of ["Read", "Study", "Preach", "Share", "Sing"]) {
-    await expect(nav.getByRole("button", { name: label })).toBeVisible();
+  for (const label of ["Read", "Study", "Pray", "Share", "Sing"]) {
+    await expect(nav.getByRole("button", { name: label, exact: true })).toBeVisible();
   }
   // Read is current on arrival, and the icons really are icons.
   await expect(nav.locator("button.on")).toHaveText(/Read/);
@@ -22,7 +22,7 @@ test("phone: the five destinations are in the bottom bar, not the menu", async (
   await page.getByLabel("Menu").click();
   const menu = page.locator(".menu");
   await expect(menu.getByRole("button", { name: "Settings" })).toBeVisible();
-  for (const gone of ["Study", "Preach", "Share", "Sing"]) {
+  for (const gone of ["Study", "Pray", "Share", "Sing"]) {
     await expect(menu.getByRole("button", { name: gone })).toHaveCount(0);
   }
 });
@@ -93,12 +93,12 @@ test("phone: Present keeps the four destinations, picking and presenting alike",
   await boot(page);
   const nav = page.locator(".bottom-nav");
 
-  // Present is the headline card of the Preach hub.
-  await nav.getByRole("button", { name: "Preach" }).click();
-  await page.locator(".ex-card", { hasText: "Present" }).first().click();
+  // Present is a card on Share (Preach was folded into it).
+  await nav.getByRole("button", { name: "Share" }).click();
+  await page.locator('[data-present="pick"]').click();
   await expect(page.locator(".present")).toBeVisible();
   await expect(nav, "the picker covered the bottom bar").toBeVisible();
-  await expect(nav.locator("button.on")).toHaveText(/Preach/);
+  await expect(nav.locator("button.on")).toHaveText(/Share/);
 
   // Unconditional: the stock set always seeds a thread for the picker, so an `if`
   // here would silently skip the presenting state on a run where seeding broke.

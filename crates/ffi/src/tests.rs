@@ -2922,6 +2922,80 @@ fn hymnal_round_trip_via_abi() {
 }
 
 #[test]
+fn the_prayer_list_round_trips_via_abi() {
+    use crate::prayers::*;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-prayers-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        let home_c = std::ffi::CString::new(home.to_str().unwrap()).unwrap();
+        let e = plumbline_engine_open(home_c.as_ptr(), ptr::null_mut());
+        let list = |today: &std::ffi::CStr| -> Value {
+            serde_json::from_str(&take(plumbline_engine_prayers_json(e, today.as_ptr())).unwrap()).unwrap()
+        };
+        let titles = |v: &Value| -> Vec<String> {
+            v.as_array().unwrap().iter().map(|p| p["title"].as_str().unwrap().to_string()).collect()
+        };
+        let today = c"2026-11-21";
+        let empty = list(today);
+        assert!(empty["praying"].as_array().unwrap().is_empty() && empty["answered"].as_array().unwrap().is_empty());
+
+        let t1 = c"2026-11-21T10:00:00Z";
+        let t2 = c"2026-11-21T11:00:00Z";
+        assert!(plumbline_engine_prayer_add(e, c"Anna's surgery".as_ptr(), t1.as_ptr()).is_null());
+        assert!(plumbline_engine_prayer_add(e, c"Exams".as_ptr(), t2.as_ptr()).is_null());
+        assert!(!plumbline_engine_prayer_add(e, c" ".as_ptr(), t2.as_ptr()).is_null(), "no title");
+        let v = list(today);
+        assert_eq!(titles(&v["praying"]), ["Anna's surgery", "Exams"]);
+        assert_eq!(
+            v["praying"][1].as_object().unwrap().keys().collect::<Vec<_>>(),
+            ["created", "id", "prayedDays", "prayedToday", "title"]
+        );
+        let id_of = |v: &Value, k: usize| std::ffi::CString::new(v["praying"][k]["id"].as_str().unwrap()).unwrap();
+        let (anna, exams) = (id_of(&v, 0), id_of(&v, 1));
+
+        // Prayed for today: counted once however often it is tapped.
+        assert!(plumbline_engine_prayer_prayed(e, anna.as_ptr(), today.as_ptr()).is_null());
+        assert!(plumbline_engine_prayer_prayed(e, anna.as_ptr(), today.as_ptr()).is_null());
+        let v = list(today);
+        assert_eq!(
+            (&v["praying"][0]["prayedDays"], &v["praying"][0]["prayedToday"]),
+            (&serde_json::json!(1), &serde_json::json!(true))
+        );
+        assert_eq!(list(c"2026-11-22")["praying"][0]["prayedToday"], false, "yesterday's prayer is not today's");
+
+        assert!(plumbline_engine_prayer_edit(e, exams.as_ptr(), c"Final exams".as_ptr(), t2.as_ptr()).is_null());
+        assert_eq!(titles(&list(today)["praying"]), ["Anna's surgery", "Final exams"]);
+
+        // Answered, with a comment: off the list and into the answered one.
+        assert!(plumbline_engine_prayer_answer(e, anna.as_ptr(), c"Went well".as_ptr(), today.as_ptr(), t2.as_ptr())
+            .is_null());
+        let v = list(today);
+        assert_eq!(titles(&v["praying"]), ["Final exams"]);
+        assert_eq!(v["answered"][0]["answer"], "Went well");
+        assert_eq!(v["answered"][0]["answered"], "2026-11-21");
+        assert_eq!(v["answered"][0]["prayedDays"], 1, "answering lost the days prayed");
+        assert!(plumbline_engine_prayer_reopen(e, anna.as_ptr(), t2.as_ptr()).is_null());
+        assert_eq!(list(today)["praying"].as_array().unwrap().len(), 2);
+
+        // Deleted, with a deletion record behind it.
+        assert!(plumbline_engine_prayer_delete(e, anna.as_ptr()).is_null());
+        assert!(plumbline_engine_prayer_delete(e, anna.as_ptr()).is_null(), "a missing prayer is a success");
+        assert_eq!(titles(&list(today)["praying"]), ["Final exams"]);
+        let records = plumbline_core::tombstone::load(&home);
+        assert!(
+            records.contains_key(&plumbline_core::tombstone::prayer(anna.to_str().unwrap())),
+            "a delete records a deletion, or a restore brings the prayer back: {records:?}"
+        );
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+#[test]
 fn a_custom_plan_starts_from_spans_and_is_named_over_the_abi() {
     unsafe {
         let home = std::env::temp_dir().join(format!("plumbline-ffi-custom-plan-{}", std::process::id()));

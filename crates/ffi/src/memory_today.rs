@@ -28,6 +28,32 @@ struct WireMemoryToday {
     cap: u32,
 }
 
+#[derive(Serialize)]
+struct WireMemoryPace {
+    windows: Vec<memory::MemoryWindow>,
+}
+
+/// Memorization activity over the reading pace's windows, as
+/// `{windows:[{id,days,reviews,added}]}` — [`memory::pace`] over the home's
+/// cards at `now` (RFC3339 UTC). No cards, or no home, answers no windows.
+/// Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_memory_pace_json(
+    engine: *const PlumblineEngine,
+    now: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(now)) = (engine.as_ref(), opt_str(now)) else {
+            return ptr::null_mut();
+        };
+        let cards = e.home.as_ref().map(|h| memory::load_cards(h).0).unwrap_or_default();
+        out_json(&WireMemoryPace { windows: memory::pace(&cards, now).unwrap_or_default() })
+    })
+}
+
 /// Today's memorization queue under a daily `cap` (`0` = no limit), as
 /// `{refs, dueTotal, reviewedToday, cap}` — [`memory::today_queue`] over the
 /// home's cards at `now` (RFC3339 UTC; the shell passes its day stamp). An

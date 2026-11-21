@@ -37,6 +37,8 @@ async function boot(page: Page): Promise<void> {
 
 async function openShare(page: Page) {
   await page.getByRole("navigation").getByRole("button", { name: "Share", exact: true }).click();
+  // The link options are folded behind the gear on the code's card.
+  await page.getByRole("button", { name: "Link options" }).click();
   const card = page.locator('[data-surface="share custom"]');
   await expect(card).toBeVisible();
   return card;

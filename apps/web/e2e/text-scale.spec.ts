@@ -80,7 +80,8 @@ test("the reader's text size is published on :root", async ({ page }) => {
  * ones already scaled and say nothing about the ones that were missed.
  */
 const CHROME: { name: string; open?: string; sel: string; drawnAt: number }[] = [
-  { name: "the passage in the header", sel: "header .subtitle", drawnAt: 16 },
+  // Shown only with a second pane open: one pane's own strip names the passage.
+  { name: "the passage in the header", open: `s.addPane(0)`, sel: "header .subtitle", drawnAt: 16 },
   { name: "the header's menu button", sel: "header .menu-btn", drawnAt: 20 },
   { name: "a destination in the top bar", sel: "header .browse button", drawnAt: 16 },
   { name: "the settings dialog's heading", open: `s.showSettings = true`, sel: '[data-surface="settings"] h2', drawnAt: 17 },

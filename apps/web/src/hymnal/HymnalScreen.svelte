@@ -166,6 +166,7 @@
 
 <section class="screen" aria-label={t("hymnal.title")}>
   <ScreenBar
+    top={!open}
     title={open && text ? text.title : t("hymnal.title")}
     onBack={() => (open ? (s.hymn = null) : s.goRead())}
     backLabel={open ? t("hymnal.backToList") : t("bar.backToReading")}

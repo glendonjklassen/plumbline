@@ -13,9 +13,9 @@
   import VizScreen from "./VizScreen.svelte";
   import TagsScreen from "./TagsScreen.svelte";
   import WeavesScreen from "./WeavesScreen.svelte";
-  import PreachScreen from "./PreachScreen.svelte";
   import SermonScreen from "./SermonScreen.svelte";
   import HymnalScreen from "../hymnal/HymnalScreen.svelte";
+  import PrayerScreen from "./PrayerScreen.svelte";
   import MarkReadDialog from "./MarkReadDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import PickDialog from "./PickDialog.svelte";
@@ -119,9 +119,10 @@
     };
   }
 
-  // The bottom bar's five ROLES — Read · Study · Preach · Share · Sing: the hats
+  // The bottom bar's five ROLES — Read · Study · Pray · Sing · Share: the hats
   // a reader wears, not a list of features. The tools live one layer down
-  // (Memorize is a card inside Study, the church rides Share). Icons are standard
+  // (Memorize is a card inside Study; Present, the sermons and the church ride Share
+  // — Preach was a role of its own until 2026-11-21, when it was folded into Share). Icons are standard
   // Material Symbols.
   //
   // Ids, not labels: this array is built ONCE, so a label would freeze whatever
@@ -141,13 +142,15 @@
       go: () => (s.screen = "explore"),
     },
     {
-      key: "preach",
-      path:
-        "M21 3H3c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h18c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2z" +
-        "m0 16.02H3V4.98h18v14.04zM10 12H8l4-4 4 4h-2v4h-4v-4z",
-      // A hub like Study, not a raise of Present: the role holds the presentation
-      // AND its materials (weaves, tags, notes).
-      go: () => (s.screen = "preach"),
+      key: "pray",
+      // Material's `chat_bubble` (maintainer, 2026-11-21).
+      path: "M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z",
+      go: () => (s.screen = "prayer"),
+    },
+    {
+      key: "sing",
+      path: "M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z",
+      go: () => (s.screen = "hymnal"),
     },
     {
       key: "share",
@@ -157,11 +160,6 @@
         "C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16" +
         "c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z",
       go: () => (s.screen = "share"),
-    },
-    {
-      key: "sing",
-      path: "M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z",
-      go: () => (s.screen = "hymnal"),
     },
   ] as const;
 
@@ -188,11 +186,11 @@
     };
   });
 
-  // Which ROLE reads as current. Preach wins because Present covers everything;
+  // Which ROLE reads as current. Share wins because Present covers everything;
   // below it the screen decides, and Memorize lights Study (it is a card there).
   const dest = $derived(
-    s.showPresent || s.screen === "preach"
-      ? "preach"
+    s.showPresent
+      ? "share"
       : s.screen === "explore" ||
           s.screen === "memorize" ||
           s.screen === "plans" ||
@@ -204,13 +202,15 @@
         ? "study"
         : s.screen === "hymnal"
           ? "sing"
-          : s.screen === "share"
+          : s.screen === "prayer"
+            ? "pray"
+            : s.screen === "share"
             ? "share"
             : s.screen === "sermon"
               ? // The editor lights the hub it was opened from.
                 s.sermonFrom === "explore"
                 ? "study"
-                : s.sermonFrom
+                : "share"
               : "read",
   );
 
@@ -346,17 +346,24 @@
          every DESTINATION, where the passage is not what the screen is about.
          Kept in the DOM at every width: the e2e suite uses it as the "text is on
          screen" boot signal. -->
-    <span class="subtitle">{subtitle}</span>
+    <!-- `solo`: with one pane its own strip, directly below, already names the
+         passage, so this would say "John 3" twice. It earns its place only when
+         there are several panes and the question is which one is active. -->
+    <span class="subtitle" class:solo={s.panes.length < 2}>{subtitle}</span>
     <!-- The roles are first-class in the top bar (Read is the base layer, then
-         Study · Preach · Share · Sing); the ≡ menu holds utilities only. Tools
+         Study · Pray · Sing · Share); the ≡ menu holds utilities only. Tools
          live one layer down — Threads/Tags/Weaves/Memorize inside Study, the
          church and the QR on Share. -->
-    <nav class="browse">
-        <button onclick={go(() => (s.screen = "explore"))}>{t("nav.study")}</button>
-        <button onclick={go(() => (s.screen = "preach"))}>{t("nav.preach")}</button>
-        <button onclick={go(() => (s.screen = "share"))}>{t("nav.share")}</button>
-        <button onclick={go(() => (s.screen = "hymnal"))}>{t("nav.sing")}</button>
-      </nav>
+    <nav class="browse" aria-label={t("nav.destinations")}>
+      <!-- The same five as the phone's bottom bar, Read included, with the
+           current one marked: on a wide screen this row is the only thing that
+           names the destination (a top-level screen's own bar is hidden here). -->
+      {#each NAV as item (item.key)}
+        <button class:on={dest === item.key} aria-current={dest === item.key ? "page" : undefined} onclick={go(item.go)}>
+          {t(`nav.${item.key}`)}
+        </button>
+      {/each}
+    </nav>
     <span class="spacer"></span>
     <button class="glass" onclick={openSearch} aria-label={t("common.openSearch")}>⌕</button>
     <button class="menu-btn" onclick={() => (s.menuOpen = !s.menuOpen)} aria-label={t("common.menu")}>≡</button>
@@ -382,12 +389,12 @@
       <TagsScreen />
     {:else if s.screen === "weaves"}
       <WeavesScreen />
-    {:else if s.screen === "preach"}
-      <PreachScreen />
     {:else if s.screen === "sermon"}
       <SermonScreen />
     {:else if s.screen === "hymnal"}
       <HymnalScreen />
+    {:else if s.screen === "prayer"}
+      <PrayerScreen />
     {:else if s.screen === "share"}
       <ShareScreen />
     {:else if s.screen === "search"}
@@ -642,6 +649,7 @@
   }
   /* A destination is not a passage. Above 700px the header stays (it is the
      destination switcher there) but the passage goes with the reader. */
+  .subtitle.solo,
   .frame:not([data-screen="read"]) .subtitle {
     display: none;
   }
@@ -658,6 +666,11 @@
   }
   .browse button:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+  }
+  /* The current destination: the bottom bar's gold tint, plus weight. */
+  .browse button.on {
+    font-weight: 600;
+    background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);
   }
   /* Phone only: on a wide screen the destinations are already in the top bar. */
   .bottom-nav {

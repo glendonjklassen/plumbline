@@ -1,13 +1,13 @@
 // The virtual home directory the engine sees through WASI: the read-only data
 // pack (data/, bridge/) plus the user's authored files (tags/, threads/,
-// weaves/, notes/, memory/, reading/, plans/, devotionals/, .config/) restored
+// weaves/, notes/, memory/, reading/, plans/, devotionals/, hymnal/, prayers/, .config/) restored
 // from IndexedDB. After every authoring write the user subtree is diffed back.
 
 import { Directory, File } from "@bjorn3/browser_wasi_shim";
 import { idbApply, idbEntries, idbGet } from "./idb";
 
 /** Home-relative directories that hold user-authored state. */
-const USER_DIRS = ["tags", "threads", "weaves", "notes", "memory", "reading", "plans", "devotionals", "hymnal", "deleted", ".config"];
+const USER_DIRS = ["tags", "threads", "weaves", "notes", "memory", "reading", "plans", "devotionals", "hymnal", "prayers", "deleted", ".config"];
 /** The corpus idxcache — rebuildable, persisted to skip the 19 MB re-parse.
  *  Sources, in preference order: this device's persisted copy (IndexedDB),
  *  else the pack-shipped web-stamped one (fetched on first visit). */

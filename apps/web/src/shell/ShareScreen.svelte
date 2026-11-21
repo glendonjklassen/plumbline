@@ -7,6 +7,7 @@
   import { getSession } from "../state/session.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
   import QrCode from "./QrCode.svelte";
+  import { modal } from "../lib/modal";
   import {
     churchFromQuery,
     PRESET_CAP,
@@ -186,6 +187,12 @@
     if (church) rows.push([t("settings.church"), church.name]);
     return rows;
   });
+  /** Whether the popup holding the link options and the church details is open. */
+  let setup = $state(false);
+  // Material's `settings`.
+  const GEAR =
+    "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z";
+
   async function shareLink(): Promise<void> {
     const title = hasChurch(s.church) ? t("share.fromChurch", { church: s.church.name }) : "Plumbline";
     if (navigator.share) {
@@ -288,9 +295,21 @@
 </script>
 
 <section class="screen" aria-label={t("nav.share")}>
-  <ScreenBar title={t("nav.share")} onBack={() => s.goRead()} onMenu={() => (s.menuOpen = true)} />
+  <ScreenBar top title={t("nav.share")} onBack={() => s.goRead()} onMenu={() => (s.menuOpen = true)} />
   <div class="content">
     <div class="card qr-card" data-surface="share app">
+      <!-- The gear: what this code carries (the link options) and whose it is
+           (the church). Configuration, so it is folded away until asked for. -->
+      <button
+        class="gear"
+        class:on={setup}
+        aria-label={t("share.options")}
+        title={t("share.options")}
+        aria-expanded={setup}
+        onclick={() => (setup = !setup)}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d={GEAR} /></svg>
+      </button>
       <h3>{t("share.title")}</h3>
       <p class="sub">{hasChurch(s.church) ? t("share.subChurch") : t("share.sub")}</p>
       <QrCode size={220} text={link} />
@@ -305,6 +324,15 @@
       <p class="sub">{new URL(link).host}</p>
       {#if hasChurch(s.church)}
         <p class="with">{t("share.with", { church: s.church.name })}</p>
+        <!-- The recipient's path to the congregation a shared link named —
+             this button was the header's Church chip before Share was a role. -->
+        <button
+          class="visit church"
+          title={churchTitle(s.church, t("shell.churchFallback"), s.churchMeets(s.church))}
+          onclick={() => visitChurch(s.church, s.showToast, t("shell.churchFallback"))}
+        >
+          {t("shell.church")}
+        </button>
       {/if}
       <!-- What the code above hands over. Rows, not a composed sentence: three
            values slotted into one sentence reads as machine translation in most
@@ -318,28 +346,20 @@
       </div>
       <button class="primary" onclick={shareLink}>{t("share.action")}</button>
     </div>
-    <!-- Share is the app AND the Gospel (maintainer direction, 2026-08-11):
-         the same Present that Preach raises, opened straight onto the Romans
-         Road — the first-run "Sharing the gospel" path, now living where the
-         sharing happens. -->
-    <div class="card" data-surface="share gospel">
-      <h3>{t("share.gospel")}</h3>
-      <p class="desc">{t("share.gospelDesc")}</p>
-      <button
-        class="visit"
-        onclick={() => {
-          s.presentThreadName = s.gospelThread();
-          s.showPresent = true;
-        }}
+    {#if setup}
+      <!-- A popup over the screen, not a section under the card (maintainer,
+           2026-11-21). Stacked at the picker sheets' level (44/45), below the
+           text prompt (50/51) that Save preset raises from inside it. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+      <div class="setup-backdrop" onclick={() => (setup = false)}></div>
+      <div
+        class="setup"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("share.options")}
+        tabindex="-1"
+        use:modal={{ close: () => (setup = false) }}
       >
-        {t("share.gospelGo")}
-      </button>
-    </div>
-    <div class="card" data-surface="share sermons">
-      <h3>{t("explore.sermons")}</h3>
-      <p class="desc">{t("explore.sermons.desc")}</p>
-      <button class="visit" onclick={() => s.openSermons("share")}>{t("sermon.open")}</button>
-    </div>
     <!-- The palette: one link, built from what the recipient will actually get.
          Every control here only offers what EXISTS in the chosen language — the
          engine answers that per language (`shareOptions`), and what is not
@@ -478,17 +498,36 @@
         <input type="time" value={serviceTimeValue()} onchange={setServiceTime} />
       </label>
       <input class="field" placeholder={t("settings.churchUrl")} bind:value={churchUrl} onchange={saveChurch} />
-      {#if hasChurch(s.church)}
-        <!-- The recipient's path to the congregation a shared link named —
-             this button was the header's Church chip before Share was a role. -->
+    </div>
+        <div class="setup-foot">
+          <button class="visit" data-modal-focus onclick={() => (setup = false)}>{t("common.close")}</button>
+        </div>
+      </div>
+    {/if}
+    <!-- Present: the picker, or straight onto the gospel walk. One card, two
+         ways in — the second is only a shortcut to a thread the first lists
+         (maintainer, 2026-11-21). -->
+    <div class="card" data-surface="share present">
+      <h3>{t("nav.present")}</h3>
+      <p class="desc">{t("preach.present.desc")}</p>
+      <div class="acts start">
         <button
           class="visit"
-          title={churchTitle(s.church, t("shell.churchFallback"), s.churchMeets(s.church))}
-          onclick={() => visitChurch(s.church, s.showToast, t("shell.churchFallback"))}
+          data-present="gospel"
+          onclick={() => {
+            s.presentThreadName = s.gospelThread();
+            s.showPresent = true;
+          }}
         >
-          {t("shell.church")}
+          {t("share.presentGospel")}
         </button>
-      {/if}
+        <button class="visit" data-present="pick" onclick={() => (s.showPresent = true)}>{t("share.presentOther")}</button>
+      </div>
+    </div>
+    <div class="card" data-surface="share sermons">
+      <h3>{t("explore.sermons")}</h3>
+      <p class="desc">{t("explore.sermons.desc")}</p>
+      <button class="visit" onclick={() => s.openSermons("share")}>{t("sermon.open")}</button>
     </div>
   </div>
 </section>
@@ -541,6 +580,7 @@
   }
   /* The QR needs its white field whatever the theme, as the dialog always had. */
   .qr-card {
+    position: relative;
     align-items: center;
     background: #ffffff;
     color: #101010;
@@ -706,6 +746,70 @@
   }
   .acts .visit {
     margin-top: 0;
+  }
+  .setup-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 16, 8, 0.35);
+    z-index: 44;
+  }
+  .setup {
+    position: fixed;
+    z-index: 45;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(440px, 94vw);
+    max-height: 88vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 12px;
+    background: var(--paper, #fcf9f4);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+  }
+  .setup-foot {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .setup-foot .visit {
+    margin-top: 0;
+  }
+  .acts.start {
+    justify-content: flex-start;
+  }
+  /* On the code's fixed white card, so fixed tones (see `.preview`). */
+  .gear {
+    position: absolute;
+    top: 6px;
+    inset-inline-end: 6px;
+    width: 40px;
+    height: 40px;
+    min-height: auto;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: #5a564e;
+  }
+  .gear svg {
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+  }
+  .gear:hover,
+  .gear.on {
+    color: #9e7d38;
+    background: #f4efe4;
+  }
+  .visit.church {
+    align-self: center;
+    color: #9e7d38;
+    border-color: #d8cba8;
   }
 
   /* Inside the QR card, which keeps its white field in every theme — so these

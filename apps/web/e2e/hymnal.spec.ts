@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The hymnal: fifth destination, chords, transposition, language, sing mode.
+// The hymnal: a destination of its own, chords, transposition, language, sing mode.
 //
 // Content-agnostic on purpose — the book is still being filled in, so every case takes whatever
 // the shipped hymnal holds and asserts a property of it rather than naming a hymn. The one thing
@@ -34,7 +34,7 @@ test("the hymnal is a destination, and it has hymns in it", async ({ page }) => 
   await expect(first.locator(".rtitle")).not.toBeEmpty();
 });
 
-test("phone: the fifth tab reaches it, and Read comes back", async ({ page }) => {
+test("phone: its tab reaches it, and Read comes back", async ({ page }) => {
   await boot(page, { width: 390, height: 780 });
   const bar = page.locator("nav.bottom-nav");
   await expect(bar).toBeVisible();

@@ -364,8 +364,8 @@ export class Session {
     | "viz"
     | "tags"
     | "weaves"
-    | "preach"
     | "hymnal"
+    | "prayer"
     | "share"
     | "search"
     | "devotional"
@@ -376,12 +376,12 @@ export class Session {
 
   /** Which thread the sermon editor has open; null is its list of sermons. */
   sermonName = $state<string | null>(null);
-  /** The hub the editor was entered from — Study, Preach or Share all offer it
-   *  — and where its ‹ returns. */
-  sermonFrom = $state<"explore" | "preach" | "share">("preach");
+  /** The hub the editor was entered from — Study and Share both offer it — and
+   *  where its ‹ returns. */
+  sermonFrom = $state<"explore" | "share">("share");
 
   /** Open the sermon editor from `from`, on `name` or on the list. */
-  openSermons(from: "explore" | "preach" | "share", name: string | null = null): void {
+  openSermons(from: "explore" | "share", name: string | null = null): void {
     this.dismissTransient();
     this.sermonFrom = from;
     this.sermonName = name;

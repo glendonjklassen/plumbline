@@ -295,6 +295,37 @@ export class StudyEngine {
     );
   }
 
+  // ── the prayer list ──────────────────────────────────────────────────────────
+
+  /** The prayer list at `today` (the reader's own `YYYY-MM-DD`):
+   *  `{praying:[…],answered:[…]}`. Lives in the home (`prayers/<id>.json`), so
+   *  it rides the backup and merges. */
+  prayers(today: string): any {
+    return this.#json("plumbline_engine_prayers_json", today);
+  }
+  prayerAdd(title: string, stamp: string): string | null {
+    return this.#author("plumbline_engine_prayer_add", (f, ...p) => f(this.#engine, ...p), [title, stamp]);
+  }
+  prayerEdit(id: string, title: string, stamp: string): string | null {
+    return this.#author("plumbline_engine_prayer_edit", (f, ...p) => f(this.#engine, ...p), [id, title, stamp]);
+  }
+  /** Record that a prayer was prayed for on `day`. Once a day; a repeat is a no-op. */
+  prayerPrayed(id: string, day: string): string | null {
+    return this.#author("plumbline_engine_prayer_prayed", (f, ...p) => f(this.#engine, ...p), [id, day]);
+  }
+  /** Mark a prayer answered on `day`. An empty `comment` is no comment. */
+  prayerAnswer(id: string, comment: string, day: string, stamp: string): string | null {
+    return this.#author("plumbline_engine_prayer_answer", (f, ...p) => f(this.#engine, ...p), [id, comment, day, stamp]);
+  }
+  /** Move an answered prayer back to the list. */
+  prayerReopen(id: string, stamp: string): string | null {
+    return this.#author("plumbline_engine_prayer_reopen", (f, ...p) => f(this.#engine, ...p), [id, stamp]);
+  }
+  /** Delete a prayer. Records a deletion, so a restore does not bring it back. */
+  prayerDelete(id: string): string | null {
+    return this.#author("plumbline_engine_prayer_delete", (f, ...p) => f(this.#engine, ...p), [id]);
+  }
+
   // ── the plain-English overlay (the AKJV delta) ───────────────────────────────
 
   /** Switch the overlay on/off. Reader only — memorize, Present, copy and share
@@ -675,6 +706,11 @@ export class StudyEngine {
       [now],
     );
     return s === null ? null : JSON.parse(s);
+  }
+  /** Reviews done and verses added over the reading pace's windows:
+   *  `{windows:[{id,days,reviews,added}]}`, empty with no cards. */
+  memoryPace(now: string): any {
+    return this.#json("plumbline_engine_memory_pace_json", now);
   }
   memoryCoverage(now: string): any {
     return this.#json("plumbline_engine_memory_coverage_json", now);

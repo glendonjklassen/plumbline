@@ -388,3 +388,55 @@ fn the_day_ledger_takes_each_days_larger_count() {
     let again = files(&after.iter().map(|(p, v)| (p.as_str(), v.clone())).collect::<Vec<_>>());
     assert_eq!(merge(&again, &laptop), Merged::default());
 }
+
+#[test]
+fn prayers_take_the_newer_edit_union_the_days_prayed_and_stay_deleted() {
+    let prayer = |title: &str, updated: &str, prayed: &[&str], answered: Option<&str>| {
+        let mut v = json!({"format": crate::prayer::FORMAT, "id": A, "title": title,
+                           "created": "2026-01-01T00:00:00Z", "updated": updated});
+        if !prayed.is_empty() {
+            v["prayed"] = json!(prayed);
+        }
+        if let Some(day) = answered {
+            v["answered"] = json!(day);
+        }
+        v
+    };
+    let path = format!("prayers/{A}.json");
+    // The phone prayed on the 2nd; the laptop prayed on the 3rd and then marked
+    // it answered, which is the later edit.
+    let phone = files(&[(&path, prayer("Anna", "2026-01-01T00:00:00Z", &["2026-01-02"], None))]);
+    let laptop =
+        files(&[(&path, prayer("Anna's surgery", "2026-01-04T00:00:00Z", &["2026-01-03"], Some("2026-01-04")))]);
+    let ab = apply(&phone, &merge(&phone, &laptop));
+    let got = &as_json(&ab)[&path];
+    assert_eq!(got["title"], "Anna's surgery", "the newer edit names it");
+    assert_eq!(got["answered"], "2026-01-04");
+    assert_eq!(got["prayed"], json!(["2026-01-02", "2026-01-03"]), "a day prayed on either device is kept");
+    let ba = apply(&laptop, &merge(&laptop, &phone));
+    assert_eq!(as_json(&ab), as_json(&ba), "the result depends on which device restored which");
+    assert_eq!(merge(&ab, &laptop), Merged::default(), "restoring the same backup twice changed something");
+
+    // A prayer only the backup has arrives; one only the device has stays.
+    let other = format!("prayers/{B}.json");
+    let mut theirs = prayer("A new job", "2026-01-02T00:00:00Z", &[], None);
+    theirs["id"] = json!(B);
+    let backup = files(&[(&other, theirs)]);
+    let after = apply(&phone, &merge(&phone, &backup));
+    assert!(after.contains_key(&path) && after.contains_key(&other));
+
+    // Deleted on the phone after the laptop's last edit: the backup does not
+    // bring it back, and a device still holding it lets it go.
+    let (tp, tv) = tombs(&[(&tomb::prayer(A), "2026-01-05T00:00:00Z")]);
+    let deleted = files(&[(&tp, tv)]);
+    assert!(!apply(&deleted, &merge(&deleted, &laptop)).contains_key(&path), "a restore resurrected a deleted prayer");
+    assert!(!apply(&laptop, &merge(&laptop, &deleted)).contains_key(&path), "the other device's delete was ignored");
+    // Edited after the deletion, it is a prayer again.
+    let later = files(&[(&path, prayer("Anna", "2026-01-06T00:00:00Z", &[], None))]);
+    assert!(apply(&deleted, &merge(&deleted, &later)).contains_key(&path));
+
+    // A file this build cannot read is never written over a readable one.
+    let junk: Files = [(path.clone(), b"{not json".to_vec())].into_iter().collect();
+    assert_eq!(merge(&phone, &junk), Merged::default());
+    assert_eq!(merge(&junk, &phone), Merged::default(), "an unreadable file on the device was written over");
+}

@@ -60,6 +60,8 @@ would bind.)
 | `plumbline_backup_merge_json(request)` | merge a backup's files into the device's (`{local, incoming}` → `{write, delete}`), engine-independent |
 | `plumbline_engine_user_notes_json` / `_user_note_json(id)` | every note (any number per verse, each with an `id`) / one note by id |
 | `plumbline_engine_user_note_add(ref, text, stamp)` / `_edit(id, text, stamp)` / `_delete(id)` | **author** notes; an emptied edit deletes. **Breaking in 0.78.0:** replaces `user_note_set` |
+| `plumbline_engine_prayers_json(today)` | the prayer list at a day: `{praying, answered}` |
+| `plumbline_engine_prayer_add(title, stamp)` / `_edit(id, title, stamp)` / `_prayed(id, day)` / `_answer(id, comment, day, stamp)` / `_reopen(id, stamp)` / `_delete(id)` | **author** the prayer list; an empty `comment` is none, and a delete records its tombstone |
 
 Authoring writes go through `core::store`'s cross-platform atomic write (temp
 sibling → fsync → rename); the caller supplies UTC timestamps. An engine opened

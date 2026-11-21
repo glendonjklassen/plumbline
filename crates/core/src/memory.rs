@@ -694,6 +694,44 @@ pub fn activity_by_day(cards: &HashMap<VRef, Card>) -> Vec<DayActivity> {
     out
 }
 
+/// One window of memorization activity: the last `days` calendar days through
+/// today. The same windows as [`crate::reading::pace`], so the Study page can
+/// show both under one set of chips.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryWindow {
+    /// `day`, `week`, `month` or `all`.
+    pub id: &'static str,
+    /// Calendar days in the window, today included (never below 1).
+    pub days: i64,
+    /// Reviews graded in the window.
+    pub reviews: u32,
+    /// Verses whose cards were created in the window (a passage counts each).
+    pub added: u32,
+}
+
+/// Reviews done and verses added today, over the last 7 days, the last 30, and
+/// since the first card — each window ending today. `None` with no cards.
+/// Anything stamped after today counts in every window, as the reading pace
+/// counts it.
+pub fn pace(cards: &HashMap<VRef, Card>, now: &str) -> Option<Vec<MemoryWindow>> {
+    let today = date_to_days(now)?;
+    let first = cards.values().filter_map(|c| date_to_days(&c.created)).min()?;
+    let window = |id: &'static str, days: i64| {
+        let from = today - days + 1;
+        let within = |stamp: &str| date_to_days(stamp).is_some_and(|d| d >= from);
+        let (mut reviews, mut added) = (0u32, 0u32);
+        for c in cards.values() {
+            reviews += c.reviews.iter().filter(|r| within(&r.at)).count() as u32;
+            if within(&c.created) {
+                added += c.verses().len() as u32;
+            }
+        }
+        MemoryWindow { id, days, reviews, added }
+    };
+    Some(vec![window("day", 1), window("week", 7), window("month", 30), window("all", (today - first).max(0) + 1)])
+}
+
 /// Coverage rolled up to the 8 canon sections (Law … Revelation) — a compact
 /// spatial summary beside the per-verse map.
 #[derive(Clone, Debug, PartialEq, Serialize)]
