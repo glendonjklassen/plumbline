@@ -28,6 +28,7 @@ pub mod merge;
 pub mod notes;
 pub mod panel;
 pub mod plan;
+pub mod prayer;
 pub mod reading;
 pub mod reference;
 pub mod renderings;

@@ -143,7 +143,7 @@ export const FEATURES: Feature[] = [
   { id: "plans", used: hasPlans, go: (s) => (s.screen = "plans") },
   { id: "readingMap", go: (s) => (s.bookNavFor = s.activePane) },
   { id: "panes", go: (s) => s.goRead() },
-  { id: "present", go: (s) => (s.screen = "preach") },
+  { id: "present", go: (s) => (s.screen = "share") },
   { id: "share", go: (s) => (s.screen = "share") },
   { id: "hymnal", go: (s) => (s.screen = "hymnal") },
   { id: "backup", go: (s) => (s.showBackup = true) },

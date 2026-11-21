@@ -1004,7 +1004,8 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
   const card = page.locator('[data-surface="share app"]');
   await expect(card).toBeVisible();
   const modulesFor = async () =>
-    card.locator("svg").getAttribute("viewBox").then((v) => Number(v!.split(" ")[2]));
+    // The code, which follows the gear glyph in the card.
+    card.locator("svg").last().getAttribute("viewBox").then((v) => Number(v!.split(" ")[2]));
   const plain = await modulesFor();
   // The card shows the host, never the full link — with a church attached the URL
   // runs off a phone screen.
@@ -1028,7 +1029,7 @@ test("Present shares the passage as a QR whose link opens at the first verse", a
   // Through the Share screen, which is where Present is raised now that the
   // welcome's "Sharing the gospel" path is gone.
   await page.getByRole("navigation").getByRole("button", { name: "Share", exact: true }).click();
-  await page.getByRole("button", { name: "Present the Gospel" }).click();
+  await page.getByRole("button", { name: "The Gospel", exact: true }).click();
   // The gospel default for an English reader (per-language since v0.69.0).
   await expect(page.locator(".present .title")).toContainText("How to Be Saved");
 

@@ -101,8 +101,8 @@ test("the chrome is re-asserted at each moment a UA can have re-derived it", asy
 // light icons on a light surface. The washout, manufactured by the repair.
 test("Present starts over when it is closed by a back-peel, chrome included", async ({ page }) => {
   await bootDark(page);
-  await page.locator(".bottom-nav").getByRole("button", { name: "Preach" }).click();
-  await page.locator(".ex-card", { hasText: "Present" }).first().click();
+  await page.locator(".bottom-nav").getByRole("button", { name: "Share" }).click();
+  await page.locator('[data-present="pick"]').click();
   await expect(page.locator(".present.picking")).toBeVisible();
 
   // The stock set seeds the Romans Road thread, so there is always one to pick.
@@ -118,7 +118,7 @@ test("Present starts over when it is closed by a back-peel, chrome included", as
 
   // Reopen by the route a reader has — the card, not a flag poked from the
   // console. The PICKER, not the presentation they walked away from.
-  await page.locator(".ex-card", { hasText: "Present" }).first().click();
+  await page.locator('[data-present="pick"]').click();
   await expect(page.locator(".present.picking")).toBeVisible();
   await chromeFollows(page, ".present", "dark");
 });

@@ -13,6 +13,7 @@
 //! | plans, devotional runs | done days are a union |
 //! | reading | per chapter: furthest reached, longest dwell, latest dates; the day ledger takes each day's larger count |
 //! | hymn favourites | a union, each star at its earlier stamp |
+//! | prayers | matched by id; the newer edit wins; days prayed are a union |
 //! | settings | the backup's, with both reading histories combined |
 //!
 //! Deletion records ([`crate::tombstone`]) from both sides are combined first,
@@ -87,6 +88,7 @@ pub fn merge(local: &Files, incoming: &Files) -> Merged {
             Kind::Devotionals => runs(&mut out, &records, l, i, crate::devotional::RUN_FORMAT, tomb::devotional, ""),
             Kind::Reading => reading(&mut out, &records, l, i),
             Kind::HymnFavourites => hymn_favourites(&mut out, &records, l, i),
+            Kind::Prayers => prayers(&mut out, &records, l, i),
             Kind::Config => other(&mut out, l, i, true),
             Kind::Other => other(&mut out, l, i, false),
         }
@@ -106,6 +108,7 @@ enum Kind {
     Devotionals,
     Reading,
     HymnFavourites,
+    Prayers,
     Config,
     Other,
 }
@@ -126,6 +129,7 @@ fn kind_of(path: &str) -> Kind {
         _ if in_dir("devotionals/") => Kind::Devotionals,
         _ if in_dir("reading/") => Kind::Reading,
         _ if path == crate::hymnal::FAVOURITES_REL_PATH => Kind::HymnFavourites,
+        _ if in_dir("prayers/") => Kind::Prayers,
         _ => Kind::Other,
     }
 }
@@ -785,6 +789,59 @@ fn hymn_favourites(out: &mut Out, records: &BTreeMap<String, String>, l: &[(&str
     }
     merged.retain(|id, stamp| !tomb::kills(records, &tomb::hymn_favourite(id), stamp));
     out.put(path.to_string(), crate::hymnal::favourites_to_bytes(&merged));
+}
+
+// ── prayers ──────────────────────────────────────────────────────────────────
+
+/// One file per prayer, `prayers/<id>.json`, so a path is an identity. The
+/// newer edit wins whole — title and answer — and the days prayed are
+/// the union of both sides, since marking a day is not an edit and stamps
+/// nothing. A deleted prayer stays deleted unless it was edited afterwards.
+fn prayers(out: &mut Out, records: &BTreeMap<String, String>, l: &[(&str, &[u8])], i: &[(&str, &[u8])]) {
+    let fmt = crate::prayer::FORMAT;
+    let local_paths: BTreeSet<&str> = l.iter().map(|(p, _)| *p).collect();
+    let lm: BTreeMap<&str, &[u8]> = l.iter().copied().collect();
+    let im: BTreeMap<&str, &[u8]> = i.iter().copied().collect();
+    let paths: BTreeSet<&str> = lm.keys().chain(im.keys()).copied().collect();
+    for p in paths {
+        let lv = lm.get(p).and_then(|b| object_of(b, fmt));
+        let iv = im.get(p).and_then(|b| object_of(b, fmt));
+        let take_incoming = match (&lv, &iv) {
+            (None, None) => {
+                if let Some(b) = im.get(p) {
+                    unparsed(out, &local_paths, p, b);
+                }
+                continue;
+            }
+            (_, None) => false,
+            (None, Some(_)) => true,
+            (Some(a), Some(b)) => str_of(b, "updated") > str_of(a, "updated"),
+        };
+        let (winner, loser) = if take_incoming { (iv.unwrap(), lv) } else { (lv.unwrap(), iv) };
+        if tomb::kills(records, &tomb::prayer(str_of(&winner, "id")), str_of(&winner, "updated")) {
+            out.drop_local(p);
+            continue;
+        }
+        // The device holds something here this build cannot read: it stays.
+        if take_incoming && loser.is_none() && lm.contains_key(p) {
+            continue;
+        }
+        let days: BTreeSet<String> = [Some(&winner), loser.as_ref()]
+            .into_iter()
+            .flatten()
+            .flat_map(|v| v.get("prayed").and_then(Value::as_array).cloned().unwrap_or_default())
+            .filter_map(|d| d.as_str().map(str::to_string))
+            .collect();
+        let mut v = winner.clone();
+        if !days.is_empty() {
+            v.as_object_mut().unwrap().insert("prayed".into(), Value::from(days.into_iter().collect::<Vec<_>>()));
+        }
+        if take_incoming && v == winner {
+            out.put(p.to_string(), im[p].to_vec());
+        } else if take_incoming || v != winner {
+            out.put_json(p.to_string(), &v);
+        }
+    }
 }
 
 /// One chapter read on two devices: the most passes and the latest dates. The

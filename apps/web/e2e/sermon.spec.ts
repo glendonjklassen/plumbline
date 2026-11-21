@@ -32,7 +32,7 @@ test("a sermon is shaped, ordered by buttons, and keeps its order across a reloa
   // polls below allow. Settled first, only the sermon's own writes move it. It
   // cannot hide the bug: an outline that never reaches the engine never appears.
   await settleBackground(page);
-  await page.evaluate(() => (window as any).__plumbline.openSermons("preach"));
+  await page.evaluate(() => (window as any).__plumbline.openSermons("share"));
   await expect(page.locator('[data-surface="sermons"]')).toBeVisible();
 
   // New sermon → named through the shared prompt → five seeded headings.
@@ -161,7 +161,7 @@ test("typing in a sermon keeps the cursor through each save", async ({ page }) =
   } catch {
     /* not Chromium */
   }
-  await page.evaluate(() => (window as any).__plumbline.openSermons("preach"));
+  await page.evaluate(() => (window as any).__plumbline.openSermons("share"));
   await page.getByRole("button", { name: "New sermon" }).click();
   const prompt = page.locator('[aria-label="Sermon title"]');
   await prompt.locator("input, textarea").first().fill("Kept cursor");

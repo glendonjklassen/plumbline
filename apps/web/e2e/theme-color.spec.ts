@@ -74,8 +74,8 @@ test("Sing paints over the status bar, so the chrome follows it and not the them
 test("Present's picker keeps the theme; only the presentation pulls the chrome to sunlight", async ({ page }) => {
   await bootDark(page);
 
-  await page.locator(".bottom-nav").getByRole("button", { name: "Preach" }).click();
-  await page.locator(".ex-card", { hasText: "Present" }).first().click();
+  await page.locator(".bottom-nav").getByRole("button", { name: "Share" }).click();
+  await page.locator('[data-present="pick"]').click();
   await expect(page.locator(".present.picking")).toBeVisible();
   await chromeFollows(page, ".present", "dark");
 

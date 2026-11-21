@@ -116,13 +116,20 @@
   }
 
   // The reader's pace, from the core's day ledger (`reading::pace`): words and
-  // chapters a day over three windows ending today. Absent until something has
+  // chapters a day over four windows ending today. Today's window is one day,
+  // so it is shown as totals — what was read today — rather than as a rate. Absent until something has
   // been read through. The window picked is a per-viewer convenience, so it
   // lives in this browser and a failure to store it is harmless.
   type PaceWindow = { id: string; days: number; words: number; chapters: number; wordsPerDay: number; chaptersPerDay: number };
   const paceWindows = $derived((booksQ?.pace?.windows ?? []) as PaceWindow[]);
   const PACE_KEY = "plumbline:paceWindow";
-  const PACE_IDS = ["week", "month", "all"] as const;
+  const PACE_IDS = ["day", "week", "month", "all"] as const;
+  const PACE_LABEL: Record<string, string> = {
+    day: "explore.paceToday",
+    week: "explore.paceWeek",
+    month: "explore.paceMonth",
+    all: "explore.paceAll",
+  };
   function readPaceWindow(): string {
     try {
       const v = localStorage.getItem(PACE_KEY);
@@ -140,7 +147,14 @@
       /* per-viewer convenience only */
     }
   }
-  const pace = $derived(paceWindows.find((w) => w.id === paceId) ?? paceWindows[0] ?? null);
+  const pace = $derived(paceWindows.find((w) => w.id === paceId) ?? null);
+  // Memorization over the same windows (`memory::pace`): reviews done and
+  // verses added. Empty until there is a card.
+  type MemoryWindow = { id: string; days: number; reviews: number; added: number };
+  const memWindows = $derived((s.qStale("memoryPace", dayStamp())?.windows ?? []) as MemoryWindow[]);
+  const mem = $derived(memWindows.find((w) => w.id === paceId) ?? null);
+  /** The block shows once either half has anything to report. */
+  const hasPace = $derived(paceWindows.length > 0 || memWindows.length > 0);
   const nf0 = $derived(new Intl.NumberFormat(lang(), { maximumFractionDigits: 0 }));
   const nf1 = $derived(new Intl.NumberFormat(lang(), { maximumFractionDigits: 1 }));
 
@@ -259,73 +273,77 @@
 </script>
 
 <section class="screen" aria-label={t("nav.study")}>
-  <ScreenBar title={t("nav.study")} onBack={() => s.goRead()} onMenu={() => (s.menuOpen = true)} />
+  <ScreenBar top title={t("nav.study")} onBack={() => s.goRead()} onMenu={() => (s.menuOpen = true)} />
   <div class="content">
-    <!-- Only rows with something to say are drawn; with nothing running at all
-         the band is one invitation rather than an empty box. -->
-    <section class="band" aria-label={t("explore.inProgress")}>
-      <h3>{t("explore.inProgress")}</h3>
+    <!-- Where the reader stands, first: activity, then the projected finish,
+         then times through the Bible (maintainer, 2026-11-21). One card style
+         for all three. What is in flight today comes after. -->
+    <section class="band" aria-label={t("explore.pace")}>
       {#if !showReal}
         <!-- A placeholder of the same shape, not a spinner: the band's job is to
-             hold its own height. One row plus the coverage strip is what it
-             resolves to in the common cases, so the cards below start where they
-             will stay — two ghost rows made the grid jump 49px UP instead.
-             Hidden from assistive tech; there is nothing here to read. -->
+             hold its own height. Hidden from assistive tech; nothing to read. -->
         <div class="skeleton" aria-hidden="true">
-          <div class="row ghost"></div>
-          <!-- The reads line is in the settled band for every reader (counter or
-               invitation), so the skeleton owes its height too. -->
-          <div class="reads ghost"></div>
           <div class="coverage ghost"></div>
+          <div class="reads ghost"></div>
         </div>
       {:else}
         <div class="settled">
-          {#if anyDoneToday}
-            <div class="row done"><span class="row-note">{t("explore.planDone")}</span></div>
+          {#if hasPace}
+            <!-- Reading and memorization over one set of windows. Its own
+                 block, not inside the coverage button: a chip row cannot sit
+                 inside a button. Chapters read through only, as the map counts. -->
+            <div class="card pace" data-surface="pace">
+              <div class="pace-head">
+                <span class="card-title">{t("explore.pace")}</span>
+                <div class="pace-chips" role="group" aria-label={t("explore.pace")}>
+                  {#each PACE_IDS as id (id)}
+                    <button class="chip" class:on={id === paceId} aria-pressed={id === paceId} onclick={() => pickPace(id)}>
+                      {t(PACE_LABEL[id])}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+              <div class="pace-cols">
+                <div class="pace-col">
+                  <p class="pace-sub">{t("explore.paceReading")}</p>
+                  {#if paceId === "day"}
+                    <p class="pace-line">
+                      {plural("explore.paceTodayChapters.one", "explore.paceTodayChapters.other", pace?.chapters ?? 0, { n: nf.format(pace?.chapters ?? 0) })}
+                    </p>
+                    <p class="pace-line">
+                      {plural("explore.paceTodayWords.one", "explore.paceTodayWords.other", pace?.words ?? 0, { n: nf.format(pace?.words ?? 0) })}
+                    </p>
+                  {:else}
+                    <p class="pace-line">{t("explore.paceWords", { n: nf0.format(pace?.wordsPerDay ?? 0) })}</p>
+                    <p class="pace-line">{t("explore.paceChapters", { n: nf1.format(pace?.chaptersPerDay ?? 0) })}</p>
+                  {/if}
+                </div>
+                <div class="pace-col" data-surface="pace-memory">
+                  <p class="pace-sub">{t("explore.paceMemory")}</p>
+                  <p class="pace-fact">
+                    {plural("explore.paceReviews.one", "explore.paceReviews.other", mem?.reviews ?? 0, { n: nf.format(mem?.reviews ?? 0) })}
+                  </p>
+                  <p class="pace-fact">
+                    {plural("explore.paceAdded.one", "explore.paceAdded.other", mem?.added ?? 0, { n: nf.format(mem?.added ?? 0) })}
+                  </p>
+                </div>
+              </div>
+            </div>
           {/if}
-          <!-- Every running plan, always with its next portion: after a finished
-               day this is the next day's chapters, day-numbered. -->
-          {#each todays as p (p.id)}
-            <button class="row" onclick={(ev) => goPlan(p, ev)}>
-              <svg class="row-icon" viewBox="0 0 24 24" aria-hidden="true" style={planColorStyle(p.color)}><path d={planIconPath(p.icon)} /></svg>
-              <span class="row-name">{p.name}</span>
-              <span class="row-note">{t("plans.chip", { day: p.day, chapters: chapterSpan(remaining(p)) })}</span>
-            </button>
-          {/each}
-          {#each devotionals as d (d.id)}
-            <button class="row" onclick={() => s.openDevotional(d.id, d.today.day)}>
-              <span class="row-name">{d.name}</span>
-              <span class="row-note">{t("devotional.dayOf", { day: d.today.day, total: d.daysTotal })}</span>
-            </button>
-          {/each}
-          <!-- The sweep under way: a tap returns to the text, where the sweep
-               happens. Its tag and chapter count are what the banner says. -->
-          {#if activeStudy}
-            <button class="row" onclick={() => s.goRead()}>
-              <span class="row-name">{t("plans.conceptStudyTag", { tag: activeStudy.tag })}</span>
-              <span class="row-note">
-                {t("plans.sweepProgress", { done: activeStudy.sweepProgress[0], total: activeStudy.sweepProgress[1] })}
+          {#if coverage}
+            <button class="coverage" onclick={() => (s.bookNavFor = s.activePane)}>
+              <span class="cov-text">
+                {t("explore.chaptersRead", { read: nf.format(coverage.read), total: nf.format(coverage.total) })}
               </span>
+              <span class="cov-bar" aria-hidden="true">
+                <span class="cov-fill" style="width: {(coverage.frac * 100).toFixed(2)}%"></span>
+              </span>
+              {#if forecast}
+                <span class="cov-forecast">{t("explore.finishForecast", { date: dayLabel(forecast.finish) })}</span>
+                <span class="cov-pace">{t("explore.finishPace", { start: dayLabel(forecast.start) })}</span>
+              {/if}
             </button>
           {/if}
-          {#if dueCount > 0}
-            <button class="row" onclick={openMemorize}>
-              <span class="row-name">{t("explore.memorize")}</span>
-              <span class="row-note">{plural("memorize.reviews.one", "memorize.reviews.other", dueCount)}</span>
-            </button>
-          {/if}
-          {#if suggestedCount > 0}
-            <button class="row" onclick={() => (s.panel = { kind: "suggested" })}>
-              <span class="row-name">{t("explore.suggested")}</span>
-              <span class="row-note">{plural("explore.toReview.one", "explore.toReview.other", suggestedCount)}</span>
-            </button>
-          {/if}
-          {#if todays.length === 0 && devotionals.length === 0 && !activeStudy && dueCount === 0 && suggestedCount === 0}
-            <button class="row invite" onclick={openPlans}>
-              <span class="row-note">{t("explore.nothingRunning")}</span>
-            </button>
-          {/if}
-
           <!-- The lifetime counter, beside the coverage bar: one says how far
                through this time you are, the other how many times there have
                been. Unset it is an invitation; set, a tap folds out the same
@@ -386,38 +404,64 @@
               <span class="reads-label">{t("explore.readsSet")}</span>
             </button>
           {/if}
+        </div>
+      {/if}
+    </section>
 
-          {#if coverage}
-            <button class="coverage" onclick={() => (s.bookNavFor = s.activePane)}>
-              <span class="cov-text">
-                {t("explore.chaptersRead", { read: nf.format(coverage.read), total: nf.format(coverage.total) })}
+    <!-- Only rows with something to say are drawn; with nothing running at all
+         the band is one invitation rather than an empty box. -->
+    <section class="band" aria-label={t("explore.inProgress")}>
+      {#if !showReal}
+        <div class="skeleton" aria-hidden="true">
+          <div class="row ghost"></div>
+        </div>
+      {:else}
+        <div class="settled">
+          {#if anyDoneToday}
+            <div class="row done"><span class="row-note">{t("explore.planDone")}</span></div>
+          {/if}
+          <!-- Every running plan, always with its next portion: after a finished
+               day this is the next day's chapters, day-numbered. -->
+          {#each todays as p (p.id)}
+            <button class="row" onclick={(ev) => goPlan(p, ev)}>
+              <svg class="row-icon" viewBox="0 0 24 24" aria-hidden="true" style={planColorStyle(p.color)}><path d={planIconPath(p.icon)} /></svg>
+              <span class="row-name">{p.name}</span>
+              <span class="row-note">{t("plans.chip", { day: p.day, chapters: chapterSpan(remaining(p)) })}</span>
+            </button>
+          {/each}
+          {#each devotionals as d (d.id)}
+            <button class="row" onclick={() => s.openDevotional(d.id, d.today.day)}>
+              <span class="row-name">{d.name}</span>
+              <span class="row-note">{t("devotional.dayOf", { day: d.today.day, total: d.daysTotal })}</span>
+            </button>
+          {/each}
+          <!-- The sweep under way: a tap returns to the text, where the sweep
+               happens. Its tag and chapter count are what the banner says. -->
+          {#if activeStudy}
+            <button class="row" onclick={() => s.goRead()}>
+              <span class="row-name">{t("plans.conceptStudyTag", { tag: activeStudy.tag })}</span>
+              <span class="row-note">
+                {t("plans.sweepProgress", { done: activeStudy.sweepProgress[0], total: activeStudy.sweepProgress[1] })}
               </span>
-              <span class="cov-bar" aria-hidden="true">
-                <span class="cov-fill" style="width: {(coverage.frac * 100).toFixed(2)}%"></span>
-              </span>
-              {#if forecast}
-                <span class="cov-forecast">{t("explore.finishForecast", { date: dayLabel(forecast.finish) })}</span>
-                <span class="cov-pace">{t("explore.finishPace", { start: dayLabel(forecast.start) })}</span>
-              {/if}
             </button>
           {/if}
-          {#if pace}
-            <!-- Its own block, not inside the coverage button: a chip row cannot
-                 sit inside a button. Chapters read through only, as the map counts. -->
-            <div class="pace" data-surface="pace">
-              <div class="pace-head">
-                <span class="pace-title">{t("explore.pace")}</span>
-                <div class="pace-chips" role="group" aria-label={t("explore.pace")}>
-                  {#each paceWindows as w (w.id)}
-                    <button class="chip" class:on={w.id === pace.id} aria-pressed={w.id === pace.id} onclick={() => pickPace(w.id)}>
-                      {t(w.id === "week" ? "explore.paceWeek" : w.id === "month" ? "explore.paceMonth" : "explore.paceAll")}
-                    </button>
-                  {/each}
-                </div>
-              </div>
-              <p class="pace-line">{t("explore.paceWords", { n: nf0.format(pace.wordsPerDay) })}</p>
-              <p class="pace-line">{t("explore.paceChapters", { n: nf1.format(pace.chaptersPerDay) })}</p>
-            </div>
+          {#if dueCount > 0}
+            <button class="row" onclick={openMemorize}>
+              <span class="row-name">{t("explore.memorize")}</span>
+              <span class="row-note">{plural("memorize.reviews.one", "memorize.reviews.other", dueCount)}</span>
+            </button>
+          {/if}
+          {#if todays.length === 0 && devotionals.length === 0 && !activeStudy && dueCount === 0 && suggestedCount === 0}
+            <button class="row invite" onclick={openPlans}>
+              <span class="row-note">{t("explore.nothingRunning")}</span>
+            </button>
+          {/if}
+          <!-- Last: a review queue is housekeeping, not what the reader came for. -->
+          {#if suggestedCount > 0}
+            <button class="row" onclick={() => (s.panel = { kind: "suggested" })}>
+              <span class="row-name">{t("explore.suggested")}</span>
+              <span class="row-note">{plural("explore.toReview.one", "explore.toReview.other", suggestedCount)}</span>
+            </button>
           {/if}
         </div>
       {/if}
@@ -579,7 +623,7 @@
     display: flex;
     align-items: baseline;
     gap: 8px;
-    padding: 10px 14px;
+    padding: 12px 14px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 10px;
     background: var(--paper, #fcf9f4);
@@ -741,16 +785,41 @@
     border-radius: 999px;
     background: var(--readDone, #6f8f6a);
   }
-  /* The pace block: a title and its window chips, then two plain lines. */
+  /* The activity block: a title and its window chips, then reading and
+     memorization side by side. The band's one card: paper, rule, 12/14. */
   .pace {
-    margin-top: 12px;
     padding: 12px 14px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 10px;
-    background: var(--popupPaper, #f2eee6);
+    background: var(--paper, #fcf9f4);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
+  }
+  /* The band heading's own type, so a card's title and a band's read alike. */
+  .card-title,
+  .pace-sub {
+    margin: 0;
+    font-size: calc(12px * var(--uiScale, 1));
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--section, #776537);
+  }
+  .pace-sub {
+    font-weight: 400;
+    color: var(--faded, #8a8276);
+  }
+  .pace-cols {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 32px;
+  }
+  .pace-col {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 9em;
   }
   .pace-head {
     display: flex;
@@ -759,14 +828,10 @@
     align-items: center;
     gap: 8px;
   }
-  .pace-title {
-    font-size: calc(13.5px * var(--uiScale, 1));
-    color: var(--section-header, #a0894a);
-    font-variant: small-caps;
-    letter-spacing: 0.04em;
-  }
   .pace-chips {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 6px;
   }
   .pace .chip {
@@ -782,7 +847,8 @@
     border-color: var(--gold, #9e7d38);
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
-  .pace-line {
+  .pace-line,
+  .pace-fact {
     margin: 0;
     font-size: calc(15px * var(--uiScale, 1));
     color: var(--ink, #211f1a);

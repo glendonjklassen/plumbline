@@ -86,7 +86,7 @@ test("the Study hub's progress is already loaded before you open it", async ({ p
     return seen;
   });
   await page.getByRole("button", { name: "Study" }).first().click();
-  await expect(page.locator("section.band")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("section.band").first()).toBeVisible({ timeout: 30_000 });
 
   const band = ["plans", "memoryDue", "suggestedWeaves", "readingBooks"];
   const refetched = (await page.evaluate(() => (window as any).__asked as string[])).filter((m) =>
@@ -98,7 +98,7 @@ test("the Study hub's progress is already loaded before you open it", async ({ p
   // And the band draws its real rows, not the same-shaped placeholder it holds
   // while its reads are in flight.
   await expect(page.locator("section.band .skeleton")).toHaveCount(0);
-  await expect(page.locator("section.band .settled")).toBeVisible();
+  await expect(page.locator("section.band .settled").first()).toBeVisible();
 });
 
 // Mutation: drop `this.scheduleStudyWarm()` from `rpc.onAuthored` — red, the band's reads are

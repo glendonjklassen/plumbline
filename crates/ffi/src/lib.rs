@@ -61,6 +61,7 @@ pub mod hymn_favourites;
 pub mod memory_today;
 pub mod notes_abi;
 pub mod plans;
+pub mod prayers;
 pub mod reading_map;
 pub mod share;
 mod wire;

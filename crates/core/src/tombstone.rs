@@ -167,6 +167,9 @@ pub fn devotional(id: &str) -> String {
 pub fn reading(book: &str, chapter: u16) -> String {
     format!("reading:{}|{chapter}", book.to_lowercase())
 }
+pub fn prayer(id: &str) -> String {
+    format!("prayer:{id}")
+}
 /// A hymn taken out of the favourites, by its hymnal id.
 pub fn hymn_favourite(id: &str) -> String {
     format!("hymnfav:{id}")

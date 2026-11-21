@@ -1339,6 +1339,15 @@ char *plumbline_engine_hymn_favourite_set(struct PlumblineEngine *engine,
                                           bool on,
                                           const char *now);
 
+// Memorization activity over the reading pace's windows, as
+// `{windows:[{id,days,reviews,added}]}` — [`memory::pace`] over the home's
+// cards at `now` (RFC3339 UTC). No cards, or no home, answers no windows.
+// Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_memory_pace_json(const struct PlumblineEngine *engine, const char *now);
+
 // Today's memorization queue under a daily `cap` (`0` = no limit), as
 // `{refs, dueTotal, reviewedToday, cap}` — [`memory::today_queue`] over the
 // home's cards at `now` (RFC3339 UTC; the shell passes its day stamp). An
@@ -1483,6 +1492,70 @@ char *plumbline_engine_plan_set_appearance(struct PlumblineEngine *engine,
                                            const char *id,
                                            const char *icon,
                                            const char *color);
+
+// The prayer list at `today` (`YYYY-MM-DD`) as `{praying:[…],answered:[…]}`,
+// each `{id,title,created,prayedDays,prayedToday,lastPrayed?,answered?,
+// answer?}`. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null); `today` is null or valid
+// NUL-terminated UTF-8.
+char *plumbline_engine_prayers_json(const struct PlumblineEngine *engine, const char *today);
+
+// Add a prayer. `stamp` is a caller-supplied UTC timestamp. An empty title is refused. Null
+// on success, else an owned error string.
+//
+// # Safety
+// `engine` is a live engine; the string args are valid NUL-terminated UTF-8.
+char *plumbline_engine_prayer_add(struct PlumblineEngine *engine,
+                                  const char *title,
+                                  const char *stamp);
+
+// Replace prayer `id`'s title. Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is a live engine; the string args are valid NUL-terminated UTF-8.
+char *plumbline_engine_prayer_edit(struct PlumblineEngine *engine,
+                                   const char *id,
+                                   const char *title,
+                                   const char *stamp);
+
+// Record that prayer `id` was prayed for on `day` (`YYYY-MM-DD`). Repeating a
+// day is a harmless no-op. Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is a live engine; the string args are valid NUL-terminated UTF-8.
+char *plumbline_engine_prayer_prayed(struct PlumblineEngine *engine,
+                                     const char *id,
+                                     const char *day);
+
+// Mark prayer `id` answered on `day` (`YYYY-MM-DD`), with an optional
+// `comment` (empty for none). Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is a live engine; the string args are valid NUL-terminated UTF-8.
+char *plumbline_engine_prayer_answer(struct PlumblineEngine *engine,
+                                     const char *id,
+                                     const char *comment,
+                                     const char *day,
+                                     const char *stamp);
+
+// Move answered prayer `id` back to the list, dropping its answer. Null on
+// success, else an owned error string.
+//
+// # Safety
+// `engine` is a live engine; the string args are valid NUL-terminated UTF-8.
+char *plumbline_engine_prayer_reopen(struct PlumblineEngine *engine,
+                                     const char *id,
+                                     const char *stamp);
+
+// Delete prayer `id`, recording the deletion so a restore does not bring it
+// back. A missing prayer is a success. Null on success, else an owned error
+// string.
+//
+// # Safety
+// `engine` is a live engine; `id` is valid NUL-terminated UTF-8.
+char *plumbline_engine_prayer_delete(struct PlumblineEngine *engine, const char *id);
 
 // Every book's reading standing at `now` (RFC3339), canon order, as
 // `{books:[…],since,spec,forecast?,sections:[…]}`. Never null on a live engine.

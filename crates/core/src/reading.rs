@@ -928,7 +928,7 @@ fn ledger_adjust(
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaceWindow {
-    /// `week`, `month` or `all`.
+    /// `day`, `week`, `month` or `all`.
     pub id: &'static str,
     /// Calendar days in the window, today included (never below 1).
     pub days: i64,
@@ -938,14 +938,15 @@ pub struct PaceWindow {
     pub chapters_per_day: f64,
 }
 
-/// The reader's pace over three windows, from the day ledger.
+/// The reader's pace over four windows, from the day ledger.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Pace {
     pub windows: Vec<PaceWindow>,
 }
 
-/// Words and chapters a day over the last 7 days, the last 30, and since the
-/// first day on the ledger — each window ending today. `None` for an empty
+/// Words and chapters a day today, over the last 7 days, the last 30, and since
+/// the first day on the ledger — each window ending today. Today's window is
+/// one day long, so its totals are what was read today. `None` for an empty
 /// ledger. Entries dated after today (a hand-logged date, a clock put back)
 /// count in every window as if they were today's.
 pub fn pace(ledger: &Ledger, now: &str) -> Option<Pace> {
@@ -971,7 +972,7 @@ pub fn pace(ledger: &Ledger, now: &str) -> Option<Pace> {
             chapters_per_day: f64::from(chapters) / days as f64,
         }
     };
-    Some(Pace { windows: vec![window("week", 7), window("month", 30), window("all", all)] })
+    Some(Pace { windows: vec![window("day", 1), window("week", 7), window("month", 30), window("all", all)] })
 }
 
 // ── the dwell tracker ────────────────────────────────────────────────────────
@@ -2189,11 +2190,16 @@ mod tests {
         assert!(!l.contains_key("2026-01-12"), "an emptied day is dropped: {l:?}");
         assert_eq!(l["2026-01-10"], DayCount { words: 30, chapters: 2 });
 
-        // The pace: three windows ending today.
+        // The pace: four windows ending today.
         let p = pace(&l, "2026-01-16T12:00:00Z").unwrap();
         let by = |id: &str| p.windows.iter().find(|x| x.id == id).unwrap().clone();
         let week = by("week"); // 10th..16th: Jan 10 (30w/2c) + Jan 11 (5w/1c) + Jan 13 (5w/1c)
         assert_eq!((week.days, week.words, week.chapters), (7, 40, 4));
+        // Today alone: nothing on the 16th, one chapter on the 13th.
+        assert_eq!((by("day").days, by("day").words, by("day").chapters), (1, 0, 0));
+        let on_13th = pace(&l, "2026-01-13T12:00:00Z").unwrap();
+        let today = on_13th.windows.iter().find(|x| x.id == "day").unwrap();
+        assert_eq!((today.words, today.chapters), (5, 1));
         assert_eq!(by("month").days, 30);
         assert_eq!(by("month").words, 40);
         let all = by("all");

@@ -18,11 +18,16 @@
     /** Raise the ≡ utilities menu. Every destination passes this; transient
      *  overlays leave it unset. */
     onMenu?: () => void;
+    /** One of the five top-level destinations (Study, Pray, Sing, Share). On a
+     *  wide screen the app header above already names it, marks it current and
+     *  holds Read and the ≡, so this bar would only repeat the title: it is
+     *  hidden there. A phone has no header on a destination and keeps it. */
+    top?: boolean;
   }
-  const { title, onBack, backLabel, actions, onMenu }: Props = $props();
+  const { title, onBack, backLabel, actions, onMenu, top = false }: Props = $props();
 </script>
 
-<div class="bar">
+<div class="bar" class:top>
   <button class="back" onclick={onBack} aria-label={backLabel ?? t("bar.backToReading")}>‹</button>
   <h2>{title}</h2>
   <span class="spacer"></span>
@@ -33,6 +38,12 @@
 </div>
 
 <style>
+  /* 701px is where Shell's header starts carrying the destinations. */
+  @media (min-width: 701px) {
+    .bar.top {
+      display: none;
+    }
+  }
   .bar {
     display: flex;
     align-items: center;

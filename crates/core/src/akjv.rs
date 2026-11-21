@@ -112,8 +112,7 @@ impl Akjv {
             t.word = s.text.clone();
             t.post = post;
             t.flags |= FLAG_RERENDERED;
-            for i in a + 1..=b {
-                let t = &mut out.tokens[i];
+            for t in &mut out.tokens[a + 1..=b] {
                 t.pre.clear();
                 t.word.clear();
                 t.post.clear();

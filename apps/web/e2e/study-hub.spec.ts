@@ -30,8 +30,7 @@ test("the band carries the running plan and today's chapters", async ({ page }) 
   });
   await openStudy(page);
 
-  const band = page.locator(".band");
-  await expect(band).toContainText("In progress");
+  const band = page.locator('section.band[aria-label="In progress"]');
   // Day one of the whole-Bible plan is Genesis 1–4, and the hub says so rather than making
   // the reader open Plans to find out.
   await expect(band).toContainText("The whole Bible in a year", { timeout: 15_000 });
@@ -53,8 +52,7 @@ test("a paused plan asks for nothing, so it is not in the band at all", async ({
   // The band answers "what needs reading" and a paused plan needs nothing, so its row is
   // absent rather than present-and-greyed: naming chapters it is not asking for would read
   // as asking for them.
-  const band = page.locator(".band");
-  await expect(band).toContainText("In progress");
+  const band = page.locator('section.band[aria-label="In progress"]');
   await expect(band).not.toContainText("The whole Bible in a year", { timeout: 15_000 });
   await expect(band).not.toContainText("Genesis 1");
 });
@@ -78,7 +76,7 @@ test("every running plan gets its own row, in order", async ({ page }) => {
 
   // Each row names its own plan and its own chapters: three plans, three different books —
   // the assertion `running[0]` failed.
-  const text = await page.locator(".band").innerText();
+  const text = await page.locator('section.band[aria-label="In progress"]').innerText();
   expect(text).toContain("The whole Bible in a year\nDay 1 · Genesis 1\u20134");
   expect(text).toContain("The New Testament in 90 days\nDay 1 · Matthew 1\u20134");
   expect(text).toContain("Psalms & Proverbs in a month\nDay 1 · Psalms 1\u20139");
@@ -97,7 +95,7 @@ test("a concept study is not a schedule, and never appears in the band", async (
 
   const rows = page.locator(".band .row");
   await expect.poll(async () => rows.count(), { timeout: 15_000 }).toBe(1);
-  await expect(page.locator(".band")).toContainText("The whole Bible in a year");
+  await expect(page.locator('section.band[aria-label="In progress"]')).toContainText("The whole Bible in a year");
 });
 
 // The Concept Study is a hub card of its own, and the sweep the reader is IN is a band
@@ -110,7 +108,7 @@ test("the Concept Study has its own card, and the active sweep sits in the band"
   });
   await openStudy(page);
 
-  const band = page.locator(".band");
+  const band = page.locator('section.band[aria-label="In progress"]');
   await expect(band).toContainText("Concept Study: “grace”", { timeout: 15_000 });
   await expect(band).toContainText(/\d+ \/ \d+ chapters studied/);
 
@@ -216,6 +214,25 @@ test("Weaves opens a page holding the library and the review queue", async ({ pa
   await expect(page.locator(".bar h2")).toHaveText("Weaves");
   await page.keyboard.press("Escape");
   await expect(page.locator(".bar h2")).toHaveText("Study");
+});
+
+// Today's window is totals, not a rate. Fails without the core's one-day window:
+// there is then no "Today" chip to click. A read dated months ago must not count,
+// which is what tells today's window from "All time" (2 chapters there).
+test("the pace shows what was read today", async ({ page }) => {
+  await boot(page);
+  await openStudy(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.engine.readingMarkRead("Gen", 1, "2026-08-10T12:00:00Z");
+    await s.engine.readingMarkRead("Gen", 2, new Date().toISOString());
+  });
+  const pace = page.locator('[data-surface="pace"]');
+  await expect(pace).toBeVisible({ timeout: 15_000 });
+  await pace.locator(".chip", { hasText: "Today" }).click();
+  await expect(pace.locator(".pace-line").nth(0)).toHaveText("1 chapter");
+  await expect(pace.locator(".pace-line").nth(1)).toHaveText(/^[\d,]+ words$/);
+  await expect(pace).not.toContainText("a day");
 });
 
 test("coverage counts the chapters actually read", async ({ page }) => {
