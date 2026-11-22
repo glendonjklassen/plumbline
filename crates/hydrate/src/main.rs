@@ -1,7 +1,7 @@
 //! `plumbline-hydrate` — assemble and verify the Plumbline data pack into a home.
 //!
-//! The reader needs only `kjv.jsonl` + `strongs.json` (+ optional notes); the
-//! R&D tier adds `cross-references.tsv` and `morphology.jsonl`. The offline
+//! The reader needs only `kjv.jsonl` + `strongs.json` (+ optional notes and the
+//! Strong's derivation families). The offline
 //! pipeline (`data-prep/README.md`) produces them; this tool places them into a
 //! home and verifies each by loading it through the same code the app uses,
 //! rather than guessing from file presence.
@@ -15,8 +15,7 @@ use std::process::ExitCode;
 
 use plumbline_core::canon::TOKENIZATION_VERSION;
 use plumbline_core::i18n::Lang;
-use plumbline_core::{akjv, corpus, crossref, home, notes, strongs};
-use plumbline_rnd::{bridge, morph};
+use plumbline_core::{akjv, corpus, home, notes, strongs};
 
 /// The pack files that belong to no particular language, relative to a home.
 /// The per-language ones come from the registry — see [`language_files`].
@@ -50,19 +49,8 @@ fn language_files() -> Vec<(String, bool)> {
     }
     out
 }
-const RND_FILES: &[&str] = &[
-    "data/cross-references.tsv",
-    "data/morphology.jsonl",
-    // Fused bridge: committed external witnesses + fitted trust priors, plus the
-    // optional hydrated/harvested source files.
-    "bridge/abbott-smith.json",
-    "bridge/lxx-alignment.json",
-    "bridge/stepbible-tipnr.json",
-    "data/source-priors.json",
-    "data/bridge-sources.json",
-    "data/quotation-pairs.json",
-    // The graded text-as-witness (its gate keeps it silent until qualified).
-    "data/text-witness.json",
+/// Optional study data, copied when the source home has it.
+const STUDY_FILES: &[&str] = &[
     // Strong's derivation families, decided offline (data-prep/strongs/).
     "data/derivation-families.json",
 ];
@@ -130,49 +118,6 @@ fn main() -> ExitCode {
                 }
             }
         }
-        "morphb" => {
-            // Pack `morphology.jsonl` (10.4 MB, 31,091 serde calls) into interned
-            // fixed-width records: the parse cannot outlive a browser tab, so a
-            // phone repeated all of it on every launch.
-            let Some(from) = flag("--from") else {
-                eprintln!("morphb needs --from <morphology.jsonl> [--out <file>]");
-                return ExitCode::from(2);
-            };
-            let out = flag("--out").unwrap_or_else(|| morph::morphb_path(&from));
-            let text = match std::fs::read_to_string(&from) {
-                Ok(t) => t,
-                Err(e) => {
-                    eprintln!("morphb: cannot read {}: {e}", from.display());
-                    return ExitCode::FAILURE;
-                }
-            };
-            let Some(bytes) = morph::encode_morph_bin(TOKENIZATION_VERSION, &text) else {
-                eprintln!("morphb: {} is stale or too large to pack", from.display());
-                return ExitCode::FAILURE;
-            };
-            if let Err(e) = std::fs::write(&out, &bytes) {
-                eprintln!("morphb: cannot write {}: {e}", out.display());
-                return ExitCode::FAILURE;
-            }
-            // Verify by loading it back: the loader prefers this file, so one
-            // that does not read is worse than none at all.
-            match morph::parse_morph_bin(TOKENIZATION_VERSION, &bytes) {
-                Some(m) => {
-                    println!(
-                        "wrote {} — {} verses ({} → {} bytes)",
-                        out.display(),
-                        m.verse_count(),
-                        text.len(),
-                        bytes.len()
-                    );
-                    ExitCode::SUCCESS
-                }
-                None => {
-                    eprintln!("morphb: wrote {} but it does not load back", out.display());
-                    ExitCode::FAILURE
-                }
-            }
-        }
         "akjvb" => {
             // Pack the plain-English overlay: 46k spans over only ~3k distinct
             // replacement phrases, so interned each is three small integers.
@@ -218,7 +163,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         other => {
-            eprintln!("unknown command '{other}'. Try: check | copy | web-cache | morphb | akjvb | help");
+            eprintln!("unknown command '{other}'. Try: check | copy | web-cache | akjvb | help");
             ExitCode::from(2)
         }
     }
@@ -241,18 +186,12 @@ plumbline-hydrate — assemble + verify the Plumbline data pack
       (mtime 0 — what the browser WASI shim reports), so the PWA's first
       boot skips the ~19 MB re-parse. Run by scripts/build-web-pack.mjs.
 
-  plumbline-hydrate morphb --from <morphology.jsonl> [--out <file>]
-      Pack the morphology sidecar into interned fixed-width records, so a
-      launch reads it instead of running 31,091 JSON parses. The JSONL
-      stays valid — a home without the packed sibling still works.
-      Run by scripts/build-web-pack.mjs.
-
   plumbline-hydrate akjvb --from <akjv.jsonl> [--out <file>]
       Pack the plain-English overlay (the AKJV delta) into interned
       fixed-width spans. The JSONL stays valid — a home without the packed
       sibling still works. Run by scripts/build-web-pack.mjs.
 
-The R&D artifacts are produced offline (see data-prep/README.md); this tool
+The data files are produced offline (see data-prep/README.md); this tool
 places and checks them, it does not train or generate.
 ";
 
@@ -289,7 +228,7 @@ fn copy(from: &Path, to: &Path) -> std::io::Result<()> {
         .iter()
         .map(|(r, _)| *r)
         .chain(langs.iter().map(|(r, _)| r.as_str()))
-        .chain(RND_FILES.iter().copied())
+        .chain(STUDY_FILES.iter().copied())
         .collect();
     let mut copied = 0usize;
     for rel in all {
@@ -418,37 +357,6 @@ fn check(home: &Path) -> ExitCode {
     match notes::load_notes(data.join("kjv-notes.jsonl")) {
         Ok(n) if !n.is_empty() => println!("  ✓ kjv-notes.jsonl — {} verses with notes", n.len()),
         _ => println!("  · kjv-notes.jsonl — absent (margin notes off)"),
-    }
-
-    println!("\nR&D tiers (Full study):");
-
-    // Fused bridge: etymology (from strongs.json) + external witnesses + priors.
-    match strongs::load_strongs(data.join("strongs.json")) {
-        Ok(d) => {
-            let ety = bridge::Bridge::from_etymology(&d).len();
-            let fused = bridge::FusedBridge::build(&d, home);
-            let ext = fused.source_link_count();
-            if ext == 0 {
-                println!("  ✓ etymology bridge — {ety} codes linked (from strongs.json; no external sources)");
-            } else {
-                println!(
-                    "  ✓ fused bridge — {ety} etymology codes + {ext} external source links (bridge/*.json + priors)"
-                );
-            }
-        }
-        Err(_) => println!("  · etymology bridge — needs strongs.json"),
-    }
-
-    let xr = crossref::load_cross_refs(data.join("cross-references.tsv"));
-    if xr.is_empty() {
-        println!("  · cross-references.tsv — absent (TSK tier off)");
-    } else {
-        println!("  ✓ cross-references.tsv — {} refs over {} verses", crossref::xref_count(&xr), xr.len());
-    }
-
-    match morph::load_morph(TOKENIZATION_VERSION, data.join("morphology.jsonl")) {
-        Some(m) => println!("  ✓ morphology.jsonl — {} verses annotated", m.verse_count()),
-        None => println!("  · morphology.jsonl — absent or stale (morphology off)"),
     }
 
     println!();

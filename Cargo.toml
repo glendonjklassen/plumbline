@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "crates/core",
     "crates/layout",
-    "crates/rnd",
     "crates/ffi",
     "crates/hydrate",
 ]
@@ -11,7 +10,6 @@ members = [
 default-members = [
     "crates/core",
     "crates/layout",
-    "crates/rnd",
     "crates/ffi",
     "crates/hydrate",
 ]
@@ -39,7 +37,6 @@ flate2 = "1"
 # Internal crates
 plumbline-core = { path = "crates/core" }
 plumbline-layout = { path = "crates/layout" }
-plumbline-rnd = { path = "crates/rnd" }
 
 [profile.release]
 lto = "thin"

@@ -25,7 +25,7 @@ const manifestPath = join(packRoot, "manifest.json");
 /** The roles the loader understands: two fixed ones, plus a per-language corpus
  *  and dictionary keyed by code (`crates/core/src/i18n.rs` composes them). */
 const ROLE_OK = /^(corpusCache|suggestedWeaves|(corpus|lexicon):[a-z]{2,3})$/;
-const STAGES = new Set(["text", "study", "analysis", "corpus", "optional"]);
+const STAGES = new Set(["text", "study", "corpus", "optional"]);
 const SEED_DIRS = new Set(["threads", "tags", "weaves"]);
 const problems = [];
 const fail = (msg) => problems.push(msg);

@@ -17,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use plumbline_core::church;
 use plumbline_core::config::{Config, PaneRef, StudyMode};
 use plumbline_core::corpus::{Corpus, Token, Verse};
-use plumbline_core::crossref::CrossRef;
 use plumbline_core::font::Font;
 use plumbline_core::hymnal;
 use plumbline_core::i18n;
@@ -230,35 +229,6 @@ pub struct Occurrences {
 }
 
 // ── rendering lens ────────────────────────────────────────────────────────────
-
-/// One occurrence of a rendering: the verse plus the inclusive token span of
-/// the contiguous same-code run.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireRenderingRef {
-    pub verse: String,
-    pub display: String,
-    pub span: [u16; 2],
-}
-
-/// One English rendering of a code, with its occurrence count and (capped)
-/// refs.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireRendering {
-    pub rendering: String,
-    pub total: usize,
-    pub capped: bool,
-    pub refs: Vec<WireRenderingRef>,
-}
-
-/// The forward lens payload: a code and all the ways it is rendered.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireRenderings {
-    pub code: String,
-    pub renderings: Vec<WireRendering>,
-}
 
 /// One code a surface word translates, with how many tagged tokens carry it.
 #[derive(Serialize)]
@@ -637,55 +607,6 @@ pub fn suggested_weaves_to_wire(loaded: &[LoadedWeave]) -> WireSuggestedWeaves {
     WireSuggestedWeaves { suggested }
 }
 
-// ── R&D tier ──────────────────────────────────────────────────────────────────
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireScored {
-    pub code: String,
-    pub score: f32,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireMorph {
-    pub verse: String,
-    pub token_index: u32,
-    /// The raw parsing code, e.g. `"HVqp3ms"` / `"V-AAI-3S"`.
-    pub code: String,
-    /// The rendered study-panel phrase, e.g. `"Qal perfect, 3rd masculine singular"`.
-    pub gloss: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireBridgePartner {
-    pub code: String,
-    /// The witnesses that assert this link (`etymology`, `lxx`, `abbott-smith`, …).
-    pub sources: Vec<String>,
-    /// The best trust prior across those witnesses.
-    pub prior: f32,
-    /// The authority tiers those witnesses attest, deduped and ordered
-    /// God→Human→Machine (`"god"`/`"human"`/`"machine"`); e.g. a scripture
-    /// quotation is `["god","machine"]`. Additive field — a consumer that
-    /// ignores it sees the pre-tier behaviour.
-    pub tiers: Vec<String>,
-    /// True when any witness's method is still research-grade (has not passed
-    /// its held-out grading) — a lead, not a result.
-    pub research_grade: bool,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireBridgePartners {
-    pub code: String,
-    pub partners: Vec<WireBridgePartner>,
-}
-
-pub fn scored_to_wire(items: Vec<(String, f32)>) -> Vec<WireScored> {
-    items.into_iter().map(|(code, score)| WireScored { code, score }).collect()
-}
-
 // ── margin notes ──────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -697,41 +618,6 @@ pub struct WireVerseNotes {
 }
 
 // ── TSK study cross-references ────────────────────────────────────────────────
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireStudyXrefs {
-    pub verse: String,
-    /// Best-voted first (the index is pre-sorted).
-    pub refs: Vec<WireStudyXref>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireStudyXref {
-    pub to: String,
-    pub to_display: String,
-    /// Range end when the pointer spans verses ("Gen 1:1–1:3").
-    pub end: Option<String>,
-    pub end_display: Option<String>,
-    pub votes: i32,
-}
-
-pub fn study_xrefs_to_wire(vref: &VRef, refs: &[CrossRef]) -> WireStudyXrefs {
-    WireStudyXrefs {
-        verse: vref.ref_key(),
-        refs: refs
-            .iter()
-            .map(|r| WireStudyXref {
-                to: r.to.ref_key(),
-                to_display: r.to.display(),
-                end: r.end.as_ref().map(|e| e.ref_key()),
-                end_display: r.end.as_ref().map(|e| e.display()),
-                votes: r.votes,
-            })
-            .collect(),
-    }
-}
 
 // ── the weave library ─────────────────────────────────────────────────────────
 
@@ -1049,45 +935,6 @@ pub fn constellation_to_wire(
 
 // ── the symbolic concept engine (collocations, distribution, leitwort) ────────
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireConcept {
-    pub code: String,
-    /// Total occurrences across the corpus.
-    pub total: u32,
-    pub ot: u32,
-    pub nt: u32,
-    /// The top-5 concentrating books, biggest first.
-    pub top_books: Vec<WireBookCount>,
-    /// Per-book counts for the dispersion strip (OSIS id → count).
-    pub by_book: std::collections::HashMap<String, u32>,
-    /// Mutual-kNN collocates by PPMI, strongest first.
-    pub collocates: Vec<WireScored>,
-    /// The code's co-occurrence community (excluding itself).
-    pub community: Vec<String>,
-    pub leitwort: Option<WireLeitwort>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireBookCount {
-    pub book: String,
-    pub display: String,
-    pub count: u32,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireLeitwort {
-    /// Total uses, and how many of them cluster in the discovered window.
-    pub n: usize,
-    pub win_count: usize,
-    /// −log10 p — display as "p ≈ 10^−score".
-    pub score: f64,
-    /// Human window label, e.g. "Genesis 37–50".
-    pub label: String,
-}
-
 // ── concept map (radial neighbourhood + dispersion strip) ─────────────────────
 
 /// A panel view as a list of typed blocks (see `plumbline_core::panel`). The shell
@@ -1141,12 +988,7 @@ fn color_token(c: Color) -> &'static str {
         Color::Faded => "faded",
         Color::Gold => "gold",
         Color::Section => "section",
-        Color::TierGod => "tierGod",
-        Color::TierHuman => "tierHuman",
-        Color::TierMachine => "tierMachine",
-        Color::TierResearch => "tierResearch",
         Color::Mono => "mono",
-        Color::Morph => "morph",
         Color::Lemma => "lemma",
     }
 }
@@ -1171,7 +1013,6 @@ pub enum WirePanelLink {
     Go { book: String, chapter: u32, verse: Option<u32> },
     External { url: String },
     Occurrences { code: String },
-    Rendering { code: String, rendering: String },
     CodeStudy { code: String, word: String },
     WordUsage { word: String, scope: String, page: u32, books: bool, all_codes: bool },
     CodeUsage { code: String, word: String, scope: String, page: u32, family: bool, books: bool, all_codes: bool },
@@ -1207,7 +1048,6 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::Go { book, chapter, verse } => WirePanelLink::Go { book, chapter, verse },
         PanelLink::External { url } => WirePanelLink::External { url },
         PanelLink::Occurrences { code } => WirePanelLink::Occurrences { code },
-        PanelLink::Rendering { code, rendering } => WirePanelLink::Rendering { code, rendering },
         PanelLink::CodeStudy { code, word } => WirePanelLink::CodeStudy { code, word },
         PanelLink::WordUsage { word, scope, page, books, all_codes } => {
             WirePanelLink::WordUsage { word, scope, page, books, all_codes }
@@ -1307,6 +1147,10 @@ pub struct WireConfigState {
     /// scroll most of a screen. Absent → off.
     #[serde(default)]
     pub page_turn: bool,
+    /// Verse numbers during the Sunday-morning seating when they are otherwise
+    /// off (additive). Absent → off.
+    #[serde(default)]
+    pub verse_numbers_sunday: bool,
     /// Sunday service start, minutes since local midnight (additive). Absent =
     /// never set — the Sunday seating keeps its before-noon rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1341,13 +1185,6 @@ pub struct WireConfigState {
     /// Reading history, most-recent-first (capped by the core).
     #[serde(default)]
     pub history: Vec<WirePaneRef>,
-    /// Show the curated-scholarship analysis tiers (additive; absent on load →
-    /// derived from `studyMode`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub human_analysis: Option<bool>,
-    /// Show the learned/statistical analysis tiers (additive).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub machine_analysis: Option<bool>,
     /// The reader's home church (additive): shown in the welcome when a shared
     /// link carried one, and attached to the links this reader shares.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1413,6 +1250,10 @@ pub struct WirePaneRef {
     /// Not the UI's language — see `config::PaneRef::lang`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub lang: String,
+    /// History entries only (additive): the named seating it was read in, a
+    /// `session_slot` token. Absent = everyday reading.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub slot: String,
 }
 
 /// A home church on the wire (see [`WireConfigState::church`]).
@@ -1493,7 +1334,13 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         open_panes: cfg
             .panes
             .iter()
-            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse, lang: p.lang.clone() })
+            .map(|p| WirePaneRef {
+                book: p.book.clone(),
+                chapter: p.chapter,
+                verse: p.verse,
+                lang: p.lang.clone(),
+                slot: String::new(),
+            })
             .collect(),
         active_pane: cfg.active,
         bible_reads: cfg.bible_reads,
@@ -1504,12 +1351,19 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             .map(|(k, p)| {
                 (
                     k.clone(),
-                    WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse, lang: p.lang.clone() },
+                    WirePaneRef {
+                        book: p.book.clone(),
+                        chapter: p.chapter,
+                        verse: p.verse,
+                        lang: p.lang.clone(),
+                        slot: String::new(),
+                    },
                 )
             })
             .collect(),
         verse_per_line: cfg.verse_per_line,
         page_turn: cfg.page_turn,
+        verse_numbers_sunday: cfg.verse_numbers_sunday,
         sunday_service: cfg.sunday_service,
         verse_numbers: cfg.verse_numbers,
         added_italics: cfg.added_italics,
@@ -1522,10 +1376,14 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         history: cfg
             .history
             .iter()
-            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: None, lang: String::new() })
+            .map(|p| WirePaneRef {
+                book: p.book.clone(),
+                chapter: p.chapter,
+                verse: None,
+                lang: String::new(),
+                slot: p.slot.clone(),
+            })
             .collect(),
-        human_analysis: Some(cfg.human_analysis),
-        machine_analysis: Some(cfg.machine_analysis),
         akjv_overlay: Some(cfg.akjv_overlay),
         memorize_per_day: Some(cfg.memorize_per_day),
         language: (!cfg.language.is_empty()).then(|| cfg.language.clone()),
@@ -1557,6 +1415,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
                 chapter: p.chapter.max(1),
                 verse: p.verse.filter(|v| *v >= 1),
                 lang: p.lang.clone(),
+                slot: String::new(),
             })
             .collect(),
         active: w.active_pane,
@@ -1573,12 +1432,14 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
                         chapter: p.chapter.max(1),
                         verse: p.verse.filter(|v| *v >= 1),
                         lang: p.lang.clone(),
+                        slot: String::new(),
                     },
                 )
             })
             .collect(),
         verse_per_line: w.verse_per_line,
         page_turn: w.page_turn,
+        verse_numbers_sunday: w.verse_numbers_sunday,
         // Same guard as `core::config::from_wire`: a minute outside the day
         // reads as never-set.
         sunday_service: w.sunday_service.filter(|m| *m < 24 * 60),
@@ -1606,11 +1467,14 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         history: w
             .history
             .iter()
-            .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: None, lang: String::new() })
+            .map(|p| PaneRef {
+                book: p.book.clone(),
+                chapter: p.chapter.max(1),
+                verse: None,
+                lang: String::new(),
+                slot: plumbline_core::config::named_slot(&p.slot),
+            })
             .collect(),
-        // Absent = off; the tiers are opt-in (core::config::from_wire).
-        human_analysis: w.human_analysis.unwrap_or(false),
-        machine_analysis: w.machine_analysis.unwrap_or(false),
         // Absent = off (core::config::from_wire): the KJV is the text.
         akjv_overlay: w.akjv_overlay.unwrap_or(false),
         memorize_per_day: w.memorize_per_day.unwrap_or(Config::default().memorize_per_day),

@@ -312,17 +312,6 @@ char *plumbline_engine_strongs_json(const struct PlumblineEngine *engine, const 
 char *plumbline_engine_strongs_occurrences_json(const struct PlumblineEngine *engine,
                                                 const char *code);
 
-// The rendering lens for a Strong's code: every distinct English rendering of
-// it, most frequent first, each with an occurrence count and its (capped)
-// verse refs + token spans. `{"code","renderings":[{"rendering","total",
-// "capped","refs":[{"verse","display","span":[start,end]}]}]}`. Each `refs`
-// list is capped at [`OCCURRENCE_CAP`]; `renderings` is empty for an untagged
-// or unknown code. Null only on a null engine. Caller-freed.
-//
-// # Safety
-// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
-char *plumbline_engine_renderings_json(const struct PlumblineEngine *engine, const char *code);
-
 // The reverse lens: the Strong's codes a surface English word translates,
 // most frequent first. `{"word","codes":[{"code","count"}]}`. Reveals where
 // one English word hides a Greek/Hebrew distinction ("love" ← agape and
@@ -390,25 +379,6 @@ char *plumbline_engine_verse_xrefs_json(const struct PlumblineEngine *engine, co
 // # Safety
 // `engine` is a valid engine pointer.
 char *plumbline_engine_suggested_weaves_json(const struct PlumblineEngine *engine);
-
-// The fused OT↔NT bridge partners of a Strong's code as JSON:
-// `{"code","partners":[{code,sources,prior}]}`, ranked by trust prior. The etymology layer
-// works from the dictionary alone, so this is available even for a bytes-opened engine
-// (external witnesses need a home). Null on a null engine / invalid code.
-//
-// # Safety
-// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
-char *plumbline_engine_bridge_partners_json(const struct PlumblineEngine *engine, const char *code);
-
-// The morphology of one token as JSON:
-// `{"verse","tokenIndex","code","gloss"}`. Null when no morphology is loaded,
-// the reference is unparseable, or that token carries no annotation.
-//
-// # Safety
-// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
-char *plumbline_engine_morph_json(const struct PlumblineEngine *engine,
-                                  const char *ref_key,
-                                  uint32_t token_index);
 
 // Add the whole verse `ref_key` to the thread named `name` (created on first
 // use). `note` may be null; `added` is a caller-supplied UTC timestamp.
@@ -679,13 +649,6 @@ char *plumbline_engine_weave_set_notes(struct PlumblineEngine *engine,
 // `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_verse_notes_json(const struct PlumblineEngine *engine, const char *ref_key);
 
-// The verse's TSK study cross-references (best-voted first) as JSON, or null
-// when the verse has none or the TSK artifact is absent.
-//
-// # Safety
-// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
-char *plumbline_engine_study_xrefs_json(const struct PlumblineEngine *engine, const char *ref_key);
-
 // The full weave library (canonical + suggested) with every link field a
 // shell needs for connectors, compare cards, the chord map and the
 // constellation. Never null on a live engine (empty library → empty list).
@@ -757,16 +720,6 @@ char *plumbline_engine_constellation_json(const struct PlumblineEngine *engine,
                                           uint32_t page,
                                           const char *pins_json);
 
-// The symbolic concept engine's view of a Strong's code: occurrence total,
-// testament split, concentrating books, per-book dispersion counts,
-// collocates, co-occurrence community, and the leitwort discovery when one
-// exists. Null when the code never occurs. Built lazily on first call
-// (corpus-wide sweep, ~seconds) and cached.
-//
-// # Safety
-// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
-char *plumbline_engine_concept_json(const struct PlumblineEngine *engine, const char *code);
-
 // A short English gloss for a Strong's code — the modal KJV rendering across
 // its occurrences (≤80 sampled), falling back to a distilled dictionary
 // clause. Plain text (not JSON); null when nothing sensible exists.
@@ -776,47 +729,22 @@ char *plumbline_engine_concept_json(const struct PlumblineEngine *engine, const 
 char *plumbline_engine_gloss(const struct PlumblineEngine *engine, const char *code);
 
 // A panel view as the typed block list (`{blocks:[…]}`). Word study: the clicked
-// word's dictionary + Full-study tiers + this verse's cross-references/notes.
-// `full` gates the R&D tiers + author actions. Never null on a live engine.
+// word's dictionary entries, then this verse's own rows, weave partners and
+// margin notes. Never null on a live engine.
 //
 // # Safety
 // `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_word_study_blocks_json(const struct PlumblineEngine *engine,
                                               const char *ref_key,
-                                              uint32_t token_index,
-                                              bool full);
+                                              uint32_t token_index);
 
-// [`plumbline_engine_word_study_blocks_json`] with per-tier gates instead of the Simple/Full
-// flag: `gates` bit 0 = curated-scholarship (human) analysis, bit 1 = learned/statistical
-// (machine) analysis. The text and the reader's own data are always on.
+// The standalone `code:CODE` study card: one Strong's code's dictionary entry
+// and the way into its concordance. Never null on a live engine.
 //
 // # Safety
-// `engine` is a live engine; `ref_key` is a valid NUL-terminated UTF-8 string.
-char *plumbline_engine_word_study_blocks2_json(const struct PlumblineEngine *engine,
-                                               const char *ref_key,
-                                               uint32_t token_index,
-                                               uint32_t gates);
-
-// The standalone `code:CODE[:word]` study card (the reverse rendering-lens
-// target). `word` may be null. Never null on a live engine.
-//
-// # Safety
-// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_code_study_blocks_json(const struct PlumblineEngine *engine,
-                                              const char *code,
-                                              const char *word,
-                                              bool full);
-
-// [`plumbline_engine_code_study_blocks_json`] with per-tier gates (bit 0 = human
-// analysis, bit 1 = machine analysis).
-//
-// # Safety
-// `engine` is a live engine; `code` is valid NUL-terminated UTF-8; `word` is
-// null or valid NUL-terminated UTF-8.
-char *plumbline_engine_code_study_blocks2_json(const struct PlumblineEngine *engine,
-                                               const char *code,
-                                               const char *word,
-                                               uint32_t gates);
+                                              const char *code);
 
 // The full concordance for a code as blocks. Never null on a live engine.
 //
@@ -824,15 +752,6 @@ char *plumbline_engine_code_study_blocks2_json(const struct PlumblineEngine *eng
 // `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_concordance_blocks_json(const struct PlumblineEngine *engine,
                                                const char *code);
-
-// The concordance filtered to one rendering of a code, as blocks. Never null
-// on a live engine.
-//
-// # Safety
-// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
-char *plumbline_engine_rendering_concordance_blocks_json(const struct PlumblineEngine *engine,
-                                                         const char *code,
-                                                         const char *rendering);
 
 // The threads list as blocks. Never null on a live engine.
 //
@@ -872,14 +791,12 @@ char *plumbline_engine_weaves_blocks_json(const struct PlumblineEngine *engine);
 // `engine` is a live engine (or null → null).
 char *plumbline_engine_suggested_blocks_json(const struct PlumblineEngine *engine);
 
-// A weave compare card as blocks (out-of-range index → empty). `full` adds the
-// edit-notes action. Never null on a live engine.
+// A weave compare card as blocks (out-of-range index → empty). Never null on a
+// live engine.
 //
 // # Safety
 // `engine` is a live engine (or null → null).
-char *plumbline_engine_compare_blocks_json(const struct PlumblineEngine *engine,
-                                           uint32_t index,
-                                           bool full);
+char *plumbline_engine_compare_blocks_json(const struct PlumblineEngine *engine, uint32_t index);
 
 // Search results as blocks (goto link or ranked hits with snippets). Null when
 // the query is blank or the engine is null.
@@ -1033,8 +950,8 @@ char *plumbline_i18n_catalog_json(const char *chosen, const char *device);
 // `chosen` and `device` are null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_i18n_set_language(const char *chosen, const char *device);
 
-// Force the lazy analytics indexes (concept engine, leitwort scan) to build now — call once
-// on a background thread at startup in Full mode so the first study click doesn't stall. Safe
+// Force the lazy indexes (search, occurrences, the rendering lens) to build now — call once
+// on a background thread at startup so the first study click doesn't stall. Safe
 // from any thread (the builds are `OnceLock`-guarded) and idempotent. Null on success, else
 // an owned error.
 //
@@ -1050,15 +967,6 @@ char *plumbline_engine_warm_indexes(const struct PlumblineEngine *engine);
 // # Safety
 // `engine` is a live engine (or null → an error string).
 char *plumbline_engine_load_core_data(const struct PlumblineEngine *engine);
-
-// Load the optional R&D artifact (the morphology sidecar) from the engine's home if it was
-// absent at open — the web fetches the R&D pack in the background, writes it into the home,
-// then calls this. Idempotent, cheap when the file is still missing, safe from any thread.
-// Null on success, else an owned error.
-//
-// # Safety
-// `engine` is a live engine (or null → an error string).
-char *plumbline_engine_load_rnd_data(const struct PlumblineEngine *engine);
 
 // Grade the verse `verse_ref` at `now` (RFC3339 UTC), creating its SRS card on
 // first review; SM-2 reschedules and appends to the review log. `grade` is one

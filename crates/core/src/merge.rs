@@ -229,8 +229,16 @@ fn config_json(local: &[u8], incoming: &[u8]) -> Option<Value> {
     let mut iv: Value = serde_json::from_slice(incoming).ok()?;
     let lh = lv.get("history").and_then(Value::as_array).cloned().unwrap_or_default();
     let ih = iv.get("history").and_then(Value::as_array).cloned().unwrap_or_default();
-    let key =
-        |e: &Value| format!("{}|{}", str_of(e, "book"), e.get("chapter").map(Value::to_string).unwrap_or_default());
+    // The seating is part of what an entry is: a psalm read at church and the
+    // same psalm read on a Tuesday are two lines of history.
+    let key = |e: &Value| {
+        format!(
+            "{}|{}|{}",
+            str_of(e, "book"),
+            e.get("chapter").map(Value::to_string).unwrap_or_default(),
+            crate::config::named_slot(str_of(e, "slot"))
+        )
+    };
     let mut seen = BTreeSet::new();
     let mut hist = Vec::new();
     for e in ih.iter().chain(lh.iter()) {
@@ -238,7 +246,15 @@ fn config_json(local: &[u8], incoming: &[u8]) -> Option<Value> {
             hist.push(e.clone());
         }
     }
-    hist.truncate(crate::config::HISTORY_CAP);
+    // Capped as the app caps it: everyday entries, and each seating apart.
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    hist.retain(|e| {
+        let slot = crate::config::named_slot(str_of(e, "slot"));
+        let cap = if slot.is_empty() { crate::config::HISTORY_CAP } else { crate::config::SEATING_HISTORY_CAP };
+        let n = counts.entry(slot).or_default();
+        *n += 1;
+        *n <= cap
+    });
     if let Some(o) = iv.as_object_mut() {
         if !hist.is_empty() || o.contains_key("history") {
             o.insert("history".to_string(), Value::Array(hist));

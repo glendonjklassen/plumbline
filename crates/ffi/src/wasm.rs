@@ -81,33 +81,6 @@ pub unsafe extern "C" fn plumbline_engine_defer_builds(engine: *const PlumblineE
     }
 }
 
-/// Load one machine-tier artifact: step 1 the morphology sidecar. Step 0 was the
-/// retired concept embedding — a no-op kept so the two-step contract and the
-/// shell's load loop stay unchanged. Returns 1 while steps remain, 0 when done
-/// (or on a null engine). Idempotent — an artifact already loaded, or still
-/// missing from the home, is a cheap no-op.
-///
-/// [`plumbline_engine_load_rnd_data`](crate::plumbline_engine_load_rnd_data) does
-/// both in one call, parsing ~17 MB of text — seconds during which this thread
-/// answers no taps. Split, the worker can serve one between artifacts.
-///
-/// # Safety
-/// `engine` is a live engine or null.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_load_rnd_step(engine: *const PlumblineEngine, step: u32) -> i32 {
-    let Some(e) = (unsafe { engine.as_ref() }) else {
-        return 0;
-    };
-    guard(0, || match step {
-        0 => 1,
-        1 => {
-            e.load_morph_only();
-            0
-        }
-        _ => 0,
-    })
-}
-
 /// The word-usage card (the word-first study candidate) as a typed block list
 /// (`{blocks:[…]}`). Pass EITHER a non-empty `word` (following a `wusage:`
 /// link) or `ref_key` + `token_index` (a tap — the word and its Strong's codes
@@ -137,7 +110,6 @@ pub unsafe extern "C" fn plumbline_engine_word_usage_blocks_json(
     token_index: u32,
     scope: *const c_char,
     page: u32,
-    gates: u32,
     flags: u32,
 ) -> *mut c_char {
     guard(std::ptr::null_mut(), || {
@@ -182,11 +154,7 @@ pub unsafe extern "C" fn plumbline_engine_word_usage_blocks_json(
             origin,
             codes: &codes,
         };
-        crate::out_json(&crate::wire::blocks_to_wire(plumbline_core::panel::word_usage_card(
-            e,
-            plumbline_core::panel::Gates::from_bits(gates),
-            &q,
-        )))
+        crate::out_json(&crate::wire::blocks_to_wire(plumbline_core::panel::word_usage_card(e, &q)))
     })
 }
 

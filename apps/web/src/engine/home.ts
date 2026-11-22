@@ -1,5 +1,5 @@
 // The virtual home directory the engine sees through WASI: the read-only data
-// pack (data/, bridge/) plus the user's authored files (tags/, threads/,
+// pack (data/) plus the user's authored files (tags/, threads/,
 // weaves/, notes/, memory/, reading/, plans/, devotionals/, hymnal/, prayers/, .config/) restored
 // from IndexedDB. After every authoring write the user subtree is diffed back.
 
@@ -39,7 +39,7 @@ export interface VirtualHome {
    *  one is ever here and either one means the fast path fired. */
   hadIdxcache: boolean;
   /** Insert read-only pack files into the live home (the WASI shim resolves
-   *  paths on open, so the engine sees them immediately) — the late R&D pack. */
+   *  paths on open, so the engine sees them immediately) — the stage-2 pack. */
   addFiles(files: Map<string, Uint8Array>): void;
   /** Drop pack files the engine has finished reading, freeing their bytes.
    *  Returns how many bytes went. See `evict` below for the rules. */
@@ -417,9 +417,7 @@ export async function buildHome(
      *  2. Only paths whose single reader has provably finished; callers pass those
      *     explicitly, nothing is inferred. `data/kjv-notes.jsonl` never qualifies —
      *     `load_study` re-reads it on every authoring write, so evicting it empties
-     *     the 1769 margin notes the moment a note is saved. Nor do
-     *     `data/cross-references.tsv` and `bridge/*`, which load through lazy cells
-     *     that can fire on any later tap.
+     *     the 1769 margin notes the moment a note is saved.
      *
      *  Frees the steady state, not the peak: at boot the corpus cache exists as the
      *  gunzip output, this node's copy, the shim's per-read slice and the engine's

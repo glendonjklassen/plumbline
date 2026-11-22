@@ -225,9 +225,6 @@ export class StudyEngine {
   strongsOccurrences(code: string): any {
     return this.#json("plumbline_engine_strongs_occurrences_json", code);
   }
-  renderings(code: string): any {
-    return this.#json("plumbline_engine_renderings_json", code);
-  }
   wordCodes(word: string): any {
     return this.#json("plumbline_engine_word_codes_json", word);
   }
@@ -248,9 +245,6 @@ export class StudyEngine {
   }
   verseNotes(refKey: string): any {
     return this.#json("plumbline_engine_verse_notes_json", refKey);
-  }
-  studyXrefs(refKey: string): any {
-    return this.#json("plumbline_engine_study_xrefs_json", refKey);
   }
   weaves(): any {
     return this.#json("plumbline_engine_weaves_json");
@@ -346,21 +340,6 @@ export class StudyEngine {
     return s === null ? null : JSON.parse(s);
   }
 
-  // ── R&D tier ────────────────────────────────────────────────────────────────
-
-  bridgePartners(code: string): any {
-    return this.#json("plumbline_engine_bridge_partners_json", code);
-  }
-  morph(refKey: string, tokenIndex: number): any {
-    const s = this.#call(
-      (r) => this.#w.takeStr((this.#w.exports.plumbline_engine_morph_json as Function)(this.#engine, r, tokenIndex) as number),
-      [refKey],
-    );
-    return s === null ? null : JSON.parse(s);
-  }
-  concept(code: string): any {
-    return this.#json("plumbline_engine_concept_json", code);
-  }
   gloss(code: string): string | null {
     return this.#text("plumbline_engine_gloss", code);
   }
@@ -381,16 +360,6 @@ export class StudyEngine {
     (this.#w.exports.plumbline_engine_defer_builds as Function)(this.#engine, on ? 1 : 0);
   }
 
-  /** Load the R&D artifacts from the home if they arrived after open (the
-   *  deferred pack); no-op when already loaded or still missing. */
-  loadRndData(): string | null {
-    return this.#text("plumbline_engine_load_rnd_data");
-  }
-  /** Load ONE machine-tier artifact (wasm-only export): true while more remain.
-   *  Split so a ~17 MB parse cannot hold the worker for seconds. */
-  loadRndStep(step: number): boolean {
-    return ((this.#w.exports.plumbline_engine_load_rnd_step as Function)(this.#engine, step) as number) === 1;
-  }
   /** Load the stage-2 core data (Strong's + margin-note study reload) once
    *  those files land in the home; no-op when nothing is missing. */
   loadCoreData(): string | null {
@@ -412,12 +381,12 @@ export class StudyEngine {
 
   // ── panel content model ─────────────────────────────────────────────────────
 
-  /** Word study with per-tier gates: bit 0 = human analysis, bit 1 = machine. */
-  wordStudyBlocks(refKey: string, tokenIndex: number, gates: number): any {
+  /** Word study: the tapped word's dictionary entries, then the verse's own rows. */
+  wordStudyBlocks(refKey: string, tokenIndex: number): any {
     const s = this.#call(
       (r) =>
         this.#w.takeStr(
-          (this.#w.exports.plumbline_engine_word_study_blocks2_json as Function)(this.#engine, r, tokenIndex, gates) as number,
+          (this.#w.exports.plumbline_engine_word_study_blocks_json as Function)(this.#engine, r, tokenIndex) as number,
         ),
       [refKey],
     );
@@ -434,7 +403,6 @@ export class StudyEngine {
     tokenIndex: number,
     scope: string,
     page: number,
-    gates: number,
     family = false,
     books = false,
     allCodes = false,
@@ -450,7 +418,6 @@ export class StudyEngine {
             tokenIndex,
             sc,
             page,
-            gates,
             (family ? 1 : 0) | (books ? 2 : 0) | (allCodes ? 4 : 0),
           ) as number,
         ),
@@ -458,22 +425,16 @@ export class StudyEngine {
     );
     return s === null ? null : JSON.parse(s);
   }
-  /** Code study card with per-tier gates (see wordStudyBlocks). */
-  codeStudyBlocks(code: string, word: string | null, gates: number): any {
+  /** One Strong's code's study card. */
+  codeStudyBlocks(code: string): any {
     const s = this.#call(
-      (c, wd) =>
-        this.#w.takeStr(
-          (this.#w.exports.plumbline_engine_code_study_blocks2_json as Function)(this.#engine, c, wd, gates) as number,
-        ),
-      [code, word],
+      (c) => this.#w.takeStr((this.#w.exports.plumbline_engine_code_study_blocks_json as Function)(this.#engine, c) as number),
+      [code],
     );
     return s === null ? null : JSON.parse(s);
   }
   concordanceBlocks(code: string): any {
     return this.#json("plumbline_engine_concordance_blocks_json", code);
-  }
-  renderingConcordanceBlocks(code: string, rendering: string): any {
-    return this.#json("plumbline_engine_rendering_concordance_blocks_json", code, rendering);
   }
   threadsBlocks(): any {
     return this.#json("plumbline_engine_threads_blocks_json");
@@ -498,9 +459,9 @@ export class StudyEngine {
   suggestedBlocks(): any {
     return this.#json("plumbline_engine_suggested_blocks_json");
   }
-  compareBlocks(index: number, full: boolean): any {
+  compareBlocks(index: number): any {
     const s = this.#w.takeStr(
-      (this.#w.exports.plumbline_engine_compare_blocks_json as Function)(this.#engine, index, full ? 1 : 0) as number,
+      (this.#w.exports.plumbline_engine_compare_blocks_json as Function)(this.#engine, index) as number,
     );
     return s === null ? null : JSON.parse(s);
   }

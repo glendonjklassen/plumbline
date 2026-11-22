@@ -90,7 +90,12 @@
   const versePerLine = $derived(!!s.config.versePerLine);
   // Both default on: an absent key is a config written before the setting existed,
   // not a reader who turned it off.
-  const verseNumbers = $derived(s.config.verseNumbers !== false);
+  // On, or off but asked for in the Sunday-morning seating: a reader whose
+  // church reads another translation follows along by number. `s.slot` is the
+  // seating NOW, re-asked on every return to the app and every save.
+  const verseNumbers = $derived(
+    s.config.verseNumbers !== false || (s.config.verseNumbersSunday === true && s.slot === "sunday-morning"),
+  );
   const addedItalics = $derived(s.config.addedItalics !== false);
   const columnWidth = $derived(Math.max(120, Math.min(cssW - 2 * sideMargin, MAX_COLUMN)));
   const marginX = $derived(Math.max(sideMargin, (cssW - columnWidth) / 2));

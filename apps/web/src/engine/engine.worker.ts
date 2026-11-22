@@ -1,22 +1,21 @@
 // The engine worker: the whole engine life runs here — pack fetch, IndexedDB home,
-// wasm instantiate, engine open, warm, the deferred R&D load, authoring writes and
-// their persistence. The main thread never blocks on an engine call; it speaks the
+// wasm instantiate, engine open, warm, authoring writes and their persistence. The main thread never blocks on an engine call; it speaks the
 // RPC below and paints.
 //
 // THE SCHEDULING RULE, which the rest of this file is arranged around: this thread
 // is the only one that can answer layout and tap RPCs, so anything synchronous it
 // runs blocks all of them — and blocks its own in-flight downloads with them, since
 // a response body is read one `await` at a time. Background loading must therefore
-// never hold the thread for one long synchronous block: stage-2 load, index warming
-// and the R&D load all run as separate macrotasks with yields between them, so
-// pending RPC messages interleave. Warming goes index-by-index through the wasm-only
+// never hold the thread for one long synchronous block: stage-2 load and index
+// warming run as separate macrotasks with yields between them, so pending RPC
+// messages interleave. Warming goes index-by-index through the wasm-only
 // `warmStep` export instead of one monolithic `warmIndexes` call.
 //
 // Protocol (structured-clone JSON). In: `{ id, op, ...args }`, where the ops are the
 // switch at the bottom of this file. Out: `{ id, result }` | `{ id, error }`, plus
 // unsolicited `{ type }` events — progress (during boot), authored, readingWrote,
-// persistFailed / persistOk, coreReady, warmReady, rndProgress / rndPreparing /
-// rndReady, langPackProgress / paneLangProgress.
+// persistFailed / persistOk, coreReady, warmReady, langPackProgress /
+// paneLangProgress.
 //
 // Layout measure runs here over an OffscreenCanvas (measure.ts adapts), so the
 // scripture face must be in self.fonts before the first LAYOUT — which is not the
@@ -32,7 +31,6 @@ import {
   hasOptional,
   fetchManifest,
   fetchPackEntries,
-  fetchRndPack,
   fetchStage2Pack,
   fetchSuggestedWeaves,
   fetchLangCorpus,
@@ -252,9 +250,9 @@ const yieldTask = () => new Promise<void>((r) => setTimeout(r, 0));
 // ── engine calls ──────────────────────────────────────────────────────────────
 // Every engine request arrives as `call` or `static`, and each is timed: an un-timed
 // one can hold this thread for as long as it likes and leave no mark anywhere.
-// `wordStudyBlocks` is the real case — it builds the occurrence index, the lens, the
-// cross-references, the concept model and the bridge synchronously when the reader
-// taps a word before the warm has reached them, seconds of it on a phone. Two clock
+// `wordStudyBlocks` is the real case — it builds the occurrence index and the lens
+// synchronously when the reader taps a word before the warm has reached them,
+// seconds of it on a phone. Two clock
 // reads per call, and only the expensive ones are kept.
 const SLOW_CALL_MS = 30;
 const SLOW_CALLS_KEPT = 25;
@@ -290,21 +288,13 @@ function timedChunk<T>(label: string, f: () => T): T {
 let firstLayoutServed: (() => void) | null = null;
 const firstLayout = new Promise<void>((r) => (firstLayoutServed = r));
 
-/** Warm the lazy indexes one per macrotask (idempotent; safe to re-run after
- *  the R&D pack lands — the machine-tier indexes only build once it is in). */
+/** Warm the lazy indexes one slice per macrotask (idempotent). */
 let warmRun: Promise<void> | null = null;
 function warmChunked(): Promise<void> {
-  // Single-flighted, like the R&D load below: the background load and the R&D load
-  // (which FirstRun.svelte kicks off via ensureRnd) really do run at once on a normal
-  // first visit. Not a throughput fix — the engine ignores the loop's step counter and
-  // every call advances one shared phase counter, so two loops split the work rather
-  // than duplicating it. The steps stay small on purpose, one slice per macrotask,
-  // which is what keeps layout and tap RPCs answerable.
-  //
-  // What it buys is a well-defined re-warm after the R&D pack lands: a second caller
-  // joins the live pass, and clearing `warmRun` on completion means a genuinely later
-  // call still gets a fresh one. Every phase is idempotent and the counter is shared,
-  // so joining mid-pass is safe.
+  // Single-flighted: a second caller joins the live pass, and clearing `warmRun`
+  // on completion means a genuinely later call still gets a fresh one. The steps
+  // stay small on purpose, one slice per macrotask, which is what keeps layout and
+  // tap RPCs answerable.
   return (warmRun ??= (async () => {
     for (let step = 0; ; step++) {
       await yieldTask();
@@ -319,63 +309,6 @@ function warmChunked(): Promise<void> {
   })().finally(() => {
     warmRun = null;
   }));
-}
-
-/** Fetch + load the machine-tier pack, chunked, with progress events for the
- *  shell's "load analysis" affordance. Shared by the auto path and the
- *  loadRnd op; concurrent callers reuse the in-flight run. */
-let rndRun: Promise<void> | null = null;
-function loadRndChunked(): Promise<void> {
-  return (rndRun ??= (async () => {
-    if (!booted!.manifest.files.some((f) => f.stage === "analysis")) return;
-    const t0 = performance.now();
-    const files = await fetchRndPack(booted!.manifest, (p) =>
-      self.postMessage({ type: "rndProgress", fraction: p.fraction }),
-    );
-    booted!.trace.push(["rnd fetch+gunzip", Math.round(performance.now() - t0)]);
-    await yieldTask();
-    // Now the expensive part: parsing the morphology is megabytes of text, seconds of
-    // it on a phone. One artifact per macrotask so a tap in between is still answered,
-    // and the shell is told we have moved from downloading to preparing.
-    self.postMessage({ type: "rndPreparing" });
-    booted!.home.addFiles(files);
-    for (let step = 0; ; step++) {
-      await yieldTask();
-      const more = timedChunk(`rnd load step ${step}`, () => booted!.engine.loadRndStep(step));
-      if (!more) break;
-    }
-    // Both are parsed into wasm memory by the steps above and never re-read.
-    const freedRnd = booted!.home.evict(["data/morphology.morphb", "data/text-witness.json"]);
-    if (freedRnd) booted!.trace.push(["home evict after analysis (KB)", Math.round(freedRnd / 1024)]);
-    await warmChunked();
-    self.postMessage({ type: "rndReady" });
-  })().catch((e) => {
-    rndRun = null; // offline — the Settings toggle or next boot retries
-    throw e;
-  }));
-}
-
-/** Data Saver — the one setting that still means "ask me before you spend". */
-const saveData = (): boolean => (navigator as any).connection?.saveData === true;
-
-/** Is the machine-tier pack already on this device? Then loading it costs no network,
- *  and the deferral — which protects the reader's data and their first paint — has
- *  nothing left to protect. */
-async function rndAlreadyCached(): Promise<boolean> {
-  const files = booted!.manifest.files.filter((f) => f.stage === "analysis");
-  if (!files.length) return false;
-  for (const f of files) {
-    if (!(await depotHas(packFileUrl(f, booted!.manifest.version)))) return false;
-  }
-  return true;
-}
-
-/** Whether this session will fetch the machine tier by itself. Phones defer it out of
- *  the boot path, never out of the session. */
-async function willAutoLoadRnd(machineOn: boolean, deferRnd: boolean): Promise<boolean> {
-  if (!machineOn) return false;
-  if (!deferRnd) return true;
-  return (await rndAlreadyCached()) || !saveData();
 }
 
 /** Notice a data update, download only what changed, and re-pin — all of it off the
@@ -400,21 +333,12 @@ async function reconcilePack(): Promise<void> {
   // it. The same call decides what gets pinned below, so the sweep and the pin cannot
   // disagree about which files should be here.
   const mine = devicePackFiles(live, (f) => hasOptional(booted!.home, f));
-  // Not the other Bibles, and not the analysis pack. They are in `mine` — the pin
-  // claims their URLs and prune keeps them — but they must not gate this sweep:
-  // ~9 MB of corpora and ~3 MB of analysis against the base pack's ~200 KB of
-  // typical drift, and each has its own download path running alongside this one
-  // (`fetchOtherCorpora`, `loadRndChunked`). Gating on them strands a slow or
+  // Not the other Bibles. They are in `mine` — the pin claims their URLs and prune
+  // keeps them — but they must not gate this sweep: ~9 MB of corpora against the
+  // base pack's ~200 KB of typical drift, with their own download path running
+  // alongside this one (`fetchOtherCorpora`). Gating on them strands a slow or
   // offline device's pin on the old release until every last byte has landed.
-  //
-  // `analysis` joined `corpus` here when the tiers began defaulting ON: that made
-  // the analysis pack a background download on every device, which is exactly
-  // what the corpus carve-out is about. Before that it was fetched only where a
-  // reader had opted in, and a device that had it had it before the sweep ran.
-  // Gating on it also raced its own downloader — the sweep fetching a file
-  // `loadRndChunked` was already fetching failed verification and abandoned the
-  // whole re-pin, which is how a deploy left the reader stranded.
-  const gating = mine.filter((f) => f.stage !== "corpus" && f.stage !== "analysis");
+  const gating = mine.filter((f) => f.stage !== "corpus");
   for (const f of gating) {
     const url = packFileUrl(f, live.version);
     if (await depotHas(url)) continue; // unchanged: same hash, same URL, already here
@@ -447,7 +371,7 @@ async function reconcilePack(): Promise<void> {
   // it has already had it.
 }
 
-async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<void> {
+async function backgroundLoad(): Promise<void> {
   await Promise.race([firstLayout, new Promise((r) => setTimeout(r, 2500))]);
   try {
     // Which pack are we actually on? A warm boot's manifest IS the pin, which
@@ -509,8 +433,7 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     });
     // Read exactly once, by loadCoreData, with the parsed forms living in the engine
     // from here on — so the home's copies are duplication. NOT the margin notes, which
-    // load_study re-reads on every authoring write, and NOT cross-references.tsv, whose
-    // lazy index can still be built on a later tap. The dictionary paths come off the
+    // load_study re-reads on every authoring write. The dictionary paths come off the
     // manifest rather than a hand-kept list, so a language added to the registry is
     // evicted by having been added.
     const freedCore = booted!.home.evict([
@@ -521,10 +444,10 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     if (freedCore) booted!.trace.push(["home evict after stage 2 (KB)", Math.round(freedCore / 1024)]);
     self.postMessage({ type: "coreReady" });
     await warmChunked();
-    // Before the analysis pack, not after: reconciling is normally one 5 KB manifest
-    // fetch and some hash comparisons, and queued behind a megabyte of optional
-    // analytics a device sits on a stale pin for the length of that download. In its
-    // own try, because being offline here is the normal case, not an error.
+    // Before the other Bibles, not after: reconciling is normally one 5 KB manifest
+    // fetch and some hash comparisons, and queued behind megabytes of corpora a
+    // device sits on a stale pin for the length of that download. In its own try,
+    // because being offline here is the normal case, not an error.
     try {
       await reconcilePack();
     } catch {
@@ -533,9 +456,8 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     // The other Bibles, last: the reader has had text for a while by now, Strong's is
     // parsed, the chapter is warm.
     await fetchOtherCorpora();
-    if (await willAutoLoadRnd(machineOn, deferRnd)) await loadRndChunked();
   } catch {
-    /* offline — the Settings toggle or next boot retries */
+    /* offline — the next boot retries */
   }
 }
 
@@ -865,11 +787,6 @@ self.onmessage = async (ev: MessageEvent) => {
           self.postMessage({ type: "readingWrote" });
         };
         const cfg = configLoad(booted.wasm) ?? {};
-        // Opt-in: absent means off, so a first visit does not pull the analysis pack
-        // in the background. (The language was set inside `boot`, before the open.)
-        const machineOn = cfg.machineAnalysis === true;
-        // So the shell never offers "Load analysis" for a load already on its way.
-        const rndAuto = await willAutoLoadRnd(machineOn, m.deferRnd === true);
         const x0 = performance.now();
         // Every concrete theme (core::theme::Theme) — the palettes the shell paints
         // from without a round trip. Keep in step with the Rust enum and
@@ -908,13 +825,12 @@ self.onmessage = async (ev: MessageEvent) => {
         const chosenLang = typeof cfg.language === "string" && cfg.language ? cfg.language : (m.sharedLang ?? "");
         const i18n = i18nCatalog(booted.wasm, chosenLang, m.locale ?? "");
         booted.trace.push(["boot reply extras (palettes + toc + i18n)", Math.round(performance.now() - x0)]);
-        void backgroundLoad(machineOn, m.deferRnd === true);
+        void backgroundLoad();
         reply({
           packVersion: booted.packVersion,
           config: cfg,
           version: engineVersion(booted.wasm),
           bundledOn: booted.home.bundledOn,
-          rndAuto,
           fontFaces,
           // Folded into the boot reply: this thread answers one thing at a time, so
           // the shell's first reads would otherwise be full queue hops between the
@@ -985,11 +901,6 @@ self.onmessage = async (ev: MessageEvent) => {
         // One-off text widths for callers needing engine-side metrics; space width
         // and friends travel inside the layout cfg instead.
         reply(measureFor(readerFont(m.px))(m.text));
-        break;
-      }
-      case "loadRnd": {
-        await loadRndChunked();
-        reply(null);
         break;
       }
       case "prune": {

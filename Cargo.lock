@@ -430,7 +430,6 @@ dependencies = [
  "cbindgen",
  "plumbline-core",
  "plumbline-layout",
- "plumbline-rnd",
  "serde",
  "serde_json",
 ]
@@ -440,7 +439,6 @@ name = "plumbline-hydrate"
 version = "0.86.0"
 dependencies = [
  "plumbline-core",
- "plumbline-rnd",
 ]
 
 [[package]]
@@ -448,16 +446,6 @@ name = "plumbline-layout"
 version = "0.86.0"
 dependencies = [
  "plumbline-core",
-]
-
-[[package]]
-name = "plumbline-rnd"
-version = "0.86.0"
-dependencies = [
- "plumbline-core",
- "serde",
- "serde_json",
- "thiserror",
 ]
 
 [[package]]

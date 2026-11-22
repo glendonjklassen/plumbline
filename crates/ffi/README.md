@@ -52,8 +52,6 @@ would bind.)
 | `plumbline_engine_search_json(query)` | multi-tier search: `goto` or `hits` |
 | `plumbline_engine_threads_json` / `_tags_json` / `_verse_xrefs_json(ref)` / `_suggested_weaves_json` | read personal study data, a verse's weave partners, and the suggested-weave review queue |
 | `plumbline_engine_thread_add` / `_tag_add` / `_tag_remove` / `_weave_add_link` | **author** study data (null on success, else an owned error string; needs an engine opened from a home dir) |
-| `plumbline_engine_bridge_partners_json(code)` | R&D: fused OT↔NT bridge partners with provenance + trust prior |
-| `plumbline_engine_morph_json(ref, tok)` | R&D: a token's morphology parse + gloss |
 | `plumbline_engine_weave_approve(index)` / `_weave_reject(index)` | **review** a suggested weave by its `suggested_weaves_json` ordinal — approve promotes it into `weaves/` (all links approved), reject deletes it |
 | `plumbline_backup_encrypt(data, phrase, entropy)` / `_decrypt(data, phrase)` / `plumbline_bytes_free` | **encrypted backup**: seal bytes under a phrase as an age file, open one again (an error JSON names `wrongPhrase` apart from damage); engine-independent, entropy supplied by the shell |
 | `plumbline_backup_phrase(entropy)` / `plumbline_backup_is_encrypted(data)` | five words for a new phrase / whether bytes are an age file rather than a plain zip |
@@ -68,11 +66,12 @@ sibling → fsync → rename); the caller supplies UTC timestamps. An engine ope
 via `plumbline_engine_open_from_bytes` has no home and returns an error from the
 authoring calls (study data is read-only).
 
-The **R&D** reads consume the offline artifacts loaded at open (concept
-morphology; the bridge's etymology layer works from the dictionary alone, its
-external witnesses need a home). Each returns null when its artifact is absent,
-so a shell shows the section exactly when it exists; no training happens across
-the boundary.
+**Breaking, removed 2026-11-22** with the analysis tiers: `_bridge_partners_json`,
+`_morph_json`, `_concept_json`, `_study_xrefs_json`, `_renderings_json`,
+`_rendering_concordance_blocks_json`, `_load_rnd_data`, and the gated
+`_word_study_blocks2_json` / `_code_study_blocks2_json`. The study-block
+endpoints lost their flags: `_word_study_blocks_json(ref, token)`,
+`_code_study_blocks_json(code)`, `_compare_blocks_json(index)`.
 
 Token flag bits are exported as `PLUMBLINE_FLAG_ADDED/DIVINE/TITLE/PARA`.
 

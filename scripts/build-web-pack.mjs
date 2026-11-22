@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Assemble the web shell's data pack: gzip the read-only home files (data/ +
-// bridge/) plus the bundled stock study set (stock/ — threads / tags / weaves)
+// Assemble the web shell's data pack: gzip the read-only home files (data/)
+// plus the bundled stock study set (stock/ — threads / tags / weaves)
 // into apps/web/public/pack/ with a manifest the loader fetches first. Stock
 // entries are marked so the loader seeds them once (edits/deletions stick). The
 // reader's other personal data (memory/) is never packed.
@@ -12,7 +12,7 @@
 //   path, bytes, gzBytes
 //   hash      — sha256 of the RAW bytes, 16 hex chars. Per-file, so a release
 //               that changes one weave invalidates one URL instead of all 44.
-//   stage     — "text" | "study" | "analysis" | "corpus" | "optional": when the
+//   stage     — "text" | "study" | "corpus" | "optional": when the
 //               loader fetches it.
 //   seedOnce  — stock study set, seeded into the reader's own files once, after
 //               which their copies rule.
@@ -37,10 +37,8 @@ const STOCK = join(repo, "stock");
 // ── the stage table ──────────────────────────────────────────────────────────
 //
 //   text     — needed before the reader can see a word. Stage 1.
-//   study    — Strong's, the margin notes, cross-references, the overlay, the
-//              bridge witnesses. Fetched right after the reader hands over.
-//   analysis — the machine tier. Background, and deferred behind an explicit
-//              action on phones.
+//   study    — Strong's, its derivation families, the margin notes, the
+//              overlay, the hymnal. Fetched right after the reader hands over.
 //   corpus   — every language's Bible except the one stage 1 opens. Background
 //              download on every device, after there is text on screen. Not
 //              `text` (a reader opens one Bible; 35 MB before first paint is
@@ -50,21 +48,16 @@ const STOCK = join(repo, "stock");
 //   optional — never fetched unless the reader asks: the suggested-weave bundle
 //              and the machine-translated dictionaries.
 //
-// Anything under data/ or bridge/ not named here defaults to `study`: it loads,
+// Anything under data/ not named here defaults to `study`: it loads,
 // just not on the boot path.
 const STAGE = {
   "data/kjv.jsonl.idxcache": "text",
   // The first-run path depends on it (36 KB): the new-believer welcome starts
   // the bundled booklet as it hands over, and `devotional_start` refuses an id
   // the catalogue does not carry — on `study` that write would race its
-  // download. Never evicted either (the `bridge/*` rule in home.ts): the engine
-  // parses it lazily on an arbitrary later tap.
+  // download. Never evicted either (home.ts): the engine parses it lazily on an
+  // arbitrary later tap.
   "data/devotional.json": "text",
-  "data/morphology.morphb": "analysis",
-  // No runtime reader in the tree — only witness.rs's own tests open it. Staged
-  // off the boot path rather than dropped, because crates/hydrate lists it as an
-  // intended R&D artifact.
-  "data/text-witness.json": "analysis",
 };
 
 /** The stock study set seeds into the reader's own files once, then their copies
@@ -72,16 +65,6 @@ const STAGE = {
  *  marker and the next boot re-seeds from these bytes. */
 const SEED_ONCE_DIRS = new Set(["threads", "tags", "weaves"]);
 
-// The concept embedding is not shipped — nothing reads it since "verses like
-// this" and the concept map were removed. This prefix sweeps out
-// `concept-vectors.vec`, its `.meta` / `.freq` sidecars and any packed `.vecb`
-// in data/; the files stay as an offline-pipeline artifact (BIBLIOGRAPHY.md).
-const VEC_PREFIX = "concept-vectors.";
-// The morphology sidecar ships packed: 10.4 MB of JSONL, 355,603 entries parsed
-// on every launch. Packed it is both faster to read and ~230 KB smaller over
-// the wire.
-const MORPH_TEXT = "morphology.jsonl";
-const MORPH_PACKED = "morphology.morphb";
 // The plain-English overlay (the AKJV delta) — a reading aid over the text
 // itself, small enough to ship on the boot path.
 const AKJV_TEXT = "akjv.jsonl";
@@ -121,7 +104,7 @@ const LANG_FILES = new Set(EXTRA_LANGS.flatMap((l) => [l.corpus, l.lexicon].filt
  *  ships whatever nobody thought to name. `data/` is also where the maintainer's
  *  own working files land (a source .docx was once gzipped into the pack);
  *  .gitignore stops those reaching git, not this walk, which reads the disk. */
-const DATA_EXTS = new Set(["json", "jsonl", "tsv", "morphb", "akjvb"]);
+const DATA_EXTS = new Set(["json", "jsonl", "akjvb"]);
 
 const SOURCES = [
   [
@@ -132,14 +115,10 @@ const SOURCES = [
       !n.endsWith(".idxcache") &&
       n !== KJV_TEXT &&
       !LANG_FILES.has(n) && // every other language's text + dictionary: emitted with their roles below
-      !n.startsWith(VEC_PREFIX) &&
-      n !== MORPH_TEXT &&
-      n !== MORPH_PACKED &&
       n !== AKJV_TEXT &&
       n !== AKJV_PACKED,
     false,
   ],
-  [join(repo, "bridge"), "bridge", () => true, false],
   [join(STOCK, "threads"), "threads", () => true, true],
   [join(STOCK, "tags"), "tags", () => true, true],
   [join(STOCK, "weaves"), "weaves", () => true, true],
@@ -287,17 +266,6 @@ if (existsSync(suggestedDir)) {
   });
 }
 
-const morphTmp = join(tmpdir(), `plumbline-morphb-${process.pid}`);
-execFileSync(
-  "cargo",
-  ["run", "--release", "--locked", "-q", "-p", "plumbline-hydrate", "--", "morphb",
-   "--from", join(repo, "data", MORPH_TEXT), "--out", morphTmp],
-  { cwd: repo, stdio: ["ignore", "inherit", "inherit"] },
-);
-const morphRaw = readFileSync(morphTmp);
-rmSync(morphTmp, { force: true });
-emit("data", MORPH_PACKED, morphRaw);
-
 const akjvTmp = join(tmpdir(), `plumbline-akjvb-${process.pid}`);
 execFileSync(
   "cargo",
@@ -323,7 +291,7 @@ const mb = (n) => (n / 1048576).toFixed(1);
 const total = files.reduce((s, f) => s + f.bytes, 0);
 const totalGz = files.reduce((s, f) => s + f.gzBytes, 0);
 const byStage = (st) => files.filter((f) => f.stage === st);
-const stageLine = ["text", "study", "analysis", "corpus", "optional"]
+const stageLine = ["text", "study", "corpus", "optional"]
   .map((st) => `${st} ${byStage(st).length}/${mb(byStage(st).reduce((s, f) => s + f.gzBytes, 0))}MB`)
   .join(", ");
 console.log(`pack ${manifest.version}: ${files.length} files, ${mb(total)}MB raw -> ${mb(totalGz)}MB gzipped`);

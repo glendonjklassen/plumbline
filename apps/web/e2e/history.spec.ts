@@ -115,3 +115,64 @@ test("a navigation stamps the seating it was made in", async ({ page }) => {
     { book: "Ps", chapter: 23, slot: "sunday-morning" },
   ]);
 });
+
+// In a named seating, what was read in that seating leads the sheet as its own
+// short list, and everything else follows under its own heading. FAILS against
+// the defect it was written for: with one list, Ps 23 below sits under sixty
+// lines of weekday reading (or past the cap entirely), which is the "I could not
+// find last Sunday" report. Out of the seating the sheet is one list again.
+test("in a seating, that seating's history leads the sheet in its own short list", async ({ page }) => {
+  await boot(page);
+  const weekday: [string, number, string?][] = [["Gen", 1], ["Exod", 1], ["Lev", 1]];
+  const sunday: [string, number, string?][] = ["Ps", "Isa", "John", "Rom", "Heb"].map((b) => [b, 1, "sunday-morning"]);
+  await seed(page, [...weekday, ...sunday]);
+
+  await page.evaluate(() => ((window as any).__plumbline.slot = "sunday-morning"));
+  await page.evaluate(() => ((window as any).__plumbline.showHistory = true));
+  const sheet = page.locator('[data-surface="history"]');
+  await expect(sheet.locator("h3").first()).toHaveText("Sunday morning");
+  // Four lines, the most recent first; the fifth is not shown.
+  await expect(sheet.locator('[data-list="seating"] button')).toHaveText(["Psalms 1", "Isaiah 1", "John 1", "Romans 1"]);
+  await expect(sheet.locator("h3").nth(1)).toHaveText("Other reading");
+  await expect(sheet.locator('[data-list="recent"] button')).toHaveText(["Genesis 1", "Exodus 1", "Leviticus 1"]);
+
+  // Any other time: one list, in the order things were read, no headings.
+  await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    s.showHistory = false;
+    s.slot = "other";
+    s.showHistory = true;
+  });
+  await expect(sheet.locator("h3")).toHaveCount(0);
+  await expect(sheet.locator('[data-list="recent"] button')).toHaveCount(8);
+});
+
+// The seating stamp is stored, and a weekday visit to the same chapter does not
+// take it. FAILS against both defects: the stamp used to be dropped by the save
+// (so nothing came back marked after a reload), and the dedupe used to be by
+// chapter alone (so the Tuesday read replaced the Sunday entry).
+test("a seating's history survives a reload and a weekday visit to the same chapter", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    s.slot = "sunday-morning";
+    s.navigate(0, "Ps", 23);
+    s.slot = "other";
+    s.navigate(0, "Gen", 1);
+    s.navigate(0, "Ps", 23);
+  });
+  const stamped = () =>
+    page.evaluate(() =>
+      ((window as any).__plumbline.config.history as any[]).filter((h) => h.book === "Ps" && h.chapter === 23).map((h) => h.slot ?? ""),
+    );
+  expect(await stamped()).toEqual(["", "sunday-morning"]);
+  await page.waitForTimeout(400); // the config save's debounce
+  await page.evaluate(() => (window as any).__plumbline.rpc.flush());
+  await page.reload();
+  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
+  // Both still there. Not an exact list: the boot's own seating restore may add
+  // an entry for whatever seating the real clock is in when this runs.
+  const after = await stamped();
+  expect(after).toContain("sunday-morning");
+  expect(after).toContain("");
+});

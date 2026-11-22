@@ -11,7 +11,6 @@
 //! nothing on the wire), so the core can add kinds without breaking older shells.
 
 use crate::reference::VRef;
-use crate::renderings::normalize as render_key;
 use crate::{i18n, versification};
 
 // ── the block model ───────────────────────────────────────────────────────────
@@ -27,16 +26,8 @@ pub enum Color {
     Gold,
     /// A section header (spaced muted gold).
     Section,
-    /// Authority tiers: the text itself / curated scholarship / machine-derived
-    /// / still-research-grade.
-    TierGod,
-    TierHuman,
-    TierMachine,
-    TierResearch,
     /// A neutral grey (#888-ish): pronunciations, kind labels, entry notes.
     Mono,
-    /// The morphology gloss tint.
-    Morph,
     /// A lemma shown small beside a chip.
     Lemma,
 }
@@ -131,9 +122,6 @@ impl Block {
     fn section(title: impl Into<String>) -> Block {
         Block::Section { title: title.into(), mark: None }
     }
-    fn section_marked(title: impl Into<String>, glyph: &str, color: Color) -> Block {
-        Block::Section { title: title.into(), mark: Some((glyph.to_string(), color)) }
-    }
 }
 
 // ── logical sizes ─────────────────────────────────────────────────────────────
@@ -151,7 +139,6 @@ mod sz {
     pub const NOTE: f32 = 12.5;
     pub const CAPTION: f32 = 12.0;
     pub const FINE: f32 = 11.5;
-    pub const MARK: f32 = 11.0;
 }
 
 // ── projected data the producer renders ───────────────────────────────────────
@@ -175,22 +162,6 @@ pub struct ChipView {
     pub gloss: Option<String>,
     pub lemma: Option<String>,
     pub xlit: Option<String>,
-}
-
-/// One English rendering of a code and how often it occurs.
-#[derive(Debug, Clone)]
-pub struct RenderingView {
-    pub rendering: String,
-    pub total: u32,
-}
-
-/// The verses where a code is rendered exactly one way (filtered concordance).
-#[derive(Debug, Clone)]
-pub struct RenderingRefsView {
-    pub rendering: String,
-    pub total: u32,
-    /// `(ref key, display)`, already capped by the source.
-    pub refs: Vec<(String, String)>,
 }
 
 /// A code's full concordance: total + `(ref key, display)` verses (capped).
@@ -235,36 +206,6 @@ pub struct WordLineView {
     pub segs: Vec<(String, bool)>,
 }
 
-/// An OT↔NT bridge partner: the code, its humanized witness sources, and the
-/// authority tiers / research-grade flag driving its provenance marks.
-#[derive(Debug, Clone)]
-pub struct BridgePartnerView {
-    pub code: String,
-    /// Already lay-humanized (`bridge::source_label`), ready to join with " + ".
-    pub sources: Vec<String>,
-    pub tiers: Vec<String>,
-    pub research_grade: bool,
-}
-
-/// The symbolic concept engine's view of a code.
-#[derive(Debug, Clone, Default)]
-pub struct ConceptView {
-    pub community: Vec<String>,
-    /// `(display name, count)` for the top concentrating books.
-    pub top_books: Vec<(String, u32)>,
-    pub ot: u32,
-    pub nt: u32,
-    pub leitwort: Option<LeitwortView>,
-}
-
-#[derive(Debug, Clone)]
-pub struct LeitwortView {
-    pub n: usize,
-    pub win_count: usize,
-    pub score: f64,
-    pub label: String,
-}
-
 /// A weave cross-reference partner of a verse.
 #[derive(Debug, Clone)]
 pub struct XrefView {
@@ -273,15 +214,6 @@ pub struct XrefView {
     pub weave: String,
     /// Library index of the weave, when it resolves (→ a compare-card link).
     pub weave_index: Option<usize>,
-}
-
-/// A TSK study cross-reference (optionally a range).
-#[derive(Debug, Clone)]
-pub struct StudyXrefView {
-    pub to: String,
-    pub to_display: String,
-    pub end: Option<String>,
-    pub end_display: Option<String>,
 }
 
 /// A thread (an ordered passage trail).
@@ -424,16 +356,13 @@ pub struct SearchHitView {
 // ── the data source ───────────────────────────────────────────────────────────
 
 /// Everything the panel producer reads, so the panel derivation is written once.
-/// Every method is a thin projection; the R&D tiers (bridge / concept / morphology
-/// / similar verses) return empty when their artifact is absent, so a simple-reader
-/// source needs only the base methods.
+/// Every method is a thin projection.
 pub trait PanelSource {
     /// The surface English word at a token, if the verse/token resolve.
     fn token_word(&self, verse: &str, token: u32) -> Option<String>;
-    /// Whether the open corpus is the KJV — the text every analytic in this module
-    /// is tagged against. False for a translation with its own tokenization, whose
-    /// tokens still carry Strong's tags (so dictionary and concordance work) but
-    /// whose KJV-token-anchored tiers (morphology, the rendering lens) stay off.
+    /// Whether the open corpus is the KJV. False for a translation with its own
+    /// tokenization, whose tokens still carry Strong's tags (so dictionary and
+    /// concordance work) but which the KJV-token-anchored overlay does not fit.
     fn is_kjv_text(&self) -> bool {
         true
     }
@@ -446,8 +375,6 @@ pub trait PanelSource {
     }
     /// A verse's display form (`"John 3:16"`), if it resolves.
     fn verse_display(&self, refkey: &str) -> Option<String>;
-    /// The morphology gloss for a token (Full study), when the sidecar has it.
-    fn morph_gloss(&self, verse: &str, token: u32) -> Option<String>;
 
     fn occurrence_count(&self, code: &str) -> usize;
     fn strongs(&self, code: &str) -> Option<StrongsView>;
@@ -456,12 +383,6 @@ pub trait PanelSource {
     /// A chip projection (gloss + lemma) for a code.
     fn chip(&self, code: &str) -> ChipView;
 
-    /// The rendering lens for a code (Full study): every English rendering with
-    /// counts, most frequent first. Empty for an untagged code.
-    fn renderings(&self, code: &str) -> Vec<RenderingView>;
-    /// The verses where a code is rendered exactly `rendering` (filtered
-    /// concordance); `None` when the code has no such rendering.
-    fn rendering_refs(&self, code: &str, rendering: &str) -> Option<RenderingRefsView>;
     /// The codes a surface word translates ON ITS OWN, most frequent first
     /// ([`crate::renderings::Renderings::word_sole_codes`]) — the reverse lens,
     /// and the original-word chips of a tap on an untagged token. Not the whole
@@ -497,14 +418,7 @@ pub trait PanelSource {
         vec![code.to_string()]
     }
 
-    fn bridge_partners(&self, code: &str) -> Vec<BridgePartnerView>;
-    /// The symbolic concept engine's view of a code: its community (same-root
-    /// members), concentrating books, testament split, and leitwort. `None`
-    /// without the `concept` feature or its index.
-    fn concept(&self, code: &str) -> Option<ConceptView>;
-
     fn verse_xrefs(&self, verse: &str) -> Vec<XrefView>;
-    fn study_xrefs(&self, verse: &str) -> Vec<StudyXrefView>;
     /// The tags holding a verse, as `(tag index, name)`.
     fn verse_tags(&self, verse: &str) -> Vec<(usize, String)>;
     fn verse_notes(&self, verse: &str) -> Vec<String>;
@@ -559,11 +473,6 @@ pub enum PanelLink {
     /// `occ:CODE` — the code's full concordance.
     Occurrences {
         code: String,
-    },
-    /// `rend:CODE:RENDERING` — the concordance filtered to one rendering.
-    Rendering {
-        code: String,
-        rendering: String,
     },
     /// `code:CODE[:WORD]` — the standalone code-study card.
     CodeStudy {
@@ -726,10 +635,6 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
             PanelLink::External { url: rest.to_string() }
         }
         "occ" => PanelLink::Occurrences { code: rest.to_string() },
-        "rend" => {
-            let (code, rendering) = rest.split_once(':')?;
-            PanelLink::Rendering { code: code.to_string(), rendering: rendering.to_string() }
-        }
         "code" => {
             let (code, word) = rest.split_once(':').unwrap_or((rest, ""));
             PanelLink::CodeStudy { code: code.to_string(), word: word.to_string() }
@@ -830,28 +735,6 @@ fn go(refkey: &str, display: &str, size: f32) -> Run {
     Run::new(display, size, Color::Gold).link(go_uri(refkey))
 }
 
-/// The occurrence chips ("gloss lemma" joined by middots, each → `occ:CODE`).
-fn concept_chips(src: &dyn PanelSource, size: f32, codes: &[String]) -> Vec<Run> {
-    let mut runs = Vec::new();
-    for (i, code) in codes.iter().enumerate() {
-        if i > 0 {
-            runs.push(Run::new("  ·  ", size, Color::Ink));
-        }
-        let c = src.chip(code);
-        let label = c.gloss.clone().or_else(|| c.lemma.clone()).unwrap_or_else(|| code.clone());
-        runs.push(Run::new(label, size, Color::Gold).link(format!("occ:{code}")));
-        if let (Some(_), Some(lemma)) = (&c.gloss, &c.lemma) {
-            runs.push(Run::new(format!(" {lemma}"), size - 1.0, Color::Lemma));
-        }
-        // The transliteration rides beside the letters wherever they appear, for
-        // a reader who does not read the script (maintainer, 2026-09-10).
-        if let (Some(_), Some(x)) = (&c.lemma, &c.xlit) {
-            runs.push(Run::new(format!(" {x}"), size - 1.0, Color::Faded).italic());
-        }
-    }
-    runs
-}
-
 /// The original word as ONE line: the lemma in its own script, then its
 /// transliteration beside it for a reader who does not read that script — beside,
 /// not under, so the eye reads them as one word. Either half alone when that is all
@@ -899,75 +782,12 @@ fn same_root_row(src: &dyn PanelSource, code: &str, out: &mut Vec<Block>) {
     out.push(Block::para(runs));
 }
 
-/// The tier-mark glyphs — additive, never one "winning" tier — plus a research flask.
-fn tier_marks(runs: &mut Vec<Run>, tiers: &[String], research: bool) {
-    let has = |t: &str| tiers.iter().any(|x| x == t);
-    if has("god") {
-        runs.push(Run::new(" ✝", sz::MARK, Color::TierGod));
-    }
-    if has("human") {
-        runs.push(Run::new(" †", sz::MARK, Color::TierHuman));
-    }
-    if has("machine") {
-        runs.push(Run::new(" ≈", sz::MARK, Color::TierMachine));
-    }
-    if research {
-        runs.push(Run::new(" ⚗", sz::MARK, Color::TierResearch));
-    }
-}
-
-/// The provenance legend, shown once at the foot of a Full-study card.
-fn legend() -> Block {
-    Block::para(vec![
-        Run::new(format!("{}  ", s("panel.legendIntro")), sz::MARK, Color::Faded),
-        Run::new("✝", sz::MARK, Color::TierGod),
-        Run::new(format!(" {}  ·  ", s("panel.legendText")), sz::MARK, Color::Faded),
-        Run::new("†", sz::MARK, Color::TierHuman),
-        Run::new(format!(" {}  ·  ", s("panel.legendHuman")), sz::MARK, Color::Faded),
-        Run::new("≈", sz::MARK, Color::TierMachine),
-        Run::new(format!(" {}", s("panel.legendMachine")), sz::MARK, Color::Faded),
-    ])
-}
-
 // ── word study ────────────────────────────────────────────────────────────────
 
-/// Which analysis tiers the reader has switched on. The text and the reader's own
-/// data (tags, notes, author actions) are always on; **human** gates the
-/// curated-scholarship tiers (renderings, morphology, same-root, TSK) and
-/// **machine** the learned/statistical ones (concept engine, SIF, leitwort).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Gates {
-    pub human: bool,
-    pub machine: bool,
-}
-
-impl Gates {
-    pub const ALL: Gates = Gates { human: true, machine: true };
-    pub const TEXT_ONLY: Gates = Gates { human: false, machine: false };
-
-    /// The legacy Simple/Full flag as gates (Full = everything on).
-    pub fn from_full(full: bool) -> Gates {
-        if full {
-            Gates::ALL
-        } else {
-            Gates::TEXT_ONLY
-        }
-    }
-
-    /// The wire form: bit 0 = human, bit 1 = machine.
-    pub fn from_bits(bits: u32) -> Gates {
-        Gates { human: bits & 1 != 0, machine: bits & 2 != 0 }
-    }
-
-    pub fn any(self) -> bool {
-        self.human || self.machine
-    }
-}
-
-/// The study of a clicked word: its Strong's entries (dictionary + gated analysis
-/// tiers), the verse's cross-references, and its margin notes. `verse`/`token`
-/// locate the tap; `codes` are its Strong's codes.
-pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token: u32, codes: &[String]) -> Vec<Block> {
+/// The study of a clicked word: its Strong's entries, the verse's weave
+/// partners, and its margin notes. `verse`/`token` locate the tap; `codes` are
+/// its Strong's codes.
+pub fn word_study(src: &dyn PanelSource, verse: &str, token: u32, codes: &[String]) -> Vec<Block> {
     let mut out = Vec::new();
     let display = src.verse_display(verse).unwrap_or_else(|| verse.to_string());
     let word = src.token_word(verse, token).unwrap_or_default();
@@ -984,25 +804,12 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
     if !word.is_empty() {
         out.push(Block::para(vec![Run::new(&word, sz::WORD, Color::Ink)]));
     }
-    // What a second translation can carry is decided by whether a thing is keyed by
-    // TOKEN INDEX or by refKey. Token-keyed evidence (morphology gloss, renderings,
-    // same-root, the concept lens) would describe a different set of words in
-    // another corpus's tokenization; refKey-keyed data (the reader's note, tags,
-    // threads, TSK cross-references) is valid in any of them.
-    let kjv = src.is_kjv_text();
-
-    if kjv && gates.human {
-        if let Some(g) = src.morph_gloss(verse, token) {
-            out.push(Block::para(vec![Run::new(g, sz::NOTE, Color::Morph).italic()]));
-        }
-    }
     // The reader's own note rides near the top — what they wrote comes before the
     // evidence.
     user_note_block(src, verse, &mut out);
 
     // A translated corpus carries Strong's tags of its own, so the dictionary and
-    // concordance serve there like on the KJV; only the KJV-token-anchored tiers
-    // stay gated (inside `code_study`).
+    // concordance serve there like on the KJV.
     if codes.is_empty() {
         out.push(Block::para(vec![Run::new(
             crate::i18n::t(crate::i18n::active(), "study.noStrongs", &[]),
@@ -1012,27 +819,18 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
         .italic()]));
     } else {
         for code in codes {
-            code_study(src, code, &word, gates, &mut out);
+            code_study(src, code, &mut out);
         }
         lexicon_caveat(src, &mut out);
     }
-    verse_extras(src, verse, gates, &mut out);
-    if kjv && gates.any() && !codes.is_empty() {
-        out.push(legend());
-    }
+    verse_extras(src, verse, &mut out);
     out
 }
 
-/// Legacy Simple/Full entry point (the v1 ABI endpoints); Full switches every tier on.
-pub fn word_study(src: &dyn PanelSource, full: bool, verse: &str, token: u32, codes: &[String]) -> Vec<Block> {
-    word_study_gated(src, Gates::from_full(full), verse, token, codes)
-}
-
-/// The study of one Strong's code, appended to `out`: dictionary entry plus
-/// the gated tiers — the rendering lens + same-root under `human`, the
-/// analytics under `machine`. Rendered inline for each of a tapped word's
+/// The study of one Strong's code, appended to `out`: its dictionary entry and
+/// the way into its concordance. Rendered inline for each of a tapped word's
 /// codes and standalone by [`code_study_card`].
-fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: &mut Vec<Block>) {
+fn code_study(src: &dyn PanelSource, code: &str, out: &mut Vec<Block>) {
     out.push(Block::Rule);
 
     let n = src.occurrence_count(code);
@@ -1074,118 +872,15 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
         }
         None => out.push(Block::para(vec![Run::new(s("panel.notInDictionary"), sz::BODY, Color::Faded).italic()])),
     }
-
-    // Everything below is evidence about KJV tokens — off for a translated corpus,
-    // whose card is the dictionary + concordance above.
-    if !gates.any() || !src.is_kjv_text() {
-        return;
-    }
-
-    // The English words this code is translated as, most frequent first; the tapped
-    // word's own rendering is bold.
-    let rends = if gates.human { src.renderings(code) } else { Vec::new() };
-    if !rends.is_empty() {
-        out.push(Block::section_marked(s("panel.renderings"), "†", Color::TierHuman));
-        let wkey = render_key(word);
-        let mut runs = Vec::new();
-        for (i, r) in rends.iter().enumerate() {
-            if i > 0 {
-                runs.push(Run::new("  ·  ", sz::LIST, Color::Ink));
-            }
-            let tapped = !wkey.is_empty() && render_key(&r.rendering) == wkey;
-            let mut link = Run::new(&r.rendering, sz::LIST, Color::Gold).link(format!("rend:{code}:{}", r.rendering));
-            link.bold = tapped;
-            runs.push(link);
-            runs.push(Run::new(format!(" ×{}", r.total), sz::FINE, Color::Faded));
-        }
-        out.push(Block::para(runs));
-
-        // Reverse lens: if the tapped word also stands for other codes.
-        if !word.is_empty() {
-            let others: Vec<String> = src.word_codes(word).into_iter().filter(|c| c != code).collect();
-            if !others.is_empty() {
-                let mut runs = vec![Run::new(
-                    format!("{} ", sa("panel.alsoTranslates", &[("word", word)])),
-                    sz::FINE,
-                    Color::Faded,
-                )];
-                for (i, o) in others.iter().enumerate() {
-                    if i > 0 {
-                        runs.push(Run::new(", ", sz::FINE, Color::Faded));
-                    }
-                    let label = match src.gloss(o) {
-                        Some(g) => format!("{o} ({g})"),
-                        None => o.clone(),
-                    };
-                    runs.push(Run::new(label, sz::FINE, Color::Gold).link(format!("code:{o}:{word}")));
-                }
-                out.push(Block::Para { runs, indent: false, top_gap: false, drag: None });
-            }
-        }
-    }
-
-    let partners = if gates.human { src.bridge_partners(code) } else { Vec::new() };
-    if !partners.is_empty() {
-        out.push(Block::section(s("panel.sameRootAcross")));
-        for p in partners.iter().take(6) {
-            let mut runs = concept_chips(src, sz::LIST, std::slice::from_ref(&p.code));
-            runs.push(Run::new(format!("   {}", p.sources.join(" + ")), sz::FINE, Color::Faded));
-            tier_marks(&mut runs, &p.tiers, p.research_grade);
-            out.push(Block::para(runs));
-        }
-    }
-
-    if !gates.machine {
-        return;
-    }
-
-    if let Some(c) = src.concept(code) {
-        if !c.community.is_empty() {
-            out.push(Block::section_marked(s("panel.appearsAlongside"), "≈", Color::TierMachine));
-            let take: Vec<String> = c.community.iter().take(8).cloned().collect();
-            out.push(Block::para(concept_chips(src, sz::LIST, &take)));
-        }
-        if !c.top_books.is_empty() {
-            out.push(Block::section_marked(s("panel.mostUsedIn"), "≈", Color::TierMachine));
-            let joined = c.top_books.iter().map(|(b, n)| format!("{b} ×{n}")).collect::<Vec<_>>().join(" · ");
-            out.push(Block::para(vec![
-                Run::new(joined, sz::SMALL, Color::Ink),
-                Run::new(
-                    format!("   ({})", sa("panel.otNt", &[("ot", &c.ot.to_string()), ("nt", &c.nt.to_string())])),
-                    sz::CAPTION,
-                    Color::Faded,
-                ),
-            ]));
-        }
-        if let Some(lw) = &c.leitwort {
-            out.push(Block::section_marked(s("panel.leitwort"), "≈", Color::TierMachine));
-            out.push(Block::para(vec![
-                Run::new(
-                    format!(
-                        "{} ",
-                        sa(
-                            "panel.leitwortCluster",
-                            &[("win", &lw.win_count.to_string()), ("n", &lw.n.to_string()), ("label", &lw.label)]
-                        )
-                    ),
-                    sz::SMALL,
-                    Color::Ink,
-                ),
-                Run::new(format!("(p ≈ 10^−{:.1})", lw.score), sz::CAPTION, Color::Faded),
-            ]));
-        }
-    }
 }
 
-/// The per-verse extras after a word's code blocks: author actions, weave + TSK
-/// cross-references, tags, and margin notes. Author actions and the verse's tags are
-/// the reader's own data and are never gated.
-/// Everything a verse carries below a word study: the reader's own rows, then
-/// the references. One fetch of the weave partners serves both halves.
-fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<Block>) {
+/// Everything a verse carries below a word study: the reader's own rows (tag,
+/// add to thread, weaves, tags), then its weave partners and margin notes. One
+/// fetch of the weave partners serves both halves.
+fn verse_extras(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
     let xrefs = src.verse_xrefs(verse);
     verse_own(src, verse, &xrefs, out);
-    verse_refs(src, verse, gates, &xrefs, out);
+    verse_refs(src, verse, &xrefs, out);
 }
 
 /// The verse's OWN rows: tag / add-to-thread, the weaves it is in, its tags.
@@ -1239,9 +934,8 @@ fn verse_own(src: &dyn PanelSource, verse: &str, xrefs: &[XrefView], out: &mut V
     }
 }
 
-/// The verse's references: weave partners, the TSK study cross-references
-/// (gated), and the translators' margin notes.
-fn verse_refs(src: &dyn PanelSource, verse: &str, gates: Gates, xrefs: &[XrefView], out: &mut Vec<Block>) {
+/// The verse's references: weave partners and the translators' margin notes.
+fn verse_refs(src: &dyn PanelSource, verse: &str, xrefs: &[XrefView], out: &mut Vec<Block>) {
     if !xrefs.is_empty() {
         out.push(Block::para(vec![Run::new(sn("panel.xrefs", xrefs.len()), sz::LABEL, Color::Ink).bold()]));
         for p in xrefs.iter().take(40) {
@@ -1257,36 +951,9 @@ fn verse_refs(src: &dyn PanelSource, verse: &str, gates: Gates, xrefs: &[XrefVie
         }
     }
 
-    if gates.human {
-        let sx = src.study_xrefs(verse);
-        if !sx.is_empty() {
-            out.push(Block::para(vec![
-                Run::new(sn("panel.studyXrefs", sx.len()), sz::LABEL, Color::Ink).bold(),
-                Run::new("  TSK", sz::FINE, Color::Mono),
-                Run::new("  †", sz::MARK, Color::TierHuman),
-            ]));
-            for r in sx.iter().take(40) {
-                let mut runs = vec![go(&r.to, &r.to_display, sz::LIST)];
-                if let (Some(end), Some(ed)) = (&r.end, &r.end_display) {
-                    runs.push(Run::new("–", sz::LIST, Color::Ink));
-                    runs.push(go(end, ed, sz::LIST));
-                }
-                out.push(Block::para(runs));
-            }
-            if sx.len() > 40 {
-                out.push(Block::para(vec![
-                    Run::new(sn("panel.more", sx.len() - 40), sz::CAPTION, Color::Faded).italic()
-                ]));
-            }
-        }
-    }
-
     let notes = src.verse_notes(verse);
     if !notes.is_empty() {
-        out.push(Block::para(vec![
-            Run::new(s("panel.marginNotes"), sz::LABEL, Color::Ink).bold(),
-            Run::new("  †", sz::MARK, Color::TierHuman),
-        ]));
+        out.push(Block::para(vec![Run::new(s("panel.marginNotes"), sz::LABEL, Color::Ink).bold()]));
         for n in &notes {
             out.push(Block::para(vec![Run::new(n, sz::NOTE, Color::Faded)]));
         }
@@ -1294,7 +961,7 @@ fn verse_refs(src: &dyn PanelSource, verse: &str, gates: Gates, xrefs: &[XrefVie
 }
 
 /// The reader's own notes on a verse — emitted near the **top** of the word
-/// study, their words before the evidence. Never gated. The header's verb adds a
+/// study, their words before the evidence. The header's verb adds a
 /// note; each note carries its own edit link (empty text deletes it).
 fn user_note_block(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
     out.push(Block::Para {
@@ -1350,18 +1017,10 @@ fn lexicon_caveat(src: &dyn PanelSource, out: &mut Vec<Block>) {
 /// The standalone `code:CODE[:word]` study card (the reverse rendering-lens
 /// target): the code's own entry, so "'love' also translates G5368" lands on
 /// G5368 rather than a bare concordance. `word` is the surface that led here.
-pub fn code_study_card(src: &dyn PanelSource, full: bool, code: &str, word: &str) -> Vec<Block> {
-    code_study_card_gated(src, Gates::from_full(full), code, word)
-}
-
-/// [`code_study_card`] with per-tier gates (the v2 endpoints' shape).
-pub fn code_study_card_gated(src: &dyn PanelSource, gates: Gates, code: &str, word: &str) -> Vec<Block> {
+pub fn code_study_card(src: &dyn PanelSource, code: &str) -> Vec<Block> {
     let mut out = Vec::new();
-    code_study(src, code, word, gates, &mut out);
+    code_study(src, code, &mut out);
     lexicon_caveat(src, &mut out);
-    if gates.any() && src.is_kjv_text() {
-        out.push(legend());
-    }
     out
 }
 
@@ -1450,14 +1109,14 @@ pub struct UsageQuery<'a> {
 /// occurrence lines are scripture verbatim (labels sit on their own rows,
 /// never inside the text), and nothing is ranked — books and lines run in
 /// canon order only.
-pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> Vec<Block> {
+pub fn word_usage_card(src: &dyn PanelSource, q: &UsageQuery) -> Vec<Block> {
     let mut out = Vec::new();
     let scope = if q.scope.is_empty() { "all" } else { q.scope };
     // The tapped verse's weave partners, fetched once: its own rows (above the
     // evidence) and its references (below) both read them.
     let xrefs = q.origin.map(|(verse, _)| src.verse_xrefs(verse)).unwrap_or_default();
 
-    if let Some((verse, token)) = q.origin {
+    if let Some((verse, _)) = q.origin {
         let display = src.verse_display(verse).unwrap_or_else(|| verse.to_string());
         let mut head = vec![Run::new(&display, sz::BODY, Color::Ink).bold()];
         if let Some(printed) = VRef::parse_ref_key(verse).and_then(|v| versification::printed_note(i18n::active(), &v))
@@ -1466,11 +1125,6 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
             head.push(Run::new(printed, sz::FINE, Color::Faded));
         }
         out.push(Block::para(head));
-        if src.is_kjv_text() && gates.human {
-            if let Some(g) = src.morph_gloss(verse, token) {
-                out.push(Block::para(vec![Run::new(g, sz::NOTE, Color::Morph).italic()]));
-            }
-        }
     }
     if !q.word.is_empty() {
         out.push(Block::para(vec![Run::new(q.word, sz::WORD, Color::Ink)]));
@@ -1582,7 +1236,7 @@ pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> V
         out.push(Block::para(runs));
     }
     if let Some((verse, _)) = q.origin {
-        verse_refs(src, verse, gates, &xrefs, &mut out);
+        verse_refs(src, verse, &xrefs, &mut out);
     }
     out
 }
@@ -1788,39 +1442,6 @@ pub fn concordance(src: &dyn PanelSource, code: &str) -> Vec<Block> {
             Color::Faded,
         )
         .italic()]));
-    }
-    out
-}
-
-/// The concordance filtered to one rendering of a code (a RENDERINGS chip).
-pub fn rendering_concordance(src: &dyn PanelSource, code: &str, rendering: &str) -> Vec<Block> {
-    let Some(m) = src.rendering_refs(code, rendering) else {
-        return vec![Block::para(vec![Run::new(
-            crate::i18n::t(crate::i18n::active(), "panel.noRendering", &[("rendering", rendering), ("code", code)]),
-            sz::BODY,
-            Color::Faded,
-        )
-        .italic()])];
-    };
-    let mut out = vec![
-        Block::para(vec![
-            Run::new(code, sz::TITLE, Color::Ink).bold(),
-            Run::new(format!("  “{}”", m.rendering), sz::TITLE, Color::Ink),
-        ]),
-        Block::para(vec![Run::new(
-            format!("{} verse{} rendered “{}”", m.total, if m.total == 1 { "" } else { "s" }, m.rendering),
-            sz::SMALL,
-            Color::Gold,
-        )]),
-    ];
-    for (refkey, display) in &m.refs {
-        out.push(Block::para(vec![go(refkey, display, sz::LIST)]));
-    }
-    let shown = m.refs.len() as u32;
-    if m.total > shown {
-        out.push(Block::para(vec![
-            Run::new(sn("panel.more", (m.total - shown) as usize), sz::CAPTION, Color::Faded).italic()
-        ]));
     }
     out
 }
@@ -2138,7 +1759,7 @@ pub fn suggested(src: &dyn PanelSource) -> Vec<Block> {
 
 // ── weave compare card ────────────────────────────────────────────────────────
 
-pub fn compare_card(src: &dyn PanelSource, full: bool, index: usize) -> Vec<Block> {
+pub fn compare_card(src: &dyn PanelSource, index: usize) -> Vec<Block> {
     let weaves = src.weaves();
     let Some(w) = weaves.get(index) else { return Vec::new() };
     let suffix = if w.suggested { "  (suggested)" } else { "" };
@@ -2146,9 +1767,6 @@ pub fn compare_card(src: &dyn PanelSource, full: bool, index: usize) -> Vec<Bloc
         Run::new(&w.name, sz::TITLE, Color::Ink).bold(),
         Run::new(format!("   {}{suffix}", w.kind_label), sz::CAPTION, Color::Mono),
     ])];
-    // ✎ note is the reader's own annotation — always available; author actions
-    // are not gated, so `full` is unused here.
-    let _ = full;
     let mut head = vec![Run::new(sp("panel.links", w.links.len()), sz::SMALL, Color::Faded)];
     head.push(Run::new("   ", sz::SMALL, Color::Ink));
     head.push(Run::new(s("panel.note"), sz::CAPTION, Color::Faded).link(format!("editweavenotes:{index}")));

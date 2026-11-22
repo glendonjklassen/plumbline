@@ -230,8 +230,9 @@ test("the pace shows what was read today", async ({ page }) => {
   const pace = page.locator('[data-surface="pace"]');
   await expect(pace).toBeVisible({ timeout: 15_000 });
   await pace.locator(".chip", { hasText: "Today" }).click();
-  await expect(pace.locator(".pace-line").nth(0)).toHaveText("1 chapter");
-  await expect(pace.locator(".pace-line").nth(1)).toHaveText(/^[\d,]+ words$/);
+  // Words first, then chapters — the order every other window uses.
+  await expect(pace.locator(".pace-line").nth(0)).toHaveText(/^[\d,]+ words$/);
+  await expect(pace.locator(".pace-line").nth(1)).toHaveText("1 chapter");
   await expect(pace).not.toContainText("a day");
 });
 

@@ -7,10 +7,19 @@
   import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
-  const history = $derived((s.config.history ?? []) as { book: string; chapter: number }[]);
+  const history = $derived((s.config.history ?? []) as { book: string; chapter: number; slot?: string }[]);
+  /** The named seating the reader is in now, if any. While in one, what was
+   *  read in that seating leads the sheet as its own short list — the app has
+   *  just reopened last week's place, and stepping away from it to check a
+   *  reference must not bury the way back (maintainer, 2026-11-22). */
+  const seating = $derived(s.slot && SEATING_LABEL_KEY[s.slot] ? s.slot : null);
+  const SEATING_LINES = 4;
   /** One line per RUN, not per chapter: an evening in Genesis 1–3 is one thing
    *  the reader did, and three lines of it pushed everything else off the sheet. */
-  const spans = $derived(historySpans(history));
+  const seatSpans = $derived(
+    seating ? historySpans(history.filter((h) => h.slot === seating)).slice(0, SEATING_LINES) : [],
+  );
+  const spans = $derived(historySpans(seating ? history.filter((h) => h.slot !== seating) : history));
 
   function open(book: string, chapter: number): void {
     s.showHistory = false;
@@ -33,7 +42,18 @@
     {#if history.length === 0}
       <p class="empty">{t("history.empty")}</p>
     {/if}
-    <div class="list">
+    {#if seating && seatSpans.length > 0}
+      <h3>{t(SEATING_LABEL_KEY[seating])}</h3>
+      <div class="list" data-list="seating">
+        {#each seatSpans as sp, i (i)}
+          <button onclick={() => open(sp.book, sp.open)}>
+            <span>{spanLabel(sp, (b) => s.bookName(b))}</span>
+          </button>
+        {/each}
+      </div>
+      {#if spans.length > 0}<h3>{t("history.other")}</h3>{/if}
+    {/if}
+    <div class="list" data-list="recent">
       {#each spans as sp, i (i)}
         <button onclick={() => open(sp.book, sp.open)}>
           <span>{spanLabel(sp, (b) => s.bookName(b))}</span>
@@ -61,6 +81,14 @@
 {/if}
 
 <style>
+  h3 {
+    margin: 8px 0 2px;
+    font-size: calc(12px * var(--uiScale, 1));
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--section, #776537);
+  }
   .backdrop {
     position: fixed;
     inset: 0;

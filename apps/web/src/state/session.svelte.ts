@@ -78,7 +78,6 @@ export type PanelView =
     }
   | { kind: "codeStudy"; code: string; word: string | null; lang?: string }
   | { kind: "concordance"; code: string; lang?: string }
-  | { kind: "renderingConcordance"; code: string; rendering: string; lang?: string }
   | { kind: "threads" }
   | { kind: "thread"; index: number; edit?: boolean }
   | { kind: "tags" }
@@ -95,6 +94,7 @@ export type PanelView =
 export type MapPopup = { kind: "chord" } | { kind: "constellation" };
 
 const HISTORY_CAP = 50; // mirrors core config::HISTORY_CAP
+const SEATING_HISTORY_CAP = 12; // mirrors core config::SEATING_HISTORY_CAP
 
 /**
  * The delimiter between an engine method name and its arguments in a cache key.
@@ -472,19 +472,6 @@ export class Session {
   presentFromShare = $state(false);
   /** Whether the bundled stock set is on (worker home state, mirrored). */
   bundledOn = $state(true);
-  /** The machine-tier pack's lifecycle this session. Phones boot with the
-   *  auto-download deferred ("off") and load it behind an explicit action;
-   *  desktops auto-load ("loading" → "ready") when the machine tier is on. */
-  rndState = $state<"off" | "loading" | "ready">("off");
-  /** Machine-tier download progress (0..1) while rndState === "loading". */
-  rndProgress = $state(0);
-  /** Downloaded, now being parsed into the engine — the phase where progress
-   *  can't advance and the UI must say so rather than sit at a number. */
-  rndPreparing = $state(false);
-  /** Whether this boot deferred the machine-tier auto-download (phones) —
-   *  gates the explicit "load analysis" offers so desktops, where the pack
-   *  is already on its way, don't flash a pointless button. */
-  rndDeferred = false;
   /** Per-stage boot timings ([label, ms]) from the engine worker — the
    *  on-device numbers behind Settings → boot diagnostics. */
   bootTrace = $state<[string, number][]>([]);
@@ -773,13 +760,6 @@ export class Session {
         },
       };
     });
-  }
-
-  /** Per-tier content gates (bit 0 = human/scholars, bit 1 = machine); the
-   *  text and the reader's own data are always on. */
-  get gates(): number {
-    // `=== true`, not `!== false`: the tiers are opt-in, so absent means off.
-    return (this.config.humanAnalysis === true ? 1 : 0) | (this.config.machineAnalysis === true ? 2 : 0);
   }
 
   #saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1182,7 +1162,7 @@ export class Session {
       .catch(() => {});
   }
 
-  /** Drop cached study reads (authoring landed / R&D pack arrived). The
+  /** Drop cached study reads (authoring landed / the study pack arrived). The
    *  corpus-derived immutables survive — wiping them makes navigation clamp
    *  against an empty TOC mid-refill. Which reads those are, and the delimiter
    *  that decides it, live in [[PINNED_READS]] and [[KEY_SEP]]; never hand-write
@@ -1667,29 +1647,6 @@ export class Session {
       // be re-taken — a warm from before it would have been thrown away.
       this.scheduleStudyWarm();
     };
-    rpc.onRndPreparing = () => {
-      this.rndProgress = 1;
-      this.rndPreparing = true;
-    };
-    rpc.onRndReady = () => {
-      // The machine tiers just lit up — anything on screen re-fetches.
-      this.rndState = "ready";
-      this.rndPreparing = false;
-      this.invalidate();
-      this.studyEpoch++;
-    };
-    rpc.onRndProgress = (fraction) => {
-      if (this.rndState !== "ready") this.rndState = "loading";
-      this.rndProgress = fraction;
-    };
-    rpc.onRndPreparing = () => {
-      // Downloaded; the engine is parsing it now. Progress can't advance
-      // through that, so the UI stops showing a number and says what's
-      // happening instead.
-      this.rndProgress = 1;
-      this.rndPreparing = true;
-    };
-
     // Debug handle for the console (and the repo's headless probes).
     (globalThis as any).__plumbline = this;
 
@@ -1848,8 +1805,7 @@ export class Session {
    *  The welcome used to do this: choosing a path wrote the config on the way
    *  out, so a fresh install always had one. With no first run nothing writes it
    *  until the reader changes a setting, which left a brand-new install with no
-   *  config file at all — and with the analysis tiers now defaulting ON, no
-   *  record of that default either. Written once so the defaults this build
+   *  config file at all, and no record of its defaults. Written once so the defaults this build
    *  chose are the ones a later build reads back, instead of being re-derived
    *  from whatever the defaults have become by then. */
   writeConfigOnFirstBoot(firstRun: boolean): void {
@@ -2114,7 +2070,7 @@ export class Session {
     return best && best > 1 ? best : undefined;
   }
 
-  /** Persist config (debounced) — pane set, zoom, theme, gates, history. */
+  /** Persist config (debounced) — pane set, zoom, theme, history. */
   /** The week's feature tile is dealt with — Done, or Open — and the chip
    *  stands down until the next week picks another. */
   spotlightDone(): void {
@@ -2137,37 +2093,24 @@ export class Session {
     }, 300);
   }
 
-  /** Fetch + load the deferred machine-tier pack (the phones' "load analysis"
-   *  action and the Settings toggle; desktops auto-load after boot when the
-   *  machine tier is on). Idempotent — the worker reuses an in-flight run. */
-  ensureRnd(): Promise<void> {
-    if (this.rndState === "ready") return Promise.resolve();
-    this.rndState = "loading";
-    return this.rpc.loadRnd().then(
-      () => {
-        this.rndState = "ready";
-        this.rndPreparing = false;
-        this.invalidate();
-        this.studyEpoch++;
-      },
-      () => {
-        // Offline / fetch failed — back to the explicit action.
-        this.rndState = "off";
-        this.rndPreparing = false;
-        this.showToast(t("rnd.downloadFailed"));
-      },
-    );
-  }
-
   #pushHistory(book: string, chapter: number): void {
     const h: any[] = (this.config.history ??= []);
-    const without = h.filter((e) => !(e.book === book && e.chapter === chapter));
-    // WHERE it was read, for the History sheet's icon (historySpans.ts): a
-    // named seating only — the everyday one is the absence of a mark. Additive
-    // on the wire, and the key rides the core's config round trip untouched
-    // (config.rs keeps a history entry's extra keys).
-    const seat = this.slot && this.slot !== "other" ? { slot: this.slot } : {};
-    this.config.history = [{ book, chapter, ...seat }, ...without].slice(0, HISTORY_CAP);
+    // WHERE it was read, for the History sheet (historySpans.ts): a named
+    // seating only — the everyday one is the absence of a mark. A stored field
+    // (`config::PaneRef::slot`), and part of what an entry IS: a psalm read at
+    // church and the same psalm on a Tuesday are two lines, so the dedupe is by
+    // seating too. Otherwise checking a reference midweek re-files last
+    // Sunday's passage as everyday reading.
+    const slot = this.slot && this.slot !== "other" ? this.slot : "";
+    const without = h.filter((e) => !(e.book === book && e.chapter === chapter && (e.slot ?? "") === slot));
+    // Capped as the core caps it (`config::cap_history`): everyday entries and
+    // each seating apart, so a week of reading cannot push Sunday off the list.
+    const seen: Record<string, number> = {};
+    this.config.history = [{ book, chapter, ...(slot ? { slot } : {}) }, ...without].filter((e) => {
+      const k = e.slot ?? "";
+      seen[k] = (seen[k] ?? 0) + 1;
+      return seen[k] <= (k ? SEATING_HISTORY_CAP : HISTORY_CAP);
+    });
   }
 
   /** The seating this session is in, resolved from the reader's own local
@@ -2250,6 +2193,11 @@ export class Session {
     pane.pendingScroll = !!(seat.verse && seat.verse > 1);
     pane.scrollY = 0;
     pane.reached = 0;
+    // The place the seating reopened goes on the seating's own history, so it
+    // can be found again after the reader steps away to check a reference
+    // (maintainer, 2026-11-22). Stamped with the seating, so it joins that
+    // list and does not reorder everyday reading.
+    this.#pushHistory(pane.book, pane.chapter);
     this.saveConfig();
   }
 

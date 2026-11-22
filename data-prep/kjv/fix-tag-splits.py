@@ -12,14 +12,12 @@ them joined everywhere else; they are listed separately below.
 
 This script merges those pieces into one token (Strong's refs concatenated,
 flags OR-ed, the first piece's `pre` and the last piece's `post` kept) and
-re-indexes the two sidecars addressed by token index:
+re-indexes the sidecar addressed by token index:
 
   - data/akjv.jsonl   spans `[start, end, text]` — shifted; a span that now
                       matches the KJV text letter for letter is dropped, a
                       verse left with no spans is dropped, and the header's
                       verse count follows
-  - data/morphology.jsonl entries `[tok, strongs, homograph, code]` — shifted;
-                      the pieces' entries all land on the merged token
 
 Run from the repo root once, after a re-import; it refuses to write when any
 listed verse no longer carries its pieces (a corpus already fixed), so a second
@@ -38,7 +36,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 KJV = ROOT / "data" / "kjv.jsonl"
 AKJV = ROOT / "data" / "akjv.jsonl"
-MORPH = ROOT / "data" / "morphology.jsonl"
 
 # (ref, [pieces]) — the pieces are the token words, in order, as the import
 # left them. A piece's trailing punctuation (`day’` + `s`) stays inside the word.
@@ -216,27 +213,12 @@ def main(dry):
     print(f"akjv: dropped {dropped} spans that now match the KJV, {dropped_verses} verses left empty; "
           f"header verses = {header['verses']}")
 
-    # ── morphology entries ───────────────────────────────────────────────
-    morph_lines = []
-    with MORPH.open(encoding="utf-8") as f:
-        morph_lines.append(f.readline())
-        for line in f:
-            v = json.loads(line)
-            ref = ref_of(v)
-            if ref not in plan:
-                morph_lines.append(line)
-                continue
-            f_ = remap(ref)
-            v["e"] = [[f_(e[0]), *e[1:]] for e in v["e"]]
-            morph_lines.append(json.dumps(v, separators=(",", ":"), ensure_ascii=False, sort_keys=True) + "\n")
-
     if dry:
         print("dry run: nothing written")
         return
     KJV.write_text("".join(out_lines), encoding="utf-8")
     AKJV.write_text("".join(akjv_lines), encoding="utf-8")
-    MORPH.write_text("".join(morph_lines), encoding="utf-8")
-    print(f"wrote {KJV.name}, {AKJV.name}, {MORPH.name}: {sum(len(r) for r in plan.values())} words in {len(plan)} verses")
+    print(f"wrote {KJV.name}, {AKJV.name}: {sum(len(r) for r in plan.values())} words in {len(plan)} verses")
 
 
 if __name__ == "__main__":

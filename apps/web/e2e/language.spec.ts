@@ -236,7 +236,7 @@ test.describe("an English device", () => {
       for (let i = 0; i < 8; i++) {
         const tok = await s.rpc.call("token", "John 3:16", i);
         if (tok?.strongs?.length) {
-          const blocks = await s.rpc.call("wordStudyBlocks", "John 3:16", i, s.gates);
+          const blocks = await s.rpc.call("wordStudyBlocks", "John 3:16", i);
           return { code: tok.strongs[0], json: JSON.stringify(blocks) };
         }
       }
@@ -292,7 +292,7 @@ test.describe("a Spanish reader", () => {
       for (let i = 0; i < 8; i++) {
         const tok = await s.rpc.call("token", "John 3:16", i);
         if (tok?.strongs?.length) {
-          const blocks = await s.rpc.call("wordStudyBlocks", "John 3:16", i, s.gates);
+          const blocks = await s.rpc.call("wordStudyBlocks", "John 3:16", i);
           return JSON.stringify(blocks);
         }
       }

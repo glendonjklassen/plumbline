@@ -43,14 +43,6 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
     case "occurrences":
       s.panel = { kind: "concordance", code: link.code, lang: panelLang(s) };
       break;
-    case "rendering":
-      s.panel = {
-        kind: "renderingConcordance",
-        code: link.code,
-        rendering: link.rendering,
-        lang: panelLang(s),
-      };
-      break;
     case "codeStudy":
       s.panel = { kind: "codeStudy", code: link.code, word: link.word ?? null, lang: panelLang(s) };
       break;

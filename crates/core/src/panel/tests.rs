@@ -9,22 +9,15 @@ use std::collections::HashMap;
 /// A minimal in-memory source: enough tagged data to exercise every branch.
 #[derive(Default)]
 struct Fake {
-    full: bool,
     words: HashMap<(String, u32), String>,
     displays: HashMap<String, String>,
-    morph: HashMap<(String, u32), String>,
     occ_count: HashMap<String, usize>,
     entries: HashMap<String, StrongsView>,
     glosses: HashMap<String, String>,
     lemmas: HashMap<String, String>,
-    renderings: HashMap<String, Vec<RenderingView>>,
-    rendering_refs: HashMap<(String, String), RenderingRefsView>,
     word_codes: HashMap<String, Vec<String>>,
     occurrences: HashMap<String, OccurrencesView>,
-    bridge: HashMap<String, Vec<BridgePartnerView>>,
-    concept: HashMap<String, ConceptView>,
     xrefs: HashMap<String, Vec<XrefView>>,
-    study_xrefs: HashMap<String, Vec<StudyXrefView>>,
     verse_tags: HashMap<String, Vec<(usize, String)>>,
     notes: HashMap<String, Vec<String>>,
     user_notes: HashMap<String, Vec<(String, String)>>,
@@ -46,9 +39,6 @@ impl PanelSource for Fake {
     }
     fn verse_display(&self, refkey: &str) -> Option<String> {
         self.displays.get(refkey).cloned()
-    }
-    fn morph_gloss(&self, verse: &str, token: u32) -> Option<String> {
-        self.morph.get(&(verse.to_string(), token)).cloned()
     }
     fn occurrence_count(&self, code: &str) -> usize {
         self.occ_count.get(code).copied().unwrap_or(0)
@@ -83,29 +73,14 @@ impl PanelSource for Fake {
             xlit: self.entries.get(code).and_then(|e| e.xlit.clone()),
         }
     }
-    fn renderings(&self, code: &str) -> Vec<RenderingView> {
-        self.renderings.get(code).cloned().unwrap_or_default()
-    }
-    fn rendering_refs(&self, code: &str, rendering: &str) -> Option<RenderingRefsView> {
-        self.rendering_refs.get(&(code.to_string(), render_key(rendering))).cloned()
-    }
     fn word_codes(&self, word: &str) -> Vec<String> {
         self.word_codes.get(word).cloned().unwrap_or_default()
     }
     fn occurrences(&self, code: &str) -> OccurrencesView {
         self.occurrences.get(code).cloned().unwrap_or_default()
     }
-    fn bridge_partners(&self, code: &str) -> Vec<BridgePartnerView> {
-        self.bridge.get(code).cloned().unwrap_or_default()
-    }
-    fn concept(&self, code: &str) -> Option<ConceptView> {
-        self.concept.get(code).cloned()
-    }
     fn verse_xrefs(&self, verse: &str) -> Vec<XrefView> {
         self.xrefs.get(verse).cloned().unwrap_or_default()
-    }
-    fn study_xrefs(&self, verse: &str) -> Vec<StudyXrefView> {
-        self.study_xrefs.get(verse).cloned().unwrap_or_default()
     }
     fn verse_tags(&self, verse: &str) -> Vec<(usize, String)> {
         self.verse_tags.get(verse).cloned().unwrap_or_default()
@@ -206,10 +181,8 @@ fn parse_link_round_trips_the_producer_uris() {
 
     // Read verbs.
     assert_eq!(parse_link("occ:G25"), Some(PanelLink::Occurrences { code: "G25".into() }));
-    assert_eq!(
-        parse_link("rend:G25:loved"),
-        Some(PanelLink::Rendering { code: "G25".into(), rendering: "loved".into() })
-    );
+    // The rendering concordance went with the analysis tiers: its verb is unknown now.
+    assert_eq!(parse_link("rend:G25:loved"), None);
     assert_eq!(
         parse_link("code:G5368:loved"),
         Some(PanelLink::CodeStudy { code: "G5368".into(), word: "loved".into() })
@@ -267,7 +240,7 @@ fn simple_word_study_is_just_display_word_and_dictionary() {
         },
     );
 
-    let blocks = word_study(&f, f.full, "John 3:16", 1, &["G2316".to_string()]);
+    let blocks = word_study(&f, "John 3:16", 1, &["G2316".to_string()]);
     // Header, the big word, the reader's own note slot (near the top — their
     // words before the evidence), a rule, the code header, lemma, def, KJV.
     assert_eq!(text_of(&blocks[0]), "John 3:16");
@@ -280,10 +253,8 @@ fn simple_word_study_is_just_display_word_and_dictionary() {
     assert!(u.contains(&"occ:G2316".to_string()));
     assert!(u.contains(&"addnote:John 3:16".to_string()));
     assert!(u.contains(&"addtag:John 3:16".to_string()));
-    // No analysis sections with every gate off.
+    // The card is the dictionary and the reader's own rows: no analysis sections.
     assert!(section_titles(&blocks).is_empty());
-    // No legend with every gate off.
-    assert!(!blocks.iter().any(|b| text_of(b).contains("where this comes from")));
 }
 
 #[test]
@@ -291,91 +262,13 @@ fn untagged_word_says_so() {
     let mut f = Fake::default();
     f.displays.insert("John 3:16".into(), "John 3:16".into());
     f.words.insert(("John 3:16".into(), 0), "the".into());
-    let blocks = word_study(&f, f.full, "John 3:16", 0, &[]);
+    let blocks = word_study(&f, "John 3:16", 0, &[]);
     assert!(blocks.iter().any(|b| text_of(b) == "no Strong's tag on this word"));
 }
 
 #[test]
-fn full_word_study_orders_the_tiers_and_marks_them() {
-    let mut f = Fake { full: true, ..Default::default() };
-    f.displays.insert("John 3:16".into(), "John 3:16".into());
-    f.words.insert(("John 3:16".into(), 3), "loved".into());
-    f.morph.insert(("John 3:16".into(), 3), "verb, aorist active".into());
-    f.occ_count.insert("G25".into(), 43);
-    f.entries.insert(
-        "G25".into(),
-        StrongsView { lemma: Some("ἀγαπάω".into()), def: Some("to love".into()), ..Default::default() },
-    );
-    f.renderings.insert(
-        "G25".into(),
-        vec![
-            RenderingView { rendering: "loved".into(), total: 30 },
-            RenderingView { rendering: "beloved".into(), total: 13 },
-        ],
-    );
-    f.word_codes.insert("loved".into(), vec!["G25".into(), "G5368".into()]);
-    f.glosses.insert("G5368".into(), "to be a friend".into());
-    f.bridge.insert(
-        "G25".into(),
-        vec![BridgePartnerView {
-            code: "H157".into(),
-            sources: vec!["Septuagint".into(), "1769 renderings".into()],
-            tiers: vec!["human".into(), "machine".into()],
-            research_grade: true,
-        }],
-    );
-    f.glosses.insert("H157".into(), "to love".into());
-    f.concept.insert(
-        "G25".into(),
-        ConceptView {
-            community: vec!["G26".into()],
-            top_books: vec![("John".into(), 30)],
-            ot: 0,
-            nt: 43,
-            leitwort: Some(LeitwortView { n: 43, win_count: 20, score: 4.2, label: "John 13–17".into() }),
-        },
-    );
-
-    let blocks = word_study(&f, f.full, "John 3:16", 3, &["G25".to_string()]);
-    let titles = section_titles(&blocks);
-    // Tier order is fixed and complete.
-    assert_eq!(
-        titles,
-        vec!["RENDERINGS", "SAME ROOT ACROSS TESTAMENTS", "APPEARS ALONGSIDE", "MOST USED IN", "LEITWORT",]
-    );
-    // The morph gloss appears (Full only).
-    assert!(blocks.iter().any(|b| text_of(b) == "verb, aorist active"));
-    // The tapped rendering "loved" is bold; "beloved" is not. (Match the
-    // renderings list by its unique "beloved" run, not the big word display.)
-    let rend_para = blocks
-        .iter()
-        .find_map(|b| match b {
-            Block::Para { runs, .. } if runs.iter().any(|r| r.text == "beloved") => Some(runs),
-            _ => None,
-        })
-        .unwrap();
-    assert!(rend_para.iter().find(|r| r.text == "loved").unwrap().bold);
-    assert!(!rend_para.iter().find(|r| r.text == "beloved").unwrap().bold);
-    // The rendering chip routes rend:CODE:rendering.
-    assert!(uris(&blocks).contains(&"rend:G25:loved".to_string()));
-    // The reverse lens points at the other code's own card, carrying the word.
-    assert!(uris(&blocks).contains(&"code:G5368:loved".to_string()));
-    // Bridge partner sources are humanized + joined, and its tier marks show.
-    let bridge_para = blocks.iter().find(|b| text_of(b).contains("Septuagint + 1769 renderings")).unwrap();
-    if let Block::Para { runs, .. } = bridge_para {
-        // human, machine, and the research flask (no god).
-        assert!(runs.iter().any(|r| r.text == " †" && r.color == Color::TierHuman));
-        assert!(runs.iter().any(|r| r.text == " ≈" && r.color == Color::TierMachine));
-        assert!(runs.iter().any(|r| r.text == " ⚗" && r.color == Color::TierResearch));
-        assert!(!runs.iter().any(|r| r.text == " ✝"));
-    }
-    // The concept-map link + legend close the card.
-    assert!(blocks.iter().any(|b| text_of(b).contains("where this comes from")));
-}
-
-#[test]
-fn verse_extras_gate_on_full_and_prebake_author_uris() {
-    let mut f = Fake { full: true, ..Default::default() };
+fn verse_extras_prebake_author_uris() {
+    let mut f = Fake::default();
     f.displays.insert("John 3:16".into(), "John 3:16".into());
     f.words.insert(("John 3:16".into(), 1), "God".into());
     f.occ_count.insert("G2316".into(), 1);
@@ -389,36 +282,18 @@ fn verse_extras_gate_on_full_and_prebake_author_uris() {
             weave_index: Some(2),
         }],
     );
-    f.study_xrefs.insert(
-        "John 3:16".into(),
-        vec![StudyXrefView { to: "Rom 5:8".into(), to_display: "Rom 5:8".into(), end: None, end_display: None }],
-    );
     f.verse_tags.insert("John 3:16".into(), vec![(0, "grace".into())]);
     f.notes.insert("John 3:16".into(), vec!["Or, begotten".into()]);
 
-    let blocks = word_study(&f, f.full, "John 3:16", 1, &["G2316".to_string()]);
+    let blocks = word_study(&f, "John 3:16", 1, &["G2316".to_string()]);
     let u = uris(&blocks);
     assert!(u.contains(&"addtag:John 3:16".to_string()));
     assert!(u.contains(&"addthread:John 3:16".to_string()));
     assert!(u.contains(&"weave:2".to_string())); // xref weave → compare card
     assert!(u.contains(&"go:John:3:18".to_string())); // xref verse → navigate
-    assert!(u.contains(&"go:Rom:5:8".to_string())); // TSK
     assert!(u.contains(&"tag:0".to_string()));
     assert!(u.contains(&"untag:0:John 3:16".to_string()));
     assert!(blocks.iter().any(|b| text_of(b) == "Or, begotten"));
-    // Text-only mode drops the TSK tier but KEEPS the reader's own data:
-    // author actions, tags, margin notes, weave xrefs — tags accumulate in any
-    // mode.
-    let mut simple = f;
-    simple.full = false;
-    let sb = word_study(&simple, simple.full, "John 3:16", 1, &["G2316".to_string()]);
-    let su = uris(&sb);
-    assert!(su.iter().any(|x| x.starts_with("addtag")));
-    assert!(su.iter().any(|x| x.starts_with("tag:")));
-    assert!(!su.contains(&"go:Rom:5:8".to_string())); // TSK is human-gated
-    assert!(sb.iter().any(|b| text_of(b) == "Or, begotten")); // margin notes survive
-                                                              // Weave xrefs are the reader's own — still shown.
-    assert!(su.contains(&"go:John:3:18".to_string()));
 }
 
 /// Tapping a verse says WHICH WEAVES IT IS IN, not just what it links to. The
@@ -427,7 +302,7 @@ fn verse_extras_gate_on_full_and_prebake_author_uris() {
 /// weaves must name all three even when one of them contributes a single link.
 #[test]
 fn a_verse_names_the_weaves_it_belongs_to_once_each() {
-    let mut f = Fake { full: true, ..Default::default() };
+    let mut f = Fake::default();
     f.displays.insert("John 3:16".into(), "John 3:16".into());
     f.words.insert(("John 3:16".into(), 1), "God".into());
     f.occ_count.insert("G2316".into(), 1);
@@ -453,7 +328,7 @@ fn a_verse_names_the_weaves_it_belongs_to_once_each() {
         ],
     );
 
-    let blocks = word_study(&f, f.full, "John 3:16", 1, &["G2316".to_string()]);
+    let blocks = word_study(&f, "John 3:16", 1, &["G2316".to_string()]);
     let texts: Vec<String> = blocks.iter().map(text_of).collect();
 
     // The heading counts DISTINCT weaves (three), not the five links.
@@ -479,13 +354,13 @@ fn a_verse_names_the_weaves_it_belongs_to_once_each() {
 /// not appear at all for a verse in no weave.
 #[test]
 fn weave_membership_is_singular_at_one_and_absent_at_none() {
-    let mut f = Fake { full: true, ..Default::default() };
+    let mut f = Fake::default();
     f.displays.insert("John 3:16".into(), "John 3:16".into());
     f.words.insert(("John 3:16".into(), 1), "God".into());
     f.occ_count.insert("G2316".into(), 1);
     f.entries.insert("G2316".into(), StrongsView { lemma: Some("θεός".into()), ..Default::default() });
 
-    let bare = word_study(&f, f.full, "John 3:16", 1, &["G2316".to_string()]);
+    let bare = word_study(&f, "John 3:16", 1, &["G2316".to_string()]);
     assert!(
         !bare.iter().any(|b| text_of(b).starts_with("in ") && text_of(b).contains("weave")),
         "a verse in no weave gets no membership section"
@@ -500,51 +375,22 @@ fn weave_membership_is_singular_at_one_and_absent_at_none() {
             weave_index: Some(2),
         }],
     );
-    let one = word_study(&f, f.full, "John 3:16", 1, &["G2316".to_string()]);
+    let one = word_study(&f, "John 3:16", 1, &["G2316".to_string()]);
     assert!(one.iter().any(|b| text_of(b) == "in 1 weave"), "singular at one");
 }
 
 #[test]
-fn gates_split_human_and_machine_tiers() {
+fn code_study_card_is_standalone() {
     let mut f = Fake::default();
-    f.displays.insert("John 3:16".into(), "John 3:16".into());
-    f.words.insert(("John 3:16".into(), 3), "loved".into());
-    f.occ_count.insert("G25".into(), 43);
-    f.entries.insert("G25".into(), StrongsView { lemma: Some("ἀγαπάω".into()), ..Default::default() });
-    f.renderings.insert("G25".into(), vec![RenderingView { rendering: "loved".into(), total: 30 }]);
-    f.concept.insert("G25".into(), ConceptView { community: vec!["G5368".into()], ..Default::default() });
-    f.study_xrefs.insert(
-        "John 3:16".into(),
-        vec![StudyXrefView { to: "Rom 5:8".into(), to_display: "Rom 5:8".into(), end: None, end_display: None }],
-    );
-
-    // Human only: renderings + TSK, no machine analytics.
-    let hb = word_study_gated(&f, Gates { human: true, machine: false }, "John 3:16", 3, &["G25".to_string()]);
-    let ht = section_titles(&hb);
-    assert!(ht.contains(&"RENDERINGS".to_string()));
-    assert!(!ht.contains(&"APPEARS ALONGSIDE".to_string()));
-    assert!(uris(&hb).contains(&"go:Rom:5:8".to_string()));
-
-    // Machine only: analytics + concept map, no renderings/TSK.
-    let mb = word_study_gated(&f, Gates { human: false, machine: true }, "John 3:16", 3, &["G25".to_string()]);
-    let mt = section_titles(&mb);
-    assert!(!mt.contains(&"RENDERINGS".to_string()));
-    assert!(mt.contains(&"APPEARS ALONGSIDE".to_string()));
-    assert!(!uris(&mb).contains(&"go:Rom:5:8".to_string()));
-}
-
-#[test]
-fn code_study_card_is_standalone_with_legend_in_full() {
-    let mut f = Fake { full: true, ..Default::default() };
     f.occ_count.insert("G5368".into(), 25);
     f.entries.insert(
         "G5368".into(),
         StrongsView { lemma: Some("φιλέω".into()), def: Some("to be a friend".into()), ..Default::default() },
     );
-    let blocks = code_study_card(&f, f.full, "G5368", "loved");
+    let blocks = code_study_card(&f, "G5368");
     assert_eq!(text_of(&blocks[0]), ""); // opens with a rule
     assert!(matches!(blocks[0], Block::Rule));
-    assert!(blocks.iter().any(|b| text_of(b).contains("where this comes from")));
+    assert!(blocks.iter().any(|b| text_of(b).contains("to be a friend")));
 }
 
 #[test]
@@ -568,22 +414,6 @@ fn concordance_caps_and_counts() {
     // An absent code says so.
     let empty = concordance(&f, "G9999");
     assert!(empty.iter().any(|b| text_of(b) == "no occurrences of G9999"));
-}
-
-#[test]
-fn rendering_concordance_matches_by_normalized_key() {
-    let mut f = Fake::default();
-    f.rendering_refs.insert(
-        ("G25".into(), render_key("Loved")),
-        RenderingRefsView { rendering: "loved".into(), total: 1, refs: vec![("John 3:16".into(), "John 3:16".into())] },
-    );
-    // A differently-cased query still matches the normalized key.
-    let blocks = rendering_concordance(&f, "G25", "LOVED");
-    assert!(text_of(&blocks[0]).contains("“loved”"));
-    assert!(uris(&blocks).contains(&"go:John:3:16".to_string()));
-    // A missing rendering says so.
-    let miss = rendering_concordance(&f, "G25", "hated");
-    assert!(miss.iter().any(|b| text_of(b).contains("no “hated” rendering")));
 }
 
 #[test]
@@ -830,23 +660,25 @@ fn weaves_list_sorts_by_link_count_desc() {
 
 #[test]
 fn compare_card_spans_bold_and_added_italic() {
-    let mut f = Fake { full: true, ..Default::default() };
-    f.weaves = vec![WeaveView {
-        index: 0,
-        name: "Adam".into(),
-        kind_label: "type".into(),
-        notes: "first and last".into(),
-        suggested: false,
-        links: vec![WeaveLinkView {
-            a: "Gen 2:7".into(),
-            a_display: "Gen 2:7".into(),
-            b: "1Cor 15:45".into(),
-            b_display: "1Cor 15:45".into(),
-            label: "living soul".into(),
-            span_a: Some([1, 1]),
-            span_b: None,
+    let mut f = Fake {
+        weaves: vec![WeaveView {
+            index: 0,
+            name: "Adam".into(),
+            kind_label: "type".into(),
+            notes: "first and last".into(),
+            suggested: false,
+            links: vec![WeaveLinkView {
+                a: "Gen 2:7".into(),
+                a_display: "Gen 2:7".into(),
+                b: "1Cor 15:45".into(),
+                b_display: "1Cor 15:45".into(),
+                label: "living soul".into(),
+                span_a: Some([1, 1]),
+                span_b: None,
+            }],
         }],
-    }];
+        ..Default::default()
+    };
     f.tokens.insert(
         "Gen 2:7".into(),
         VerseTokensView {
@@ -857,7 +689,7 @@ fn compare_card_spans_bold_and_added_italic() {
             ],
         },
     );
-    let blocks = compare_card(&f, f.full, 0);
+    let blocks = compare_card(&f, 0);
     assert_eq!(text_of(&blocks[0]), "Adam   type");
     assert!(uris(&blocks).contains(&"editweavenotes:0".to_string()));
     assert!(blocks.iter().any(|b| text_of(b) == "“living soul”"));
@@ -962,8 +794,8 @@ fn word_study_shows_personal_note_and_edit_link_in_both_modes() {
         vec![("n1".into(), "the whole gospel in one verse".into()), ("n2".into(), "preached, Easter".into())],
     );
 
-    // Simple mode still surfaces the personal note + an edit link.
-    let sb = word_study(&f, false, "John 3:16", 1, &["G2316".to_string()]);
+    // The personal note and its edit link are on the card.
+    let sb = word_study(&f, "John 3:16", 1, &["G2316".to_string()]);
     // An add link on the header, and an edit link on EACH note, by its id.
     assert!(uris(&sb).contains(&"addnote:John 3:16".to_string()));
     assert!(uris(&sb).contains(&"editnote:n1".to_string()));
@@ -986,7 +818,7 @@ fn word_study_shows_personal_note_and_edit_link_in_both_modes() {
     g.displays.insert("John 3:16".into(), "John 3:16".into());
     g.words.insert(("John 3:16".into(), 1), "God".into());
     g.entries.insert("G2316".into(), StrongsView::default());
-    let gb = word_study(&g, false, "John 3:16", 1, &["G2316".to_string()]);
+    let gb = word_study(&g, "John 3:16", 1, &["G2316".to_string()]);
     let add = gb.iter().map(text_of).find(|t| t.contains("add")).expect("the note row");
     assert_eq!(add.matches('✎').count(), 1, "two pencils on the note row: {add:?}");
 }
@@ -1296,7 +1128,7 @@ fn word_usage_card_waits_politely() {
     // A source with no word index (or one still warming) answers None; the
     // card carries the loading line rather than a false "0 occurrences".
     let f = Fake::default();
-    let blocks = word_usage_card(&f, Gates::from_bits(0), &usage_query("mercy", "all", 0, &[]));
+    let blocks = word_usage_card(&f, &usage_query("mercy", "all", 0, &[]));
     let texts: Vec<String> = flat_runs(&blocks).into_iter().map(|(t, _, _)| t).collect();
     assert!(texts.iter().any(|t| t.contains("loading")), "{texts:?}");
 }
@@ -1305,7 +1137,7 @@ fn word_usage_card_waits_politely() {
 fn word_usage_card_lays_out_the_evidence() {
     let codes = vec!["H2617".to_string()];
     let f = Fake { word_usage: Some(usage_view()), ..Default::default() };
-    let blocks = word_usage_card(&f, Gates::from_bits(0), &usage_query("mercy", "all", 1, &codes));
+    let blocks = word_usage_card(&f, &usage_query("mercy", "all", 1, &codes));
     let runs = flat_runs(&blocks);
     let uri_of = |text: &str| runs.iter().find(|(t, _, _)| t == text).and_then(|(_, u, _)| u.clone());
 
@@ -1359,7 +1191,7 @@ fn word_usage_card_lens_switches_to_the_original_word() {
         origin: None,
         codes: &codes,
     };
-    let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
+    let blocks = word_usage_card(&f, &q);
     let runs = flat_runs(&blocks);
     // First LINKED run with this text — the headline repeats the word inertly.
     let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
@@ -1405,7 +1237,7 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
         origin: None,
         codes: &codes,
     };
-    let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
+    let blocks = word_usage_card(&f, &q);
     let runs = flat_runs(&blocks);
 
     // One line: letters, then the transliteration beside them.
@@ -1440,7 +1272,7 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
         origin: None,
         codes: &codes,
     };
-    let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
+    let blocks = word_usage_card(&f, &q);
     let runs = flat_runs(&blocks);
     let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
     assert_eq!(uri_of("Only this word"), Some("lusage:0:G1140:devils:all".into()));
@@ -1463,7 +1295,7 @@ fn word_usage_card_lens_names_the_same_root_beside_the_letters() {
         origin: None,
         codes: &solo,
     };
-    let blocks = word_usage_card(&g, Gates::from_bits(0), &q);
+    let blocks = word_usage_card(&g, &q);
     assert!(!blocks.iter().any(|b| text_of(b).starts_with("Same root (Strong’s):")));
     assert!(!flat_runs(&blocks).iter().any(|(t, _, _)| t == "Only this word"));
 }
@@ -1474,14 +1306,14 @@ fn word_usage_card_hides_a_long_by_book_list_until_asked() {
     // testament totals stand, the list is behind "Show by book", and asking
     // for it re-opens the same page with the `b` flag and a "Hide by book".
     let f = Fake { word_usage: Some(usage_view()), ..Default::default() };
-    let runs = flat_runs(&word_usage_card(&f, Gates::from_bits(0), &usage_query("mercy", "all", 1, &[])));
+    let runs = flat_runs(&word_usage_card(&f, &usage_query("mercy", "all", 1, &[])));
     assert!(runs.iter().any(|(t, _, _)| t == "Genesis"));
     assert!(!runs.iter().any(|(t, _, _)| t == "Show by book" || t == "Hide by book"));
 
     let mut wide = usage_view();
     wide.books = (1..=66).map(|i| (format!("B{i}"), format!("Book {i}"), 1)).collect();
     let g = Fake { word_usage: Some(wide), ..Default::default() };
-    let runs = flat_runs(&word_usage_card(&g, Gates::from_bits(0), &usage_query("the", "all", 1, &[])));
+    let runs = flat_runs(&word_usage_card(&g, &usage_query("the", "all", 1, &[])));
     let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
     assert!(!runs.iter().any(|(t, _, _)| t == "Book 1"), "a long list is hidden by default");
     assert_eq!(uri_of("Show by book"), Some("wusage:1b:the:all".into()));
@@ -1498,7 +1330,7 @@ fn word_usage_card_hides_a_long_by_book_list_until_asked() {
         origin: None,
         codes: &[],
     };
-    let runs = flat_runs(&word_usage_card(&g, Gates::from_bits(0), &q));
+    let runs = flat_runs(&word_usage_card(&g, &q));
     let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
     assert!(runs.iter().any(|(t, _, _)| t == "Book 66"));
     assert_eq!(uri_of("Hide by book"), Some("wusage:1:the:all".into()));
@@ -1516,7 +1348,7 @@ fn word_usage_card_caps_the_original_word_chips() {
     // shown, so the card can say what it is looking at.
     let codes: Vec<String> = (1..=10).map(|i| format!("G{i}")).collect();
     let f = Fake { word_usage: Some(usage_view()), code_usage: Some(usage_view()), ..Default::default() };
-    let blocks = word_usage_card(&f, Gates::from_bits(0), &usage_query("the", "all", 0, &codes));
+    let blocks = word_usage_card(&f, &usage_query("the", "all", 0, &codes));
     let runs = flat_runs(&blocks);
     let chips: Vec<&str> = runs
         .iter()
@@ -1544,7 +1376,7 @@ fn word_usage_card_caps_the_original_word_chips() {
         origin: None,
         codes: &codes,
     };
-    let runs = flat_runs(&word_usage_card(&f, Gates::from_bits(0), &q));
+    let runs = flat_runs(&word_usage_card(&f, &q));
     assert!(
         runs.iter().any(|(t, u, bold)| t == "G9" && u.is_none() && *bold),
         "the lensed code is shown past the cap (and counted as shown)"
@@ -1563,7 +1395,7 @@ fn word_usage_card_caps_the_original_word_chips() {
         origin: None,
         codes: &codes,
     };
-    let runs = flat_runs(&word_usage_card(&f, Gates::from_bits(0), &q));
+    let runs = flat_runs(&word_usage_card(&f, &q));
     let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
     let chips: Vec<&str> = runs
         .iter()
@@ -1596,7 +1428,7 @@ fn word_usage_card_notes_are_a_section_with_a_plus() {
         origin: Some(("Gen 1:1", 2)),
         codes: &[],
     };
-    let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
+    let blocks = word_usage_card(&f, &q);
     let runs = flat_runs(&blocks);
     assert!(runs.iter().any(|(t, u, bold)| t == "Notes" && u.is_none() && *bold));
     assert!(runs.iter().any(|(t, u, _)| t == "＋" && u.as_deref() == Some("addnote:Gen 1:1")));
@@ -1626,7 +1458,7 @@ fn occurrence_lines_are_scripture_verbatim() {
     // row — a label, an ellipsis, a separator run — changes the concatenation
     // asserted below, and one that emphasizes anything else flips a `bold`.
     let f = Fake { word_usage: Some(usage_view()), ..Default::default() };
-    let blocks = word_usage_card(&f, Gates::from_bits(0), &usage_query("mercy", "all", 1, &[]));
+    let blocks = word_usage_card(&f, &usage_query("mercy", "all", 1, &[]));
     let line = blocks
         .iter()
         .find_map(|b| match b {

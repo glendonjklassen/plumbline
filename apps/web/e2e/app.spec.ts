@@ -9,15 +9,12 @@ async function boot(page: Page): Promise<void> {
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
-/// Wait out the whole background pipeline: the analysis tier ready, then the boot
-/// trace quiet (every warm/analysis chunk appends one timed entry).
+/// Wait out the whole background pipeline: the boot trace quiet (every warm
+/// chunk appends one timed entry).
 ///
 /// Only ever call this on a FIRST visit. After a relaunch it waits out exactly the
 /// interval a relaunch measurement is about, and destroys it.
 async function settleBackground(page: Page): Promise<void> {
-  await page.waitForFunction(() => (window as any).__plumbline?.rndState === "ready", null, {
-    timeout: 120_000,
-  });
   await page.waitForFunction(
     async () => {
       const n = ((await (window as any).__plumbline.rpc.bootTrace()) ?? []).length;
@@ -112,74 +109,18 @@ test("a shared link carries the church, and says so", async ({ page }) => {
   expect(after).toBe("Grace Bible Church");
 });
 
-test("the deferred machine-tier pack loads after boot", async ({ page }) => {
-  await boot(page);
-  // Boot ships the core pack only; ensureRnd pulls the analysis pack in. Forced
-  // here rather than waiting out the idle timer.
-  //
-  // The probe must be `morph`, which reads morphology.morphb, the pack's largest
-  // file. `conceptNeighbours` answers null whether or not the pack loaded — the one
-  // thing a probe may never do.
-  const gloss = await page.evaluate(async () => {
-    const s = (window as any).__plumbline;
-    await s.ensureRnd();
-    return (await s.engine.morph("John 3:16", 3))?.gloss ?? "";
-  });
-  expect(gloss, "a machine-tier lookup should answer once the pack is in").not.toBe("");
-});
-
-// Deferring the analysis pack kept it off the boot path but also out of the
-// session, so every launch put a "one-time download / Load analysis" button in
-// front of a reader who had already taken it. It loads itself now.
-test("a phone is never asked to approve the analysis pack", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 }); // before goto: deferRnd is read at boot
-  await boot(page);
-  expect(await page.evaluate(() => (window as any).__plumbline.rndDeferred)).toBe(false);
-
-  await page.waitForFunction(() => (window as any).__plumbline.rndState === "ready", null, {
-    timeout: 90_000,
-  });
-  // Same morphology probe as the test above, and for the same reason.
-  const gloss = await page.evaluate(
-    async () => (await (window as any).__plumbline.engine.morph("John 3:16", 3))?.gloss ?? "",
-  );
-  expect(gloss, "the pack really arrived, unasked").not.toBe("");
-
-  await expect(page.getByRole("button", { name: "Load analysis" })).toHaveCount(0);
-  await expect(page.getByText(/one-time .* download/)).toHaveCount(0);
-});
-
-// A study that genuinely cannot be answered yet must not look frozen: while the
-// analysis pack is coming in it has to say so. The null refKey is load-bearing —
+// A study that genuinely cannot be answered yet must not look frozen: it has to
+// say it is loading. The null refKey is load-bearing —
 // it leaves the read unanswered for real, and an earlier version that asserted
 // straight away passed with the guard removed.
 test("a study that cannot answer yet says so, and never looks frozen", async ({ page }) => {
   await boot(page);
-  // Settle the background load first, or it lands mid-test and flips rndState
-  // back to "ready" under us.
-  await page.waitForFunction(() => (window as any).__plumbline.rndState === "ready", null, {
-    timeout: 90_000,
-  });
   await page.evaluate(() => {
     const s = (window as any).__plumbline;
-    s.rndState = "loading";
-    s.rndDeferred = true;
     s.panel = { kind: "wordStudy", refKey: null, tokenIndex: 0 };
   });
   await page.waitForTimeout(1200);
   await expect(page.locator(".loading")).toBeVisible();
-
-  // A load already under way narrates nothing: no note, no bar, no percentage.
-  // Sections appear as their data arrives, so the study stays usable throughout.
-  await expect(page.locator(".rnd-note")).toHaveCount(0);
-  await expect(page.locator(".rnd-bar")).toHaveCount(0);
-  await expect(page.getByText(/Downloading the analysis pack/i)).toHaveCount(0);
-
-  // The one surviving notice is a genuine ask rather than a status: nothing is
-  // coming, and spending the download is the reader's decision.
-  await page.evaluate(() => ((window as any).__plumbline.rndState = "off"));
-  await expect(page.locator(".rnd-note")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Load analysis" })).toBeVisible();
 
   // And nothing promises how long it takes, or that it will not happen again.
   await expect(page.getByText(/takes a few seconds/i)).toHaveCount(0);
@@ -214,7 +155,7 @@ test("after a relaunch, the first word study is already warm", { tag: "@perf" },
   const settled = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     const t = performance.now();
-    const b = await s.engine.wordStudyBlocks("John 3:16", 1, s.gates);
+    const b = await s.engine.wordStudyBlocks("John 3:16", 1);
     return { ms: performance.now() - t, blocks: b?.blocks?.length ?? 0 };
   });
   expect(settled.blocks, "the settled engine answers a word study at all").toBeGreaterThan(0);
@@ -226,7 +167,7 @@ test("after a relaunch, the first word study is already warm", { tag: "@perf" },
   const relaunch = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     const t = performance.now();
-    const b = await s.engine.wordStudyBlocks("John 3:16", 1, s.gates);
+    const b = await s.engine.wordStudyBlocks("John 3:16", 1);
     return { ms: performance.now() - t, blocks: b?.blocks?.length ?? 0 };
   });
 
@@ -360,7 +301,7 @@ test("destinations are exclusive (memorize does not linger)", async ({ page }) =
   await expect(page.getByText("Visualizations")).toBeVisible();
 });
 
-test("word study opens from a single click and respects the gates", async ({ page }) => {
+test("word study opens from a single click", async ({ page }) => {
   await boot(page);
   const canvas = page.locator("canvas").first();
   const box = (await canvas.boundingBox())!;
@@ -880,7 +821,7 @@ test("no single background chunk may monopolise the engine worker", { tag: "@per
     // Only the stages that claim to be sliced. The stage-2 Strong's parse is one
     // synchronous block by construction and is a separate question.
     const chunks = trace.filter(
-      ([l]) => l.startsWith("warm step") || l.startsWith("rnd load step"),
+      ([l]) => l.startsWith("warm step"),
     );
     const sorted = chunks.map(([, ms]) => ms).sort((a, b) => a - b);
     let worst = -1;
