@@ -1,31 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
+import { settleBackground } from "./settle";
 
-// Boot to the reader. There is no first run — the reader IS the first screen,
-// and both analysis tiers are on by default, so nothing here has to switch them
-// on the way it used to tick the welcome's checkboxes.
+// Boot to the reader. There is no first run — the reader IS the first screen.
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page).toHaveTitle("Plumbline Bible");
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
-/// Wait out the whole background pipeline: the boot trace quiet (every warm
-/// chunk appends one timed entry).
-///
-/// Only ever call this on a FIRST visit. After a relaunch it waits out exactly the
-/// interval a relaunch measurement is about, and destroys it.
-async function settleBackground(page: Page): Promise<void> {
-  await page.waitForFunction(
-    async () => {
-      const n = ((await (window as any).__plumbline.rpc.bootTrace()) ?? []).length;
-      const prev = (window as any).__settleLen ?? -1;
-      (window as any).__settleLen = n;
-      return n === prev && n > 10;
-    },
-    null,
-    { timeout: 120_000, polling: 700 },
-  );
-}
 
 /// Wait until the device actually holds every file its pin names — a different
 /// barrier from `settleBackground`, which waits only for what the boot trace
