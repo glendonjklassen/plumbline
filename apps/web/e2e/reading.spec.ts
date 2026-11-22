@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { settleBackground } from "./settle";
 
 // The reading map (core::reading): the navigator's tiles change with what the reader has read, and
 // a by-hand date lands. These drive the engine through the app's own RPC rather than reading for
@@ -12,28 +13,10 @@ async function boot(page: Page): Promise<void> {
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
-/**
- * Wait out the background pipeline before measuring anything about the cache.
- *
- * `onWarmReady` and `onRndReady` both call the whole-cache `invalidate()`, and on a fresh profile
- * they land within seconds, masking a stale reading map completely. On a real device the warm
- * settles early in a session and never fires again, so settling first puts the test in that world.
- */
-async function settleBackground(page: Page): Promise<void> {
-  // Not gated on `rndState === "ready"`: the analysis tiers are opt-in, so on a fresh profile the
-  // R&D pack is never fetched and that state never arrives. The real signal is "no further
-  // invalidation is coming", and every warm and analysis step appends one boot-trace entry.
-  await page.waitForFunction(
-    async () => {
-      const n = ((await (window as any).__plumbline.rpc.bootTrace()) ?? []).length;
-      const prev = (window as any).__settleLen ?? -1;
-      (window as any).__settleLen = n;
-      return n === prev && n > 10;
-    },
-    null,
-    { timeout: 120_000, polling: 1500 },
-  );
-}
+// `settleBackground` first, before measuring anything about the cache: `onWarmReady` calls the
+// whole-cache `invalidate()`, and on a fresh profile it lands within seconds, masking a stale
+// reading map completely. On a real device the warm settles early in a session and never fires
+// again, so settling first puts the test in that world.
 
 /** Open Go to… and step into a book, so the chapter grid is on screen. */
 async function openChapterGrid(page: Page, bookName: string): Promise<void> {
