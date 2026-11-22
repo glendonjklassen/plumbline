@@ -16,7 +16,10 @@
 
   const index = $derived(s.q("hymnal")?.hymns ?? []);
   const open = $derived(s.hymn);
-  const hymn = $derived(open ? s.q("hymn", open.id, open.semis) : null);
+  // `qStale`, not `q`: a whole-cache invalidate (the background warm finishing,
+  // any authoring write) would otherwise answer null for a moment, which unmounts
+  // the sing page and puts a scrolling hymn back at its first line.
+  const hymn = $derived(open ? s.qStale("hymn", open.id, open.semis) : null);
 
   let filter = $state("");
 
