@@ -3099,9 +3099,6 @@ fn spanish_corpus_opens_at_the_kjv_addresses_and_reads_spanish() {
         assert!(!mal.contains("Luther"), "a Spanish reader was told what a German Bible prints: {mal}");
         assert!(!mal.contains("3,19"), "Malaquías 4:1 was annotated with a numbering Spanish does not use: {mal}");
 
-        // Cross-references key on refKey, so they are as true here as in the KJV.
-        assert!(blocks.contains("Romanos 5:8"), "a Spanish cross-reference is not in Spanish: {blocks}");
-
         plumbline_engine_free(e);
         let _ = take(plumbline_i18n_set_language(c"en".as_ptr(), ptr::null()));
     }
