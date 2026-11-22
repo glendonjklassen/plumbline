@@ -35,8 +35,7 @@ permissions:
   contents: read
 
 jobs:
-  # Build + test the crates: the pure domain core, layout, the R&D flags,
-  # and the C ABI.
+  # Build + test the crates: the pure domain core, layout, and the C ABI.
   test:
     runs-on: ubuntu-24.04
     steps:
@@ -44,9 +43,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Test portable crates
-        run: cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate
-      - name: Test the R&D features
-        run: cargo test --locked -p plumbline-rnd --features "bridge morphology concept"
+        run: cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-ffi -p plumbline-hydrate
       # Every shipped corpus against the file that actually ships. `#[ignore]`d
       # in the default run because they read tens of MB and need a hydrated
       # checkout; here they are the only thing proving each corpus sits at the
@@ -72,24 +69,6 @@ jobs:
           cargo run --release --locked -q -p plumbline-hydrate -- \
             web-cache --data data/kjv.jsonl --out /tmp/idxcache.b
           cmp /tmp/idxcache.a /tmp/idxcache.b
-
-  # Test plumbline-rnd with NO features in isolation: a single -p plumbline-rnd
-  # invocation in its own job, so feature unification from sibling -p flags
-  # (or another crate's dev-deps) can't silently switch its features on.
-  rnd-featureless:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-      - name: Test plumbline-rnd with default (no) features
-        run: cargo test --locked -p plumbline-rnd
-      # Linted here rather than in `lint` for the same isolation reason the job
-      # exists at all.
-      - name: Lint plumbline-rnd with default (no) features
-        run: cargo clippy --locked -p plumbline-rnd --all-targets -- -D warnings
 
   # Formatting + clippy, both HARD gates: an advisory lint buys nothing, because
   # nobody reads a green run's warnings.
@@ -118,12 +97,9 @@ jobs:
       - name: rustfmt
         run: cargo fmt --all --check
       # `--all-targets` so every test module is linted too, not just the libs;
-      # `--all-features` reaches plumbline-rnd's analytics and the bindgen bin.
+      # `--all-features` reaches the bindgen bin.
       - name: clippy
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-      # The R&D crate's shipped feature set, linted the way it is tested.
-      - name: clippy (the R&D features)
-        run: cargo clippy --locked -p plumbline-rnd --all-targets --features "bridge morphology concept" -- -D warnings
       # The web engine's own target: `crates/ffi` carries `cfg(target_arch =
       # "wasm32")` code — the whole `wasm.rs` shim, plus the sliced-warm cluster
       # only it and the tests call — that a host-target clippy never sees.
@@ -139,7 +115,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@ccc8c1f930153b792217f06c65a38f23a882993a # 1.85
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Check portable crates on the MSRV toolchain
-        run: cargo check --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate
+        run: cargo check --locked -p plumbline-core -p plumbline-layout -p plumbline-ffi -p plumbline-hydrate
 
   # Guard against the C header drifting from the Rust source: regenerate it,
   # then fail if anything changed. A changed #[no_mangle] surface that was not

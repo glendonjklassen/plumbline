@@ -14,9 +14,9 @@
 //! Margin notes are searched alongside the exact tier. Rows are capped at
 //! [`HIT_CAP`] in tier-then-canon order while the total stays honest.
 //!
-//! The morphology *form-predicate* path (`tense:aorist voice:passive`) needs
-//! the optional morphology layer, so it answers with a placeholder here;
-//! `plumbline-rnd` will extend it.
+//! The morphology *form-predicate* path (`tense:aorist voice:passive`) has no
+//! data behind it — the morphology layer was removed 2026-11-22 — so it
+//! answers with a placeholder saying form search is not available.
 
 use crate::canon;
 use crate::corpus::{Corpus, Verse};
@@ -1444,10 +1444,9 @@ pub fn parse_form_query(q: &str) -> Option<FormQuery> {
 }
 
 /// Execute a form query. A bare Strong's code answers straight from the lemma
-/// index (query-by-Strong's). Predicate queries need the morphology layer,
-/// which lives in the optional `plumbline-rnd` crate — here they return a
-/// placeholder telling the reader to hydrate it. Ported from `formSearch`
-/// (bare-code path; predicate path stubbed pending `plumbline-rnd`).
+/// index (query-by-Strong's). Predicate queries would need a morphology layer
+/// this build does not carry, so they return a placeholder saying so. Ported
+/// from `formSearch` (bare-code path only).
 pub fn form_search(corpus: &Corpus, ix: &SearchIx, fq: &FormQuery) -> SearchAnswer {
     form_search_scoped(corpus, ix, fq, None)
 }

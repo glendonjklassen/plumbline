@@ -227,27 +227,9 @@ fn strongs_entry_and_occurrences() {
 }
 
 #[test]
-fn renderings_and_word_codes() {
+fn word_codes_are_the_reverse_lens() {
     unsafe {
         let e = open();
-
-        // Forward lens: G25 (agapao) is rendered "loved" in John 3:16, token 3.
-        let r: Value =
-            serde_json::from_str(&take(plumbline_engine_renderings_json(e, c"G25".as_ptr())).unwrap()).unwrap();
-        assert_eq!(r["code"], "G25");
-        let rs = r["renderings"].as_array().unwrap();
-        assert_eq!(rs.len(), 1);
-        assert_eq!(rs[0]["rendering"], "loved");
-        assert_eq!(rs[0]["total"], 1);
-        assert_eq!(rs[0]["capped"], false);
-        assert_eq!(rs[0]["refs"][0]["verse"], "John 3:16");
-        assert_eq!(rs[0]["refs"][0]["span"][0], 3);
-        assert_eq!(rs[0]["refs"][0]["span"][1], 3);
-
-        // Unknown/untagged code → empty renderings, not null.
-        let empty: Value =
-            serde_json::from_str(&take(plumbline_engine_renderings_json(e, c"H9999".as_ptr())).unwrap()).unwrap();
-        assert_eq!(empty["renderings"].as_array().unwrap().len(), 0);
 
         // Reverse lens: the surface word "God" (normalized) maps to G2316.
         let w: Value =
@@ -940,75 +922,6 @@ fn suggested_weave_review_via_abi() {
 }
 
 #[test]
-fn rnd_tier_via_abi() {
-    use std::ffi::CString;
-    unsafe {
-        let home = std::env::temp_dir().join(format!("plumbline-ffi-rnd-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(home.join("data")).unwrap();
-        std::fs::create_dir_all(home.join("bridge")).unwrap();
-        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
-        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
-
-        // Morphology annotating "loved" (token 3, G25) in John 3:16.
-        std::fs::write(
-            home.join("data").join("morphology.jsonl"),
-            "{\"format\":\"overlay-morphology-v1\",\"tokenization\":\"kjv1769-tok2\",\"source\":\"test\"}\n\
-             {\"b\":\"John\",\"c\":3,\"v\":16,\"e\":[[3,\"G25\",null,\"V-AAI-3S\"]]}\n",
-        )
-        .unwrap();
-        // External bridge witnesses + trust priors. lxx alone is machine-tier;
-        // the quotation pair adds a God-tier, research-grade partner so the
-        // authority-tier wire fields are exercised end to end.
-        std::fs::write(
-            home.join("bridge").join("lxx.json"),
-            r#"{"format":"overlay-bridge-sources-v1","links":[{"h":"H7225","g":"G25","source":"lxx"},{"h":"H430","g":"G25","source":"quotation"}]}"#,
-        )
-        .unwrap();
-        std::fs::write(home.join("data").join("source-priors.json"), r#"{"priors":{"lxx":0.85,"_default":0.5}}"#)
-            .unwrap();
-
-        let home_c = CString::new(home.to_str().unwrap()).unwrap();
-        let mut err: *mut c_char = ptr::null_mut();
-        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
-        assert!(err.is_null() && !e.is_null());
-        let c = |s: &str| CString::new(s).unwrap();
-
-        // Fused bridge partner from the external witness.
-        let b: Value =
-            serde_json::from_str(&take(plumbline_engine_bridge_partners_json(e, c("G25").as_ptr())).unwrap()).unwrap();
-        let p = b["partners"].as_array().unwrap().iter().find(|x| x["code"] == "H7225").unwrap();
-        assert_eq!(p["sources"][0], "lxx");
-        assert!((p["prior"].as_f64().unwrap() - 0.85).abs() < 1e-6);
-        // Authority tiers (additive): lxx is machine-only, not research-grade.
-        assert_eq!(p["tiers"], serde_json::json!(["machine"]));
-        assert_eq!(p["researchGrade"], serde_json::json!(false));
-        // The quotation partner is God-tier content by a machine method, and
-        // research-grade until the harvest is audited.
-        let q = b["partners"].as_array().unwrap().iter().find(|x| x["code"] == "H430").unwrap();
-        assert_eq!(q["sources"][0], "quotation");
-        assert_eq!(q["tiers"], serde_json::json!(["god", "machine"]));
-        assert_eq!(q["researchGrade"], serde_json::json!(true));
-
-        // Morphology of "loved".
-        let m: Value =
-            serde_json::from_str(&take(plumbline_engine_morph_json(e, c("John 3:16").as_ptr(), 3)).unwrap()).unwrap();
-        assert_eq!(m["code"], "V-AAI-3S");
-        assert_eq!(m["gloss"], "aorist active indicative, 3rd singular");
-        // A token with no annotation → null.
-        assert!(plumbline_engine_morph_json(e, c("John 3:16").as_ptr(), 1).is_null());
-
-        // A bytes-opened engine has no morphology → it returns null.
-        let bytes_engine = open();
-        assert!(plumbline_engine_morph_json(bytes_engine, c("John 3:16").as_ptr(), 3).is_null());
-        plumbline_engine_free(bytes_engine);
-
-        plumbline_engine_free(e);
-        let _ = std::fs::remove_dir_all(&home);
-    }
-}
-
-#[test]
 fn parity_endpoints_via_abi() {
     use std::ffi::CString;
     // Held for the whole test: the canon section labels below ("Law", "Gospels") come back in the active
@@ -1048,16 +961,6 @@ fn parity_endpoints_via_abi() {
                 .unwrap();
         assert_eq!(notes["notes"][0], "Or, begotten");
         assert!(plumbline_engine_verse_notes_json(e, c("John 3:18").as_ptr()).is_null());
-
-        // TSK: best-voted first, range end carried.
-        let xr: Value =
-            serde_json::from_str(&take(plumbline_engine_study_xrefs_json(e, c("John 3:16").as_ptr())).unwrap())
-                .unwrap();
-        let refs = xr["refs"].as_array().unwrap();
-        assert_eq!(refs.len(), 2);
-        assert_eq!(refs[0]["votes"], 5);
-        assert!(refs[0]["end"].is_null());
-        assert_eq!(refs[1]["end"], "John 3:18");
 
         // Weave library: spans, approval, kind label, resolvability.
         let ws: Value = serde_json::from_str(&take(plumbline_engine_weaves_json(e)).unwrap()).unwrap();
@@ -1182,24 +1085,11 @@ fn parity_endpoints_via_abi() {
 }
 
 #[test]
-fn concept_and_gloss_via_abi() {
+fn gloss_via_abi() {
     use std::ffi::CString;
     unsafe {
         let e = open();
         let c = |s: &str| CString::new(s).unwrap();
-
-        // Concept stats for a code that occurs once, in the NT.
-        let cj: Value =
-            serde_json::from_str(&take(plumbline_engine_concept_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
-        assert_eq!(cj["total"], 1);
-        assert_eq!(cj["ot"], 0);
-        assert_eq!(cj["nt"], 1);
-        assert_eq!(cj["topBooks"][0]["book"], "John");
-        assert_eq!(cj["byBook"]["John"], 1);
-        // Too few occurrences for a leitwort (min 8).
-        assert!(cj["leitwort"].is_null());
-        // Unknown code → null.
-        assert!(plumbline_engine_concept_json(e, c("H9999").as_ptr()).is_null());
 
         // English gloss: the modal KJV rendering carrying the code.
         assert_eq!(take(plumbline_engine_gloss(e, c("G2316").as_ptr())).unwrap(), "God");
@@ -1280,9 +1170,9 @@ fn panel_blocks_via_abi() {
                 .collect()
         }
 
-        // Word study on "God" (John 3:16 token 1 → G2316), Full study.
+        // Word study on "God" (John 3:16 token 1 → G2316).
         let ws: Value = serde_json::from_str(
-            &take(plumbline_engine_word_study_blocks_json(e, c("John 3:16").as_ptr(), 1, true)).unwrap(),
+            &take(plumbline_engine_word_study_blocks_json(e, c("John 3:16").as_ptr(), 1)).unwrap(),
         )
         .unwrap();
         // Opens with the verse display, then the big word.
@@ -1291,15 +1181,8 @@ fn panel_blocks_via_abi() {
         assert_eq!(ws["blocks"][1]["runs"][0]["text"], "God");
         // The code's occurrence link is baked in.
         assert!(uris(&ws).contains(&"occ:G2316".to_string()));
-        // A tier section header carries its provenance mark.
-        assert!(ws["blocks"].as_array().unwrap().iter().any(|b| b["kind"] == "section"));
-
-        // Simple mode drops the R&D sections.
-        let simple: Value = serde_json::from_str(
-            &take(plumbline_engine_word_study_blocks_json(e, c("John 3:16").as_ptr(), 1, false)).unwrap(),
-        )
-        .unwrap();
-        assert!(!simple["blocks"].as_array().unwrap().iter().any(|b| b["kind"] == "section"));
+        // The card is the dictionary and the reader's own rows: no analysis sections.
+        assert!(!ws["blocks"].as_array().unwrap().iter().any(|b| b["kind"] == "section"));
 
         // Concordance: the go: link for the one occurrence verse.
         let cc: Value =
@@ -1680,105 +1563,6 @@ fn tier0_endpoints_via_abi() {
     }
 }
 
-/// Boot-phase timing harness: engine open + each lazy analytics build over the
-/// repo's own data home. Ignored by default — run manually when tuning boot:
-///   cargo test --release -p plumbline-ffi timing_harness -- --ignored --nocapture
-#[test]
-#[ignore]
-fn timing_harness() {
-    use std::time::Instant;
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let home = std::ffi::CString::new(repo.to_str().unwrap()).unwrap();
-    let mut err: *mut c_char = ptr::null_mut();
-
-    let t = Instant::now();
-    let e = unsafe { plumbline_engine_open(home.as_ptr(), &mut err) };
-    assert!(!e.is_null(), "open failed: {:?}", unsafe { opt_str(err) });
-    println!("open (corpus+strongs+xref+bridge+morph+embed): {:?}", t.elapsed());
-    let eng = unsafe { &*e };
-
-    let t = Instant::now();
-    let _ = eng.concept();
-    println!("concept build:  {:?}", t.elapsed());
-
-    let t = Instant::now();
-    let _ = eng.leitwort();
-    println!("leitwort scan:  {:?}", t.elapsed());
-
-    unsafe { plumbline_engine_free(e) };
-}
-
-/// Companion to [`timing_harness`]: the open-time loads, individually.
-#[test]
-#[ignore]
-fn timing_harness_open_parts() {
-    use std::time::Instant;
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let data = repo.join("data");
-
-    let t = Instant::now();
-    let m = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl"));
-    println!("morphology parse: {:?} (loaded: {})", t.elapsed(), m.is_some());
-
-    let t = Instant::now();
-    let x = crossref::load_cross_refs(crossref::cross_refs_path(&repo));
-    println!("crossref parse:   {:?} (entries: {})", t.elapsed(), x.len());
-}
-
-/// Companion to [`timing_harness`]: concept-build internals + core index builds.
-#[test]
-#[ignore]
-fn timing_harness_concept_parts() {
-    use std::time::Instant;
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-
-    let t = Instant::now();
-    let corpus = corpus::load_corpus(repo.join("data/kjv.jsonl")).unwrap();
-    println!("corpus load:      {:?}", t.elapsed());
-
-    let t = Instant::now();
-    let strongs = strongs::load_strongs(repo.join("data/strongs.json")).unwrap();
-    println!("strongs parse:    {:?} ({} entries)", t.elapsed(), strongs.len());
-
-    let t = Instant::now();
-    let _ = SearchIx::build(&corpus);
-    println!("search ix build:  {:?}", t.elapsed());
-
-    let t = Instant::now();
-    let _ = OccurrenceIx::build(&corpus);
-    println!("occ ix build:     {:?}", t.elapsed());
-
-    let t = Instant::now();
-    let _ = Renderings::build(&corpus);
-    println!("renderings build: {:?}", t.elapsed());
-
-    let t = Instant::now();
-    let ix = concept::build_concept_ix(&corpus);
-    println!("concept ix:       {:?} ({} codes)", t.elapsed(), ix.len());
-
-    let t = Instant::now();
-    let df = concept::verse_frequency(&corpus);
-    let co = concept::co_occurrence(&corpus);
-    println!("co-occurrence:    {:?} ({} pairs)", t.elapsed(), co.len());
-
-    let t = Instant::now();
-    let edges = concept::ppmi(corpus.len(), &df, &co);
-    println!("ppmi:             {:?} ({} edges)", t.elapsed(), edges.len());
-
-    let t = Instant::now();
-    let knn = concept::mutual_knn(10, &edges);
-    println!("mutual knn:       {:?} ({} kept)", t.elapsed(), knn.len());
-
-    let t = Instant::now();
-    let comms = concept::communities(30, &knn);
-    println!("communities:      {:?} ({} groups)", t.elapsed(), comms.len());
-
-    // The warm phases still one call each: the worst is the next slice to cut.
-    let t = Instant::now();
-    let lw = burst::discover_leitworter(&burst::BurstParams::default(), &corpus);
-    println!("leitwort:         {:?} ({} found)", t.elapsed(), lw.len());
-}
-
 /// The overlay rides in with stage 2 (beside Strong's), and must be refused when
 /// it was aligned to a different tokenization: an overlay over the wrong text
 /// points every span at the wrong word, quietly, in scripture.
@@ -1889,48 +1673,6 @@ fn akjv_overlay_relays_the_chapter_and_keeps_hit_testing() {
     }
 }
 
-#[test]
-fn rnd_data_loads_after_open() {
-    use std::ffi::CString;
-    unsafe {
-        let home = std::env::temp_dir().join(format!("plumbline-ffi-laternd-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(home.join("data")).unwrap();
-        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
-        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
-
-        let home_c = CString::new(home.to_str().unwrap()).unwrap();
-        let mut err: *mut c_char = ptr::null_mut();
-        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
-        assert!(err.is_null() && !e.is_null());
-        let c = |s: &str| CString::new(s).unwrap();
-
-        // Core-pack boot: warm builds concept + leitwort; the R&D tiers are dark.
-        assert!(plumbline_engine_warm_indexes(e).is_null());
-        assert!(plumbline_engine_morph_json(e, c("John 3:16").as_ptr(), 3).is_null());
-
-        // A no-op load while the files are still missing is harmless.
-        assert!(plumbline_engine_load_rnd_data(e).is_null());
-
-        // The R&D pack arrives: the morphology sidecar (same as rnd_tier_via_abi).
-        std::fs::write(
-            home.join("data").join("morphology.jsonl"),
-            "{\"format\":\"overlay-morphology-v1\",\"tokenization\":\"kjv1769-tok2\",\"source\":\"test\"}\n\
-             {\"b\":\"John\",\"c\":3,\"v\":16,\"e\":[[3,\"G25\",null,\"V-AAI-3S\"]]}\n",
-        )
-        .unwrap();
-
-        assert!(plumbline_engine_load_rnd_data(e).is_null());
-        assert!(plumbline_engine_warm_indexes(e).is_null());
-
-        let m: Value =
-            serde_json::from_str(&take(plumbline_engine_morph_json(e, c("John 3:16").as_ptr(), 3)).unwrap()).unwrap();
-        assert_eq!(m["code"], "V-AAI-3S");
-        plumbline_engine_free(e);
-        let _ = std::fs::remove_dir_all(&home);
-    }
-}
-
 /// A corpus of `chapters * per` verses over Psalms, every verse carrying the
 /// four Strong's codes the fixtures use. Deliberately bigger than one warm slice.
 fn generated_kjv(chapters: u16, per: u16) -> String {
@@ -1979,21 +1721,11 @@ fn a_tap_never_builds_indexes_under_a_sliced_warm() {
         assert!(eng.occ_ix.get().is_none(), "precondition: nothing built yet");
 
         // The reader taps a word.
-        let blocks = take(plumbline_engine_word_study_blocks2_json(
-            e,
-            c"Ps 1:2".as_ptr(),
-            1,
-            3, // human + machine: every tier on, the most a tap can ask for
-        ))
-        .expect("the tap answered");
+        let blocks = take(plumbline_engine_word_study_blocks_json(e, c"Ps 1:2".as_ptr(), 1)).expect("the tap answered");
 
         for (built, what) in [
             (eng.occ_ix.get().is_some(), "the occurrence index"),
             (eng.renderings.get().is_some(), "the rendering lens"),
-            (eng.xref_ix.get().is_some(), "the cross-reference index"),
-            (eng.concept.get().is_some(), "the concept model"),
-            (eng.leitwort.get().is_some(), "the leitwort scan"),
-            (eng.bridge.get().is_some(), "the bridge"),
         ] {
             assert!(
                 !built,
@@ -2006,8 +1738,8 @@ fn a_tap_never_builds_indexes_under_a_sliced_warm() {
         let v: Value = serde_json::from_str(&blocks).unwrap();
         assert!(!v["blocks"].as_array().unwrap().is_empty(), "the tap built nothing AND answered nothing: {blocks}");
 
-        // Once the warm finishes, the same tap is fully furnished — the sections
-        // that were skipped are not skipped forever.
+        // Once the warm finishes, the same tap is fully furnished — what was
+        // deferred (the occurrence count, the glosses) is not skipped forever.
         let mut n = 0;
         while eng.warm_next(crate::WARM_SLICE) == 1 {
             n += 1;
@@ -2016,12 +1748,9 @@ fn a_tap_never_builds_indexes_under_a_sliced_warm() {
         assert!(eng.occ_ix.get().is_some(), "the warm built the occurrence index");
         assert!(eng.renderings.get().is_some(), "the warm built the rendering lens");
         let after: Value =
-            serde_json::from_str(&take(plumbline_engine_word_study_blocks2_json(e, c"Ps 1:2".as_ptr(), 1, 3)).unwrap())
+            serde_json::from_str(&take(plumbline_engine_word_study_blocks_json(e, c"Ps 1:2".as_ptr(), 1)).unwrap())
                 .unwrap();
-        assert!(
-            after["blocks"].as_array().unwrap().len() > v["blocks"].as_array().unwrap().len(),
-            "the warm added nothing to the study — the deferred sections never filled in"
-        );
+        assert_ne!(after, v, "the warm changed nothing in the study — what was deferred never filled in");
 
         plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
@@ -2053,16 +1782,11 @@ fn a_tap_before_the_warm_has_even_started_builds_nothing() {
         eng.set_defer_builds(true);
         eng.load_core_data();
 
-        let blocks =
-            take(plumbline_engine_word_study_blocks2_json(e, c"Ps 1:2".as_ptr(), 1, 3)).expect("the tap answered");
+        let blocks = take(plumbline_engine_word_study_blocks_json(e, c"Ps 1:2".as_ptr(), 1)).expect("the tap answered");
 
         for (built, what) in [
             (eng.occ_ix.get().is_some(), "the occurrence index"),
             (eng.renderings.get().is_some(), "the rendering lens"),
-            (eng.xref_ix.get().is_some(), "the cross-reference index"),
-            (eng.concept.get().is_some(), "the concept model"),
-            (eng.leitwort.get().is_some(), "the leitwort scan"),
-            (eng.bridge.get().is_some(), "the bridge"),
         ] {
             assert!(
                 !built,
@@ -2108,18 +1832,12 @@ fn no_reader_facing_export_builds_an_index_under_a_sliced_warm() {
         let code = c"G2316";
         // Every one of these is reachable from a tap, a panel, or a map the reader
         // can open in the first seconds of a launch.
-        let _ = take(plumbline_engine_word_study_blocks2_json(e, vref.as_ptr(), 1, 3));
-        let _ = take(plumbline_engine_concept_json(e, code.as_ptr()));
+        let _ = take(plumbline_engine_word_study_blocks_json(e, vref.as_ptr(), 1));
         let _ = take(plumbline_engine_strongs_occurrences_json(e, code.as_ptr()));
-        let _ = take(plumbline_engine_study_xrefs_json(e, vref.as_ptr()));
 
         for (built, what) in [
             (eng.occ_ix.get().is_some(), "the occurrence index"),
             (eng.renderings.get().is_some(), "the rendering lens"),
-            (eng.xref_ix.get().is_some(), "the cross-reference index"),
-            (eng.concept.get().is_some(), "the concept model"),
-            (eng.leitwort.get().is_some(), "the leitwort scan"),
-            (eng.bridge.get().is_some(), "the bridge"),
         ] {
             assert!(
                 !built,
@@ -2156,7 +1874,7 @@ fn a_tap_still_builds_on_demand_when_no_sliced_warm_is_running() {
         assert!(eng.occ_ix.get().is_none());
 
         // No warm_next call: nothing has promised to slice anything.
-        let _ = take(plumbline_engine_word_study_blocks2_json(e, c"Ps 1:2".as_ptr(), 1, 3));
+        let _ = take(plumbline_engine_word_study_blocks_json(e, c"Ps 1:2".as_ptr(), 1));
         assert!(eng.occ_ix.get().is_some(), "a tap on a shell that does NOT slice must still build what it needs");
 
         plumbline_engine_free(e);
@@ -2372,7 +2090,7 @@ fn wire_block_keys_are_golden() {
     use plumbline_core::panel::{Block, Color, Run};
 
     let blocks = vec![
-        Block::Section { title: "Scholarship".into(), mark: Some(("◆".into(), Color::TierHuman)) },
+        Block::Section { title: "Scholarship".into(), mark: Some(("◆".into(), Color::Gold)) },
         Block::Section { title: "Plain".into(), mark: None },
         Block::Para {
             runs: vec![Run::new("plain", 16.0, Color::Ink), Run::new("God", 16.0, Color::Gold).link("occ:G2316")],
@@ -2417,7 +2135,7 @@ fn wire_block_keys_are_golden() {
 
     // And the three keys the bug hid actually carry their values.
     assert_eq!(b[0]["markGlyph"], "◆");
-    assert_eq!(b[0]["markColor"], "tierHuman");
+    assert_eq!(b[0]["markColor"], "gold");
     assert!(b[1]["markGlyph"].is_null());
     assert_eq!(b[2]["topGap"], true);
 }
@@ -2429,7 +2147,6 @@ fn link_verb(l: &crate::wire::WirePanelLink) -> &'static str {
         L::Go { .. } => "go",
         L::External { .. } => "external",
         L::Occurrences { .. } => "occurrences",
-        L::Rendering { .. } => "rendering",
         L::CodeStudy { .. } => "codeStudy",
         L::WordUsage { .. } => "wordUsage",
         L::CodeUsage { .. } => "codeUsage",
@@ -2469,7 +2186,6 @@ fn wire_panel_link_keys_are_golden() {
     let golden: &[(&str, &str, &[&str])] = &[
         ("go:1 John:3:16", "go", &["book", "chapter", "verb", "verse"]),
         ("occ:G25", "occurrences", &["code", "verb"]),
-        ("rend:G25:loved", "rendering", &["code", "rendering", "verb"]),
         ("code:G25:loved", "codeStudy", &["code", "verb", "word"]),
         ("wusage:0:loved:book:Gen", "wordUsage", &["allCodes", "books", "page", "scope", "verb", "word"]),
         (
@@ -3256,9 +2972,8 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         let tagged = tagged.expect("no tagged token in the first 8 of German John 3:16 — did the merge run?");
 
         // The study card studies in German: the tapped code's dictionary entry and
-        // concordance serve, while the KJV-token-anchored tiers (renderings, same-root,
-        // morphology) stay off — they are evidence about the other text's words.
-        let blocks = take(plumbline_engine_word_study_blocks2_json(e, c"John 3:16".as_ptr(), tagged, 3)).unwrap();
+        // concordance serve, and no English section label reaches it.
+        let blocks = take(plumbline_engine_word_study_blocks_json(e, c"John 3:16".as_ptr(), tagged)).unwrap();
         for english in ["Renderings", "same root"] {
             assert!(!blocks.contains(english), "KJV-token evidence {english:?} reached a German reader: {blocks}");
         }
@@ -3276,37 +2991,11 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         // The printed-Bible annotation: German tradition prints Malachi 4:1 as 3,19, so
         // a reader handed "Maleachi 3,19" has to be able to find it. Annotated, never
         // renumbered — see crates/core/src/versification.rs.
-        let mal = take(plumbline_engine_word_study_blocks2_json(e, c"Mal 4:1".as_ptr(), 0, 3)).unwrap();
+        let mal = take(plumbline_engine_word_study_blocks_json(e, c"Mal 4:1".as_ptr(), 0)).unwrap();
         assert!(mal.contains("3,19"), "Maleachi 4,1 does not say what a printed German Bible calls it: {mal}");
         assert!(mal.contains("Luther"), "the annotation does not say whose numbering it is: {mal}");
         // And where they agree — which is almost everywhere — nothing is added.
         assert!(!blocks.contains("Luther "), "John 3:16 was annotated with a numbering that does not differ: {blocks}");
-
-        // The cross-references stay: they key on refKey, not a token index, so they are
-        // as true of this text as of the KJV.
-        assert!(
-            blocks.contains(&plumbline_core::i18n::t(
-                plumbline_core::i18n::Lang::De,
-                "panel.studyXrefs",
-                &[("n", "23")]
-            )),
-            "the German study card lost its cross-references: {blocks}"
-        );
-        assert!(blocks.contains("Römer 5,8"), "a German cross-reference is not in German: {blocks}");
-
-        // The morphology is not even parsed for this text. About work, not correctness:
-        // `is_kjv_text` already withholds the gloss, but parsing 355,603 entries in one
-        // synchronous block on the only thread that answers taps costs seconds of CPU
-        // to build an index nothing reads. `new` had the gate and `load_morph_only` did
-        // not — and the deferred load is the only path the web takes, since its
-        // analysis pack lands after the engine has opened.
-        //
-        // Mutation: drop the tokenization check from `load_morph_only`. Red here.
-        let _ = take(plumbline_engine_load_rnd_data(e));
-        assert!(
-            e.as_ref().unwrap().morph.get().is_none(),
-            "the KJV morphology was parsed for a German reader who can never be shown it"
-        );
 
         plumbline_engine_free(e);
         // English again, so nothing after this test inherits German.
@@ -3373,7 +3062,7 @@ fn spanish_corpus_opens_at_the_kjv_addresses_and_reads_spanish() {
             })
             .expect("no tagged token in the first 8 of Spanish John 3:16 — did the build carry the <w> markup?");
 
-        let blocks = take(plumbline_engine_word_study_blocks2_json(e, c"John 3:16".as_ptr(), tagged, 3)).unwrap();
+        let blocks = take(plumbline_engine_word_study_blocks_json(e, c"John 3:16".as_ptr(), tagged)).unwrap();
         for english in ["Renderings", "same root"] {
             assert!(!blocks.contains(english), "KJV-token evidence {english:?} reached a Spanish reader: {blocks}");
         }
@@ -3406,38 +3095,12 @@ fn spanish_corpus_opens_at_the_kjv_addresses_and_reads_spanish() {
         // No printed-numbering annotation anywhere, since Reina-Valera agrees with the
         // KJV's breaks. Malachi 4:1 is the verse German annotates, so it proves the
         // registry row decides rather than a global switch.
-        let mal = take(plumbline_engine_word_study_blocks2_json(e, c"Mal 4:1".as_ptr(), 0, 3)).unwrap();
+        let mal = take(plumbline_engine_word_study_blocks_json(e, c"Mal 4:1".as_ptr(), 0)).unwrap();
         assert!(!mal.contains("Luther"), "a Spanish reader was told what a German Bible prints: {mal}");
         assert!(!mal.contains("3,19"), "Malaquías 4:1 was annotated with a numbering Spanish does not use: {mal}");
 
-        // Cross-references key on refKey, so they are as true here as in the KJV.
-        assert!(blocks.contains("Romanos 5:8"), "a Spanish cross-reference is not in Spanish: {blocks}");
-
         plumbline_engine_free(e);
         let _ = take(plumbline_i18n_set_language(c"en".as_ptr(), ptr::null()));
-    }
-}
-
-/// The other half of the morphology gate: on the KJV the deferred load does bring
-/// it in, so the assertion above cannot pass by the loader being broken for
-/// everybody. `#[ignore]`d with its sibling — it reads the real hydrated pack.
-#[test]
-#[ignore]
-fn the_deferred_load_still_brings_the_morphology_to_an_english_reader() {
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    if !repo.join("data/morphology.jsonl").exists() {
-        eprintln!("no data/morphology.jsonl in this checkout — skipping");
-        return;
-    }
-    let home = CString::new(repo.to_str().unwrap()).unwrap();
-    unsafe {
-        let _ = take(plumbline_i18n_set_language(c"en".as_ptr(), ptr::null()));
-        let mut err: *mut c_char = ptr::null_mut();
-        let e = plumbline_engine_open(home.as_ptr(), &mut err);
-        assert!(!e.is_null(), "open failed: {:?}", opt_str(err));
-        let _ = take(plumbline_engine_load_rnd_data(e));
-        assert!(e.as_ref().unwrap().morph.get().is_some(), "the KJV reader lost their morphology");
-        plumbline_engine_free(e);
     }
 }
 
@@ -3485,7 +3148,7 @@ fn german_corpus_lexicon_serves_the_german_dictionary_with_caveat() {
         let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(!e.is_null(), "German open failed: {:?}", opt_str(err));
 
-        let blocks = take(plumbline_engine_word_study_blocks2_json(e, c"John 3:16".as_ptr(), 1, 3)).unwrap();
+        let blocks = take(plumbline_engine_word_study_blocks_json(e, c"John 3:16".as_ptr(), 1)).unwrap();
         assert!(blocks.contains("Gott, Gottheit"), "the German definition did not serve: {blocks}");
         assert!(!blocks.contains("a deity"), "the English definition leaked past the German dictionary: {blocks}");
         assert!(blocks.contains("Luther:"), "the renderings are not labelled for the reader's Bible: {blocks}");
@@ -3523,7 +3186,7 @@ fn german_corpus_lexicon_serves_the_german_dictionary_with_caveat() {
         std::env::set_var("XDG_CONFIG_HOME", &cfg_dir);
         let e2 = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(!e2.is_null(), "open with strongsDeOff failed: {:?}", opt_str(err));
-        let blocks = take(plumbline_engine_word_study_blocks2_json(e2, c"John 3:16".as_ptr(), 1, 3)).unwrap();
+        let blocks = take(plumbline_engine_word_study_blocks_json(e2, c"John 3:16".as_ptr(), 1)).unwrap();
         assert!(blocks.contains("a deity"), "strongsDeOff did not return the English definitions: {blocks}");
         assert!(!blocks.contains(&caveat), "the caveat rode along with the English dictionary: {blocks}");
         plumbline_engine_free(e2);

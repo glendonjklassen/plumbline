@@ -26,15 +26,13 @@ Every text is public domain:
 | French | Ostervald |
 | Traditional and Simplified Chinese | Chinese Union Version (1919) |
 
-Word-level study (the Strong's dictionary, concordance, grammar) is available
+Word-level study (the Strong's dictionary and concordance) is available
 where the text carries word tags — English, German, and Spanish today. The
 other languages are reader editions: reading, search, notes, tags, threads,
 weaves, memorization, and sharing all work the same.
 
 ![Isaiah 2 and Micah 4 open side by side, joined by weave connector lines,
-with the study panel on "treasures" — Strong's H214, its morphology, every
-KJV rendering, and where the concept concentrates across the
-canon](assets/readme/reader-weaves.png)
+with the study panel on "treasures"](assets/readme/reader-weaves.png)
 
 ## Features
 
@@ -55,15 +53,11 @@ theme](assets/readme/themeable.png)
 
 ### Study
 
-- Tap any word for its Strong's entry with its transliteration, every
-  rendering of the underlying word, every verse that word occurs in (widened
-  to its family of words on request), and a concordance of where it appears
-- The same root traced across the Old and New Testaments
+- Tap any word for its Strong's entry with its transliteration, every verse
+  that word occurs in (widened to its family of words on request), and a
+  concordance of where it appears
 - The 1769 translators' own margin notes
-- Cross-references from the Treasury of Scripture Knowledge
 - Search that handles partial matches, phrases, and original-language words
-- Statistical layers — where a word concentrates, which words keep company —
-  all computed on your device, on by default; Settings turns them off
 
 ### Your own work
 
@@ -182,9 +176,7 @@ zips restore as before.
 ## Data provenance
 
 The KJV (public domain) comes from eBible.org's Strong's-tagged SWORD module;
-Strong's from Open Scriptures (CC-BY-SA); morphology from OSHB (CC-BY 4.0) and
-Robinson's public-domain Textus Receptus parsing; cross-references from the
-Treasury of Scripture Knowledge via openbible.info. The other Bibles: Luther
+Strong's from Open Scriptures (CC-BY-SA). The other Bibles: Luther
 1912 via The Unbound Bible with Zefania Strong's tags, Reina-Valera 1909 and
 Smith & Van Dyck 1865 via eBible.org, the Ostervald and both editions of the
 1919 Chinese Union Version via open-bibles, and the Punjabi and Hindi Bibles

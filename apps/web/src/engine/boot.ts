@@ -1,8 +1,8 @@
 // Boot sequence: core data pack → virtual home → wasm instance → engine open, and the
 // ready StudyEngine back. The heavy step is the first-visit corpus parse; the built
 // cache is persisted, so later visits skip it. Everything beyond the corpus (Strong's,
-// cross-refs, the ~17 MB machine-tier artifacts) is the engine worker's to stream in
-// afterwards, in yield-friendly chunks.
+// the margin notes, the other Bibles) is the engine worker's to stream in afterwards,
+// in yield-friendly chunks.
 //
 // The engine's hooks (`onAuthored`, `onReadingWrite`) are single-slot properties, so
 // engine.worker.ts must stay the only place that wires them. Every stage is timed into

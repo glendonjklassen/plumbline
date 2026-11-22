@@ -1,7 +1,6 @@
 <script lang="ts">
-  // Boot: the engine worker does everything — pack fetch, home, wasm, open, warm,
-  // and later the deferred R&D pack — while this thread paints the splash from its
-  // progress messages. Fonts load here too, for painting; the worker loads its own
+  // Boot: the engine worker does everything — pack fetch, home, wasm, open and
+  // warm — while this thread paints the splash from its progress messages. Fonts load here too, for painting; the worker loads its own
   // copy for layout measurement.
   import { bootErrorCopy } from "./engine/bootError";
   import { deviceLocale, langChosen, lastLang, rememberLangChosen, setCatalog, t, readerFace } from "./lib/i18n.svelte";
@@ -173,12 +172,6 @@
     try {
       const rpc = new EngineRpc();
       rpc.onProgress = (p) => (phase = p);
-      // Never deferred. Phones used to hold the machine tier back and offer an
-      // explicit action instead, because spending a download unasked is rude —
-      // but it is 3 MB against the 35 MB of text the same boot already fetches
-      // and the 260 MB of Bibles behind it. Holding that back bought a phone
-      // nothing and cost every reader the tier until they went looking.
-      const deferRnd = false;
       const hinted = hintedTextFont();
       // Read before the boot message, because `?lang=` decides which CORPUS gets
       // inflated — a language resolved after the engine opens picks nothing.
@@ -198,7 +191,6 @@
         // boot, so it says "en" for anyone who ever opened the app in English, and
         // a Punjabi link was opening an English Bible under a Punjabi shell.
         rpc.boot({
-          deferRnd,
           locale: deviceLocale(),
           lang: linkLang && !langChosen() ? linkLang : lastLang(),
           sharedLang: linkLang,
@@ -287,11 +279,6 @@
       if (hasChurch(shared)) {
         s.showToast(t("shell.homeChurchSet", { church: shared.name }));
       }
-      // "Deferred" must mean the reader wants the machine tier and its download was
-      // held back, not merely that no download happened: the tiers are opt-in, so
-      // without the last clause every phone would be offered a tier its reader had
-      // never asked for.
-      s.rndDeferred = deferRnd && !info.rndAuto && s.config.machineAnalysis === true;
       // The TOC, seeded into the read-through cache — not a round trip: it came
       // back on the boot reply (BOOT_READS, engine/worker-client.ts), so this is a
       // local write under the key `q("toc")` reads. Awaited because the two lines

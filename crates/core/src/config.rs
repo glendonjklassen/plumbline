@@ -57,6 +57,10 @@ pub struct PaneRef {
     /// The text this pane reads, as a language code; empty = the reader's own.
     /// Per-pane, not per-app: German beside English is the point.
     pub lang: String,
+    /// HISTORY entries only: the named seating it was read in, as a
+    /// `session_slot` token (`sunday-morning`, …). Empty for everyday reading,
+    /// and always empty on a pane or a seating's own position.
+    pub slot: String,
 }
 
 /// The reader's home church, carried in a shared link. Every part is optional;
@@ -103,6 +107,10 @@ pub struct Config {
     /// Page-turn mode: a tap margin either side of the text scrolls most of a
     /// screen, so a page-turner remote can drive the page.
     pub page_turn: bool,
+    /// With [`verse_numbers`](Config::verse_numbers) off, show them anyway
+    /// during the Sunday-morning seating — for a reader whose church reads
+    /// another translation and follows along by number.
+    pub verse_numbers_sunday: bool,
     /// Paint the small leading verse numbers. A layout input, not a paint flag:
     /// see `plumbline_layout::LayoutConfig`.
     pub verse_numbers: bool,
@@ -122,14 +130,9 @@ pub struct Config {
     pub side_margin: f64,
     /// Reader line-height as a multiple of the text height (default 1.35).
     pub line_spacing: f64,
-    /// Reading history, most-recent-first, deduped by (book, chapter) and capped
-    /// at [`HISTORY_CAP`].
+    /// Reading history, most-recent-first, deduped by (book, chapter, seating)
+    /// and capped by [`cap_history`].
     pub history: Vec<PaneRef>,
-    /// Show the curated-scholarship analysis tiers (renderings, morphology,
-    /// same-root, TSK). The text and the reader's own data are never gated.
-    pub human_analysis: bool,
-    /// Show the learned/statistical tiers (concept engine, SIF, leitwort).
-    pub machine_analysis: bool,
     /// The reader's home church, attached to the links this reader shares.
     pub church: Church,
     /// Sunday service start, minutes since local midnight. Set, the
@@ -275,8 +278,37 @@ pub fn clean_presets(list: &[SharePreset]) -> Vec<SharePreset> {
 /// A verse copy-shape token accepted for [`Config::copy_style`].
 pub const COPY_STYLES: [&str; 3] = ["verse", "verseRef", "verseMarkdown"];
 
-/// The most reading-history entries kept (persisted + returned).
+/// The most EVERYDAY reading-history entries kept (persisted + returned).
 pub const HISTORY_CAP: usize = 50;
+
+/// The most history entries kept for EACH named seating, on top of
+/// [`HISTORY_CAP`]. Counted apart because a week of everyday reading is easily
+/// fifty chapters, and one shared cap pushed last Sunday's passages off the
+/// list before the next Sunday came — the one day they are wanted.
+pub const SEATING_HISTORY_CAP: usize = 12;
+
+/// A history entry's seating as stored: a named `session_slot` token, or empty
+/// for everyday reading and for anything this build does not know.
+pub fn named_slot(token: &str) -> String {
+    match crate::session_slot::SessionSlot::parse(token) {
+        Some(s) if s != crate::session_slot::SessionSlot::Other => s.token().to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Trim a most-recent-first history to its caps: [`HISTORY_CAP`] everyday
+/// entries and [`SEATING_HISTORY_CAP`] per named seating, order kept.
+pub fn cap_history(history: Vec<PaneRef>) -> Vec<PaneRef> {
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    history
+        .into_iter()
+        .filter(|p| {
+            let n = seen.entry(p.slot.clone()).or_default();
+            *n += 1;
+            *n <= if p.slot.is_empty() { HISTORY_CAP } else { SEATING_HISTORY_CAP }
+        })
+        .collect()
+}
 
 impl Default for Config {
     fn default() -> Config {
@@ -290,6 +322,7 @@ impl Default for Config {
             bible_reads_credited: false,
             verse_per_line: false,
             page_turn: false,
+            verse_numbers_sunday: false,
             verse_numbers: true,
             added_italics: true,
             theme: ThemeChoice::default(),
@@ -299,13 +332,6 @@ impl Default for Config {
             side_margin: 28.0,
             line_spacing: 1.35,
             history: Vec::new(),
-            // ON by default. They were opt-in while the first-run welcome asked
-            // about them; with the welcome gone nothing asks, and opt-in would
-            // mean nobody ever finds them. The machine tier's download is 3 MB
-            // against 35 MB of text and 260 MB of Bibles — small enough that
-            // spending it unasked is not the imposition it would be for a corpus.
-            human_analysis: true,
-            machine_analysis: true,
             church: Church::default(),
             sunday_service: None,
             akjv_overlay: false,
@@ -361,6 +387,9 @@ struct ConfigWire {
     /// their file unchanged.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     page_turn: bool,
+    /// Absent → off, and off is not written.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    verse_numbers_sunday: bool,
     /// `default_true`, not serde's `bool` default: absent in an older file means
     /// the numbers and italics that reader has always had, not their removal.
     #[serde(default = "default_true")]
@@ -386,10 +415,6 @@ struct ConfigWire {
     // Every `Option` below is an additive key: absent means the default given in
     // `from_wire`, and skipped rather than written null so an existing config
     // does not grow keys just because this build knows about the feature.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    human_analysis: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    machine_analysis: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     church: Option<ChurchWire>,
     /// `alias`: this shipped as `strongsDeOff` when German was the only
@@ -443,6 +468,9 @@ struct PaneWire {
     /// Absent = the reader's own language.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     lang: String,
+    /// A history entry's named seating; absent = everyday. See [`PaneRef::slot`].
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    slot: String,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -517,6 +545,7 @@ impl Config {
                     chapter: p.chapter.max(1),
                     verse: p.verse.filter(|v| *v >= 1),
                     lang: p.lang,
+                    slot: String::new(),
                 })
                 .collect(),
             // Clamp: shells index panes with this.
@@ -539,12 +568,14 @@ impl Config {
                             chapter: p.chapter.max(1),
                             verse: p.verse.filter(|v| *v >= 1),
                             lang: p.lang,
+                            slot: String::new(),
                         },
                     )
                 })
                 .collect(),
             verse_per_line: w.verse_per_line,
             page_turn: w.page_turn,
+            verse_numbers_sunday: w.verse_numbers_sunday,
             verse_numbers: w.verse_numbers,
             added_italics: w.added_italics,
             theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
@@ -555,18 +586,18 @@ impl Config {
             copy_style: normalize_copy_style(&w.copy_style),
             side_margin: clamp_or(w.side_margin, 0.0, 160.0, Config::default().side_margin),
             line_spacing: clamp_or(w.line_spacing, 1.0, 3.0, Config::default().line_spacing),
-            history: w
-                .history
-                .into_iter()
-                .map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1), verse: None, lang: String::new() })
-                .take(HISTORY_CAP)
-                .collect(),
-            // Absent = a config written before the tiers had a default, or one
-            // this build has not seen. Reads as ON, matching `Config::default`;
-            // a reader who switched one OFF has an explicit `false` on the wire
-            // and keeps it.
-            human_analysis: w.human_analysis.unwrap_or(true),
-            machine_analysis: w.machine_analysis.unwrap_or(true),
+            history: cap_history(
+                w.history
+                    .into_iter()
+                    .map(|p| PaneRef {
+                        book: p.book,
+                        chapter: p.chapter.max(1),
+                        verse: None,
+                        lang: String::new(),
+                        slot: named_slot(&p.slot),
+                    })
+                    .collect(),
+            ),
             localized_lexicon_off: w.localized_lexicon_off.unwrap_or(false),
             akjv_overlay: w.akjv_overlay.unwrap_or(false),
             memorize_per_day: w.memorize_per_day.unwrap_or(Config::default().memorize_per_day),
@@ -612,6 +643,7 @@ impl Config {
                     chapter: p.chapter,
                     verse: p.verse,
                     lang: p.lang.clone(),
+                    slot: String::new(),
                     extra: Map::new(),
                 })
                 .collect(),
@@ -629,6 +661,7 @@ impl Config {
                             chapter: p.chapter,
                             verse: p.verse,
                             lang: p.lang.clone(),
+                            slot: String::new(),
                             extra: Map::new(),
                         },
                     )
@@ -636,6 +669,7 @@ impl Config {
                 .collect(),
             verse_per_line: self.verse_per_line,
             page_turn: self.page_turn,
+            verse_numbers_sunday: self.verse_numbers_sunday,
             verse_numbers: self.verse_numbers,
             added_italics: self.added_italics,
             theme: self.theme.token().to_string(),
@@ -644,21 +678,18 @@ impl Config {
             copy_style: self.copy_style.clone(),
             side_margin: self.side_margin,
             line_spacing: self.line_spacing,
-            history: self
-                .history
-                .iter()
-                .take(HISTORY_CAP)
+            history: cap_history(self.history.clone())
+                .into_iter()
                 // History is a list of places, not of panes: no language.
                 .map(|p| PaneWire {
-                    book: p.book.clone(),
+                    book: p.book,
                     chapter: p.chapter,
                     verse: None,
                     lang: String::new(),
+                    slot: named_slot(&p.slot),
                     extra: Map::new(),
                 })
                 .collect(),
-            human_analysis: Some(self.human_analysis),
-            machine_analysis: Some(self.machine_analysis),
             localized_lexicon_off: Some(self.localized_lexicon_off),
             akjv_overlay: Some(self.akjv_overlay),
             memorize_per_day: Some(self.memorize_per_day),
@@ -866,8 +897,8 @@ mod tests {
             mode: StudyMode::Full,
             body_size: 21.5,
             panes: vec![
-                PaneRef { book: "John".into(), chapter: 3, verse: Some(16), lang: String::new() },
-                PaneRef { book: "Rom".into(), chapter: 8, verse: None, lang: String::new() },
+                PaneRef { book: "John".into(), chapter: 3, verse: Some(16), lang: String::new(), slot: String::new() },
+                PaneRef { book: "Rom".into(), chapter: 8, verse: None, lang: String::new(), slot: String::new() },
             ],
             active: 1,
             // Every field here is set away from its default: a default value is
@@ -879,10 +910,11 @@ mod tests {
             bible_reads_credited: false,
             slots: BTreeMap::from([(
                 "sunday-morning".to_string(),
-                PaneRef { book: "Ps".into(), chapter: 23, verse: Some(4), lang: String::new() },
+                PaneRef { book: "Ps".into(), chapter: 23, verse: Some(4), lang: String::new(), slot: String::new() },
             )]),
             verse_per_line: true,
             page_turn: true,
+            verse_numbers_sunday: true,
             verse_numbers: false,
             added_italics: false,
             theme: ThemeChoice::Night,
@@ -894,11 +926,9 @@ mod tests {
             side_margin: 40.0,
             line_spacing: 1.6,
             history: vec![
-                PaneRef { book: "Gen".into(), chapter: 1, verse: None, lang: String::new() },
-                PaneRef { book: "Rom".into(), chapter: 8, verse: None, lang: String::new() },
+                PaneRef { book: "Gen".into(), chapter: 1, verse: None, lang: String::new(), slot: String::new() },
+                PaneRef { book: "Rom".into(), chapter: 8, verse: None, lang: String::new(), slot: String::new() },
             ],
-            human_analysis: true,
-            machine_analysis: false,
             akjv_overlay: true,
             memorize_per_day: 25,
             language: "de".to_string(),
@@ -1171,8 +1201,8 @@ mod tests {
         let path = dir.join("config.json");
         let cfg = Config {
             panes: vec![
-                PaneRef { book: "John".into(), chapter: 3, verse: None, lang: String::new() },
-                PaneRef { book: "John".into(), chapter: 3, verse: None, lang: "de".into() },
+                PaneRef { book: "John".into(), chapter: 3, verse: None, lang: String::new(), slot: String::new() },
+                PaneRef { book: "John".into(), chapter: 3, verse: None, lang: "de".into(), slot: String::new() },
             ],
             ..Config::default()
         };
@@ -1215,8 +1245,6 @@ mod tests {
   "sideMargin": 28.0,
   "lineSpacing": 1.35,
   "history": [],
-  "humanAnalysis": true,
-  "machineAnalysis": true,
   "localizedLexiconOff": false,
   "akjvOverlay": false,
   "memorizePerDay": 10
@@ -1226,14 +1254,53 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A history entry keeps the seating it was read in across a save, and the
+    /// seatings are capped apart from everyday reading — so a week of chapters
+    /// cannot push last Sunday off the list. Fails against the defect: `slot`
+    /// was not a field, so a save dropped it and every entry came back everyday.
+    #[test]
+    fn history_keeps_its_seating_and_caps_each_seating_apart() {
+        let dir = scratch("history-slots");
+        let path = dir.join("config.json");
+        let entry = |chapter: u16, slot: &str| PaneRef {
+            book: "Ps".into(),
+            chapter,
+            verse: None,
+            lang: String::new(),
+            slot: slot.into(),
+        };
+        // Sixty everyday chapters on top, then last Sunday's twenty beneath.
+        let mut history: Vec<PaneRef> = (1..=60).map(|c| entry(c, "")).collect();
+        history.extend((61..=80).map(|c| entry(c, "sunday-morning")));
+        history.push(entry(81, "a-later-builds-seating"));
+        save_to(&path, &Config { history, ..Config::default() }).unwrap();
+        let (back, _) = load_from(&path);
+        let of = |slot: &str| back.history.iter().filter(|p| p.slot == slot).map(|p| p.chapter).collect::<Vec<_>>();
+        assert_eq!(of("sunday-morning"), (61..=72).collect::<Vec<_>>(), "the seating's newest twelve");
+        // The unknown seating reads as everyday, and everyday is capped at fifty.
+        assert_eq!(of(""), (1..=50).collect::<Vec<_>>());
+        assert!(
+            !std::fs::read_to_string(&path).unwrap().contains("\"slot\": \"\""),
+            "an everyday entry writes no slot"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn page_turn_and_sunday_service_round_trip_and_stay_off_the_default_file() {
         let dir = scratch("pageturn");
         let path = dir.join("config.json");
-        let cfg = Config { page_turn: true, sunday_service: Some(10 * 60 + 30), ..Config::default() };
+        let cfg = Config {
+            page_turn: true,
+            verse_numbers_sunday: true,
+            sunday_service: Some(10 * 60 + 30),
+            ..Config::default()
+        };
         save_to(&path, &cfg).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("\"pageTurn\": true"));
+        assert!(text.contains("\"verseNumbersSunday\": true"));
+        assert!(load_from(&path).0.verse_numbers_sunday);
         assert!(text.contains("\"sundayService\": 630"));
         let (back, _) = load_from(&path);
         assert!(back.page_turn);

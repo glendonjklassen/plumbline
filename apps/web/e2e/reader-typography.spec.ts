@@ -72,7 +72,7 @@ test("verse numbers off removes them AND reclaims the space they held", async ({
   expect(before.numbers, "the shipped reader paints verse numbers").toBeGreaterThan(0);
 
   await openAdvanced(page);
-  await page.getByRole("checkbox", { name: "Verse numbers" }).uncheck();
+  await page.getByRole("checkbox", { name: /^Verse numbers(?! on Sunday)/ }).uncheck();
   await page.keyboard.press("Escape");
 
   // Live: no reload, no chapter turn, no resize.
@@ -89,11 +89,39 @@ test("verse numbers off removes them AND reclaims the space they held", async ({
   expect(after.firstWordX).toBe(0);
 
   await openAdvanced(page);
-  await page.getByRole("checkbox", { name: "Verse numbers" }).check();
+  await page.getByRole("checkbox", { name: /^Verse numbers(?! on Sunday)/ }).check();
   await page.keyboard.press("Escape");
   await expect
     .poll(async () => (await painted(page)).numbers, { timeout: 15_000 })
     .toBe(before.numbers);
+});
+
+// With the numbers off, the Sunday setting brings them back for the Sunday-morning
+// seating only. FAILS without the feature: nothing reads `verseNumbersSunday`, so
+// the count stays 0 in the seating. The last step is the other half — out of the
+// seating they go again — which a setting that simply turned the numbers on would fail.
+test("verse numbers come back for the Sunday morning seating when asked, and only then", async ({ page }) => {
+  await boot(page);
+  const before = await paintedPage(page);
+
+  await openAdvanced(page);
+  const sunday = page.locator('[data-setting="verseNumbersSunday"]');
+  await expect(sunday, "nothing to do while the numbers are on").toBeDisabled();
+  await page.getByRole("checkbox", { name: /^Verse numbers(?! on Sunday)/ }).uncheck();
+  await sunday.check();
+  await page.keyboard.press("Escape");
+  await settleConfigWrite(page);
+
+  // An ordinary day: still off. (Set by hand; the engine's answer for the real
+  // clock is only re-asked on a save or a return to the app, and nothing below does either.)
+  await page.evaluate(() => ((window as any).__plumbline.slot = "other"));
+  await expect.poll(async () => (await painted(page)).numbers, { timeout: 15_000 }).toBe(0);
+
+  await page.evaluate(() => ((window as any).__plumbline.slot = "sunday-morning"));
+  await expect.poll(async () => (await painted(page)).numbers, { timeout: 15_000 }).toBe(before.numbers);
+
+  await page.evaluate(() => ((window as any).__plumbline.slot = "sunday-evening"));
+  await expect.poll(async () => (await painted(page)).numbers, { timeout: 15_000 }).toBe(0);
 });
 
 test("supplied-word italics off changes the painted page, and leaves the layout alone", async ({ page }) => {
@@ -141,7 +169,7 @@ test("both switches survive a reload", async ({ page }) => {
   await boot(page);
   await paintedPage(page);
   await openAdvanced(page);
-  await page.getByRole("checkbox", { name: "Verse numbers" }).uncheck();
+  await page.getByRole("checkbox", { name: /^Verse numbers(?! on Sunday)/ }).uncheck();
   await page.getByRole("checkbox", { name: "Italicize supplied words" }).uncheck();
   await page.keyboard.press("Escape");
   await expect.poll(async () => (await painted(page)).numbers, { timeout: 15_000 }).toBe(0);

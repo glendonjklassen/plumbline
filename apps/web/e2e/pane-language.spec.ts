@@ -104,8 +104,8 @@ test("word study on a pane comes from that pane's own text", async ({ page }) =>
   // answers identical.
   const answers = await page.evaluate(async (v: any) => {
     const s = (window as any).__plumbline;
-    const de = await s.fetchQIn("de", "wordStudyBlocks", v.refKey, v.tokenIndex, s.gates);
-    const en = await s.fetchQIn(undefined, "wordStudyBlocks", v.refKey, v.tokenIndex, s.gates);
+    const de = await s.fetchQIn("de", "wordStudyBlocks", v.refKey, v.tokenIndex);
+    const en = await s.fetchQIn(undefined, "wordStudyBlocks", v.refKey, v.tokenIndex);
     return { de: JSON.stringify(de), en: JSON.stringify(en) };
   }, view);
   expect(answers.de, "the German text must answer differently from the KJV").not.toBe(answers.en);
@@ -218,7 +218,7 @@ test("a restored language pane paints its text and answers study after a reload"
   // And its study answers.
   const study = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    return JSON.stringify(await s.fetchQIn("de", "wordStudyBlocks", "John 3:16", 1, s.gates));
+    return JSON.stringify(await s.fetchQIn("de", "wordStudyBlocks", "John 3:16", 1));
   });
   expect(study.length).toBeGreaterThan(40);
 });

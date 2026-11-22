@@ -5,9 +5,6 @@
 //! concordance, multi-tier search, and the weave graph. No UI, no rendering, no
 //! I/O beyond loading data files; everything here is deterministic, so the
 //! shell and the FFI layer duplicate no study logic.
-//!
-//! Optional R&D features (morphology, concept, bridge) live in the separate,
-//! feature-gated `plumbline-rnd` crate.
 
 pub mod akjv;
 pub mod backup;
@@ -16,7 +13,6 @@ pub mod church;
 pub mod civil;
 pub mod config;
 pub mod corpus;
-pub mod crossref;
 pub mod devotional;
 pub mod export;
 pub mod font;

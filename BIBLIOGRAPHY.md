@@ -1,8 +1,7 @@
 # Bibliography — data sources & licensing
 
 What Plumbline ships, where each piece comes from, and under what license.
-Everything is freely licensed or public domain; per the project's stance, every
-analysis layer is a tool for studying the text, never an authority over it.
+Everything is freely licensed or public domain.
 
 ## The text and its apparatus
 
@@ -13,7 +12,6 @@ analysis layer is a tool for studying the text, never an authority over it.
 | `data/derivation-families.json` | One parent list per Strong's number — the explicit, unhedged derivations the dictionary states — behind the word study's "Same root (Strong's)" row | derived from `data/strongs.json` by `data-prep/strongs/derivations.py`, hand decisions in `data-prep/strongs/derivation-overrides.json` | as Strong's (public domain) |
 | `data/kjv-notes.jsonl` | The 1769 translators' margin notes — 6,959 of them, Genesis to Malachi | the `<note>` markup carried inside that same `engKJV2006eb` 14.3 dump, lifted in the same pass (see below) | public domain |
 | `data/akjv.jsonl` | Plain-English overlay: where the AKJV words a verse differently, keyed to KJV token spans (6.9% of tokens) | American King James Version, Michael Peter Engelbrite 1999, via [scrollmapper/bible_databases](https://github.com/scrollmapper/bible_databases); aligned by `scripts/build-akjv-delta.mjs` | **public domain** — released 1999-11-08, "copy it, sell it, modify it" |
-| `data/cross-references.tsv` | ~343k Treasury of Scripture Knowledge references with votes | [openbible.info](https://www.openbible.info/labs/cross-references/) | CC Attribution; TSK itself public domain |
 
 **The KJV module, named exactly.** Both KJV rows come out of one dump of one
 module: **`engKJV2006eb`, version 14.3** — eBible.org's Strong's-tagged KJV,
@@ -32,7 +30,7 @@ carries none for the New Testament.
 eBible.org's catalogue lists that KJV today as **`ENGKJV` / `eng-kjv2006`**
 ([entry](https://ebible.org/find/details.php?id=engKJV), public domain); the
 module id `engKJV2006eb` itself no longer resolves there (checked 2026-07-29).
-`data/` and `bridge/` are committed to this repo, so nothing re-fetches it.
+`data/` is committed to this repo, so nothing re-fetches it.
 
 ## The German text and its apparatus
 
@@ -50,43 +48,15 @@ module id `engKJV2006eb` itself no longer resolves there (checked 2026-07-29).
 | `data/cuv1919t.jsonl` | 和合本 1919 (Chinese Union Version, traditional) at KJV addresses, tokenized one character per token (`cuv1919t-tok1`); John 7:53 split back out of 8:1, 1 Chr 22 realigned, 3 John 15 merged; the printed edition's 69 ranged-verse placeholders (併於上節) carried verbatim, two constructed at range tails, all 22 differing printed numbers in `crates/core/src/versification/cuv-numbering.tsv` | [seven1m/open-bibles](https://github.com/seven1m/open-bibles) USFX edition (`chi-cuv.usfx.xml`); built by `data-prep/cuv/build-cuv.py`, proved by `check-cuv.py` | public domain (the 1919 text — the 2010 Revised CUV is in copyright and is not this text) |
 | `data/cuv1919s.jsonl` | 和合本 1919, simplified-character edition, as above (`cuv1919s-tok1`); proved parallel to the traditional edition token-for-token. **Modified**: two 2013 规范字 codepoints in CJK Extension B that virtually no font carries (𫈟, 𫗪; twelve occurrences) ship as their traditional forms 蔯/餵 | as above (`chi-cuv-simp.usfx.xml`); same build and check scripts | public domain (the 1919 text) |
 
-## Morphology
+## Removed data
 
-| Shipped file | Contents | Source | License |
-|---|---|---|---|
-| `data/morphology.jsonl` (Hebrew side) | OSHM parses projected onto the KJV tokens | [openscriptures/morphhb](https://github.com/openscriptures/morphhb) (OSHB/WLC) | CC-BY 4.0 |
-| `data/morphology.jsonl` (Greek side) | Robinson parsing codes, Textus Receptus | [byztxt/greektext-textus-receptus](https://github.com/byztxt/greektext-textus-receptus) (Dr. M. A. Robinson) | public domain |
-
-## The cross-testament bridge
-
-| Shipped file | Contents | Source | License |
-|---|---|---|---|
-| `bridge/lxx-alignment.json` | Hebrew↔Greek links from LXX↔WLC statistical alignment | [eliranwong/LXX-Swete-1930](https://github.com/eliranwong/LXX-Swete-1930) (Swete's LXX, public domain text) + CLTK lemmata | see repos; Swete text public domain |
-| `bridge/abbott-smith.json` | Abbott-Smith's Manual Greek Lexicon OT references | [translatable-exegetical-tools/Abbott-Smith](https://github.com/translatable-exegetical-tools) | public domain text; repo CC-BY-SA |
-| `bridge/stepbible-tipnr.json` | Proper-name Hebrew↔Greek identities (TIPNR) | [STEPBible/STEPBible-Data](https://github.com/STEPBible/STEPBible-Data) | CC-BY 4.0 |
-| `data/source-priors.json`, `data/quotation-pairs.json`, `data/text-witness.json` | fitted trust priors; harvested quotation pairs; the graded text-witness | produced by the offline pipeline over the sources above | derived works of the above |
-
-## Self-trained artifacts
-
-**No longer shipped, as of 2026-07-30.** The one entry in this section left the
-product that day: nothing in the app reads it any more, so it is not in the web
-data pack. The provenance record stays here because the file is still an output
-of the offline pipeline and still lives in `data/`.
-
-| File | Contents | Provenance |
-|---|---|---|
-| `data/concept-vectors.vec` (+ `.meta`, `.freq`) — **not shipped since 2026-07-30** | 7,426 concept embeddings over Strong's sequences, Procrustes-aligned across testaments | trained offline in pure NumPy on the tagged corpus; it never sees the English surface, so the output is wholly owned and freely licensable |
-
-The three features that read it were removed the same day, on the maintainer's
-call that they were machine-generated noise: SIMILAR CONCEPTS, "verses like
-this", and the concept map.
-
-No modern pretrained encoder touches the text anywhere: contextual models
-misread Early Modern English, so every artifact is either curated (above) or
-self-trained on Strong's numbers. The methods papers behind each layer
-(word2vec/SIF/Procrustes/scan statistics/label propagation) are catalogued in
-the overlay project's BIBLIOGRAPHY; the Rust ports implement the same recipes
-(see the module docs in `crates/rnd/`).
+Removed from the repository and the product on 2026-11-22, with the analysis
+tiers that read them (git history has the files and their provenance tables):
+the OSHB and Robinson morphology (`data/morphology.jsonl`), the Treasury of
+Scripture Knowledge cross-references (`data/cross-references.tsv`), the
+cross-testament bridge witnesses (`bridge/`: the LXX alignment, Abbott-Smith,
+STEPBible TIPNR), the fitted priors and witness files, and the self-trained
+concept embedding (`data/concept-vectors.vec`).
 
 ## Study content
 

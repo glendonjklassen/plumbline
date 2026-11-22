@@ -1,18 +1,15 @@
-# data-prep — the R&D data pack
+# data-prep — the data pack
 
-**The whole pack — reading core and R&D tier alike — is committed to this
-repo** (`data/`, `bridge/`), so a clone is a hydrated home and none of this has
-to be rebuilt to use the app. This document records what the artifacts are and
-how each was *produced*, so the pack stays reproducible (and re-buildable if
-the frozen tokenization ever changes). Provenance and licensing:
-[BIBLIOGRAPHY.md](../BIBLIOGRAPHY.md).
+**The whole pack is committed to this repo** (`data/`), so a clone is a
+hydrated home and none of this has to be rebuilt to use the app. This document
+records what the artifacts are and how each was *produced*, so the pack stays
+reproducible (and re-buildable if the frozen tokenization ever changes).
+Provenance and licensing: [BIBLIOGRAPHY.md](../BIBLIOGRAPHY.md).
 
-The load-bearing fact (see the session analysis): **almost none of this is
-"training."** One artifact (the concept vectors) is a lightweight CPU skip-gram;
-everything else is a deterministic parse/align/download of public-domain source
-texts. It is a **build-once → ship-the-files** proposition — no GPU, no
-foundation model, no ongoing training, and the outputs are stable as long as the
-tokenization stays frozen (`kjv1769-tok2`).
+Nothing here is training: every artifact is a deterministic parse, alignment or
+download of public-domain or freely licensed source texts. Build once, ship the
+files; the outputs are stable as long as the tokenization stays frozen
+(`kjv1769-tok2`).
 
 ## What Plumbline consumes
 
@@ -21,86 +18,31 @@ All under the resolved data home (`core::home`) at `<home>/data/`:
 | File | Feeds | Rust consumer | Build? |
 |------|-------|---------------|--------|
 | `kjv.jsonl` | the reader | `core::corpus` | committed (SWORD import) |
-| `strongs.json` | Strong's + the **etymology bridge** | `core::strongs`, `rnd::bridge` | committed; bridge needs no extra data |
+| `strongs.json` | Strong's dictionary | `core::strongs` | committed |
+| `derivation-families.json` | the word lens's "same root" families | `core::strongs` | reviewed data file ([strongs/](strongs/)) |
 | `kjv-notes.jsonl` | 1769 margin notes | `core::notes` | committed (import) |
 | `akjv.jsonl` | the plain-English overlay | `core::akjv` | deterministic align (no ML) |
-| `cross-references.tsv` | TSK topical tier | `core::crossref` | download (no ML) |
-| `concept-vectors.vec` (+ `.meta`, `.freq`) | **no longer shipped** (2026-07-30): its three readers were removed as noise. Still produced here; nothing consumes it | `rnd::embed` | **train once** (CPU) |
-| `morphology.jsonl` | per-token parse | `rnd::morph` | deterministic projection |
-| `chronological.json` | the chronological reading plan's curated order | `core::plan::load_table` | `scripts/build-chronological.mjs` from [chronological/order.json](chronological/order.json) (no ML; exactly-once canon coverage verified against the corpus at build) |
-| `bridge/*.json` (LXX, Abbott-Smith, TIPNR) | fused cross-testament witnesses | `rnd::bridge` | committed / align (no ML) |
-| `source-priors.json` | per-source trust weight | `rnd::bridge` | deterministic calibration |
+| `chronological.json` | the chronological reading plan's curated order | `core::plan::load_table` | `scripts/build-chronological.mjs` from [chronological/order.json](chronological/order.json) |
 
-Every consumer degrades gracefully: a missing file means the section simply
-doesn't render. The reader runs with only the three core files.
+Every consumer degrades gracefully: a missing optional file means its feature
+simply doesn't appear. The reader runs with `kjv.jsonl` and `strongs.json`.
+
+The analysis artifacts — `cross-references.tsv`, `morphology.jsonl`, the
+`bridge/` witnesses, `source-priors.json`, `quotation-pairs.json`,
+`text-witness.json` and the concept vectors — were removed 2026-11-22 with the
+analysis tiers that read them. Their pipelines live in the reference `overlay`
+checkout; git history here has the files and this document's notes on them.
 
 ## How each artifact is produced
-
-The generators are the existing offline Python in the reference `overlay`
-checkout (`ml/` and `pipelines/`, each with its own README). Plumbline does
-**not** reimplement them — the runtime only reads their outputs, exactly as it
-reads `kjv.jsonl`. Run them once against a hydrated home:
 
 - **`kjv.jsonl`** — the overlay importer's SWORD pass, then
   `python3 data-prep/kjv/fix-tag-splits.py` from the repo root. The eBible
   module closes some Strong's `<w>` tags mid-word and the importer takes every
   tag edge as a word edge, so 55 New Testament words came out in two pieces
   ("agains t", "mid night", "who soever" — the list is in the script). The
-  script rejoins them and re-indexes the two token-addressed sidecars
-  (`akjv.jsonl`, `morphology.jsonl`); rebuild `akjv.akjvb` after it. A core
-  test (`shipped_corpus_has_no_tag_split_words`) fails if a re-import skips it.
-- **`concept-vectors.vec`** — `python3 ml/train_concept2vec.py` then
-  `python3 ml/align_hg.py`. Skip-gram with negative sampling in **pure NumPy**
-  (no gensim/torch, no GPU); minutes on a laptop. `align_hg.py` rotates the
-  Hebrew subspace onto the Greek (orthogonal Procrustes, one SVD) so
-  cross-testament neighbours become meaningful. Output is "wholly owned and
-  free to relicense" (it never sees English). The `.meta` stamps the
-  tokenization (Plumbline refuses a mismatch) and records the alignment + the
-  Greek root-alias map; `.freq` carries the training counts the SIF weights use.
-- **`morphology.jsonl`** — `python3 pipelines/morph_oshb.py` +
-  `pipelines/morph_tr.py`, then the overlay `--project-morph` step. A
-  deterministic projection of OSHB (Westminster Leningrad Codex; lemma/morph
-  CC BY 4.0, text public domain) and Robinson's parsed Textus Receptus (public
-  domain) onto the KJV tokens. No ML.
-- **`cross-references.tsv`** — `python3 pipelines/cross_refs.py`. A download +
-  reshape of openbible.info's TSK-derived, vote-ranked references (CC
-  Attribution). No ML.
-
-The **bridge** (`rnd::bridge`) works with no artifact at all — the etymology
-layer is derived at runtime from `strongs.json`'s own "of Hebrew origin (Hxxxx)"
-derivations — and, when the committed `bridge/*.json` witnesses and
-`source-priors.json` are present, **fuses** them: each cross-testament partner
-is tagged with the sources that assert it (etymology / lxx / abbott-smith /
-tipnr / …) and ranked by the fitted trust prior.
-
-- **`bridge/*.json`** — `python3 pipelines/lxx_bridge.py`,
-  `pipelines/abbott_smith.py`, `pipelines/stepbible_tipnr.py`. Public-domain /
-  CC-BY inputs; the artifacts carry their attributions. LXX uses IBM Model 2
-  word alignment (pure Python EM, deterministic) — statistics, not training.
-- **`source-priors.json`** — `python3 ml/calibrate_source_priors.py`. A
-  deterministic calibration of each source's precision against the Abbott-Smith
-  gold; a tiny JSON of weights.
-
-## Deferred (still data-gated)
-
-Not yet ported: cross-testament **quotation detection** (the fused
-LXX/Abbott-Smith/embedding lexicon + CL-ASA run alignment) and the
-`text-witness*` adversarial audit. Same recipe when wanted — port the Rust
-consumer, ship the precomputed file.
-
-Licensing: the concept vectors are wholly owned; TSK is CC-Attribution; OSHB is
-CC BY 4.0; the TR/WLC texts and Abbott-Smith are public domain. The Louw-Nida /
-SDBH semantic-domains source is CC-BY-**SA** (copyleft) and was deliberately
-**excluded** from the shippable pack.
-
-## Hosting the pack
-
-Because Plumbline resolves its data home (env → working tree → next to the
-executable → per-user data dir) and reads these files by name, "shipping the R&D
-pack" is just placing the files under `<home>/data/`. A downloadable pack is a
-tarball of the R&D rows above, extracted there; the app picks them up on next
-launch with no code change. (The C ABI's `plumbline_engine_open_from_bytes` can also
-load core data from asset bytes for a bundled build.)
+  script rejoins them and re-indexes the token-addressed sidecar
+  (`akjv.jsonl`); rebuild `akjv.akjvb` after it. A core test
+  (`shipped_corpus_has_no_tag_split_words`) fails if a re-import skips it.
 
 ## The `plumbline-hydrate` tool
 
@@ -108,18 +50,16 @@ load core data from asset bytes for a bundled build.)
 and **verifies** each artifact by loading it through the same code the app uses:
 
 ```sh
-# Inspect a home — which tiers will light up?
+# Inspect a home
 cargo run -p plumbline-hydrate -- check --home ~/.local/share/plumbline
 
-# Copy the pack from a source (e.g. an overlay checkout that already has the
-# artifacts) into a home, then verify.
-cargo run -p plumbline-hydrate -- copy --from ../overlay --to ~/.local/share/plumbline
+# Copy the pack from a source into a home, then verify.
+cargo run -p plumbline-hydrate -- copy --from . --to ~/.local/share/plumbline
 ```
 
-`check` reports verse/entry counts, TSK coverage, embedding dim/alignment, and
-morphology coverage; it exits non-zero only when a **required core** file is
-missing. It does not generate the artifacts — run the offline pipeline above for
-that — it assembles and validates them.
+`check` reports verse and entry counts; it exits non-zero only when a
+**required core** file is missing. It does not generate the artifacts — it
+assembles and validates them.
 
 
 ## `akjv.jsonl` — the plain-English overlay

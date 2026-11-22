@@ -33,28 +33,18 @@ their own terms. Those terms travel with the files; nothing above changes them.
   data/     the KJV 1769 text and the 1769 translators' margin notes (public
             domain — a Crown patent applies in the UK); the American King James
             Version overlay (public domain); Strong's Hebrew and Greek
-            dictionaries from Open Scriptures (CC-BY-SA); OSHB Hebrew
-            morphology (CC-BY 4.0); Robinson's Greek parsing codes (public
-            domain); Treasury of Scripture Knowledge cross-references via
-            openbible.info (CC Attribution; the TSK itself is public domain).
-
-  bridge/   Abbott-Smith's Manual Greek Lexicon (public-domain text, from a
-            CC-BY-SA repository); the LXX alignment (Swete's LXX text is public
-            domain; see the upstream repositories for the rest); STEPBible's
-            TIPNR proper-name identities (CC-BY 4.0).
+            dictionaries from Open Scriptures (CC-BY-SA).
 
   fonts     EB Garamond, under the SIL Open Font License. OFL.txt ships beside
             the fonts in apps/web/public/fonts/.
 
 The files built from those sources inherit whatever they were derived from —
-data/kjv.jsonl.idxcache, data/akjv.akjvb, data/source-priors.json,
-data/quotation-pairs.json, data/text-witness.json, and the packed forms the
-shell loads. The shell bundles copies of the data (under
+data/kjv.jsonl.idxcache, data/akjv.akjvb, and the packed forms the shell
+loads. The shell bundles copies of the data (under
 apps/web/public/pack/); the same terms follow the copies.
 
-Everything else is MIT, as above: the code, the authored study set (threads,
-tags, weaves), and data/concept-vectors.vec (+ .meta, .freq), which is trained
-here over Strong's numbers alone.
+Everything else is MIT, as above: the code and the authored study set (threads,
+tags, weaves).
 
 BIBLIOGRAPHY.md has the per-file detail — every source, its upstream repository,
 and its license.

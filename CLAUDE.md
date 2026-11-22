@@ -12,8 +12,15 @@
   (curious / new believer / sharing / established) and the `start=new` link
   parameter were removed 2026-08-31: the reader is the first screen. A shared
   link's destination opens straight away, because a person handed it over and
-  provides the context the welcome used to. The analysis tiers moved to
-  on-by-default (§Architecture #4) since nothing asks any more.
+  provides the context the welcome used to.
+- **No analysis tiers.** "Scholars' analysis" (renderings, morphology,
+  same-root-across-testaments, Treasury cross-references) and "Machine
+  analysis" (appears-alongside, most-used-in, leitwort) were removed
+  2026-11-22, with `crates/rnd`, `core::crossref`, their data files
+  (`bridge/`, `cross-references.tsv`, `morphology.jsonl`, the witness and
+  prior files) and the pack's `analysis` stage — git history has them. A word
+  study is the dictionary entry, the word-usage lens, and the reader's own
+  rows. Do not reintroduce a settings gate for study content.
 - **One shell: the PWA (`apps/web`).** The GTK and WinUI desktop shells were
   retired 2026-07-25 and the Android/Compose one 2026-08-30 — git history has
   them all; ignore stale references to parity, "the two shells", or the
@@ -63,14 +70,12 @@
 |-----------------|------------|
 | `crates/core` (`plumbline-core`) | Pure domain: corpus, Strong's, search, weaves, tags, config, atomic store |
 | `crates/layout` (`plumbline-layout`) | Greedy line-breaker + hit regions (measures via callback) |
-| `crates/rnd` (`plumbline-rnd`) | Feature-gated analytics: bridge, morphology, keyness, witness, concept |
 | `crates/ffi` (`plumbline-ffi`) | The single flat C ABI (cdylib), compiled to wasm for the shell — see [crates/ffi/README.md](crates/ffi/README.md) |
 | `crates/hydrate` (`plumbline-hydrate`) | CLI: copy/verify the data pack into a home |
 | `apps/web` | The PWA shell (Svelte + the core compiled to wasm32-wasip1) |
 
-The five portable crates are dependency-light pure Rust and build anywhere,
-including `wasm32-wasip1`. CI runs the portable tests, the R&D-feature tests,
-an MSRV check, a header-drift guard, and the web shell's Playwright suite. The
+The four portable crates are dependency-light pure Rust and build anywhere,
+including `wasm32-wasip1`. CI runs the portable tests, an MSRV check, a header-drift guard, and the web shell's Playwright suite. The
 offline pipeline that produced the data pack is documented in
 [data-prep/README.md](data-prep/README.md).
 
@@ -82,15 +87,14 @@ Decisions in force:
 |---|----------|--------|
 | 1 | UI strategy | **Thin shell over a shared Rust core.** Today one shell: the PWA. The GTK/WinUI and Compose shells were built and retired; the C ABI is what makes another one cheap. |
 | 2 | Build order | Desktop first (GTK4) → Windows → Android → web; everything but the PWA then retired. |
-| 3 | Data delivery | **Bundle core, download R&D** — KJV + Strong's ship in-app; heavy analytics artifacts are optional packs. |
-| 4 | R&D default | **On by default** — both analysis tiers ship on and the pack downloads unasked (3 MB against 260 MB of Bibles); Settings turns them off. Superseded the guided first-run, which was removed with the welcome (2026-08-31). |
+| 3 | Data delivery | **Text first, the rest behind it** — the open Bible and the stock set are stage `text`; Strong's, margin notes and the hymnal follow as `study`; the other Bibles download in the background as `corpus`; machine-translated dictionaries and suggested weaves are `optional`. |
+| 4 | Analysis tiers | **Removed 2026-11-22** (see Product rules). Was: two opt-out tiers and a 3 MB background pack. |
 | — | Patches / signed rules | Dropped — the Ed25519 point-patch/rule layer was not ported. |
 | — | Future | The paid sync SaaS was **cancelled** — the product is entirely free. Keep the data-model discipline it imposed anyway (stable ids, no host-local assumptions, exportable single-file JSON). |
 
 ```
 Rust core (pure, headless, fully testable)
   ├─ crates/core     domain: canon, references, corpus, Strong's, search, weaves, threads
-  ├─ crates/rnd      OPTIONAL, feature-gated analytics
   ├─ crates/layout   text layout + per-word HIT-TESTING → a display list
   └─ crates/ffi      one C ABI surface → the wasm web binding
 
@@ -201,7 +205,7 @@ needed.
   entry from the request it was stored for. Entries the depot writes are
   Responses it constructs, so they carry no Vary at all.
 - **The data pack's manifest is the load spec** (`formatVersion: 2`). Each entry
-  carries `stage` (`text` | `study` | `analysis`), `seedOnce` for the stock study
+  carries `stage` (`text` | `study` | `corpus` | `optional`), `seedOnce` for the stock study
   set, `role: "corpusCache"`, and a per-file `hash` over the RAW bytes — raw
   because some hosts serve `.gz` with `Content-Encoding: gzip`, so the loader
   cannot know which form it received. The loader switches on those instead of
@@ -220,9 +224,7 @@ needed.
 
 ## Verification
 
-- `cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate`
-- `cargo test --locked -p plumbline-rnd` (featureless — must stay compiling)
-- `cargo test --locked -p plumbline-rnd --features "bridge morphology concept"`
+- `cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-ffi -p plumbline-hydrate`
 - After touching `crates/ffi`'s extern surface: regenerate the header
   (`cargo run -p plumbline-ffi --features bindgen --bin plumbline-bindgen`) — CI
   fails on drift — and keep the wasm-only exports in `crates/ffi/src/wasm.rs` in

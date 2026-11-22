@@ -1,5 +1,5 @@
 <script lang="ts">
-  // One Settings dialog: analysis switches, theme, text size / margin /
+  // One Settings dialog: theme, text size / margin /
   // line-spacing sliders, copy format, bundled stock set.
   import { getSession } from "../state/session.svelte";
   import { shippedBase } from "../lib/locale";
@@ -49,14 +49,6 @@
     s.saveConfig();
   }
 
-  function toggleGate(key: "humanAnalysis" | "machineAnalysis"): void {
-    // `!== true`, not `=== false`: the tiers are opt-in, so an absent value means
-    // off, and `undefined === false` left the first click doing nothing.
-    s.config[key] = s.config[key] !== true;
-    s.saveConfig();
-    // Machine tier on: pull the deferred R&D pack in (no-op if idle already did).
-    if (key === "machineAnalysis" && s.config[key] === true) void s.ensureRnd();
-  }
   /** The switch in progress: which language, and how far its Bible has come
    *  (null fraction = nothing to download). Drives the full-screen overlay at
    *  the bottom of this file. */
@@ -206,13 +198,6 @@
     }
     return t("settings.offlineComplete");
   });
-  /** Preparing is not downloading; say so separately or not at all. */
-  const preparingNote = $derived(
-    offlineComplete && s.rndState !== "ready"
-      ? t("settings.offlinePreparing")
-      : "",
-  );
-
   $effect(() => {
     if (s.showSettings && !offlineBusy) void surveyOffline().then((r) => (offline = r));
   });
@@ -221,9 +206,6 @@
     offlineBusy = true;
     offlineProgress = 0;
     try {
-      // The machine tier first: the piece left out on phones, and loading it
-      // also puts its files in the cache.
-      if (s.rndState !== "ready") await s.ensureRnd();
       offline = await completeOffline((f) => (offlineProgress = f));
     } catch {
       s.showToast(t("settings.offlineFailed"));
@@ -657,6 +639,24 @@
           }}
         />
       </label>
+      <!-- Only does anything while the numbers are off, so it is disabled —
+           not hidden — while they are on. -->
+      <label class="toggle">
+        <span class="body">
+          <span class="name">{t("settings.verseNumbersSunday")}</span>
+          <span class="desc">{t("settings.verseNumbersSundayDesc")}</span>
+        </span>
+        <input
+          type="checkbox"
+          data-setting="verseNumbersSunday"
+          checked={s.config.verseNumbersSunday === true}
+          disabled={s.config.verseNumbers !== false}
+          onchange={() => {
+            s.config.verseNumbersSunday = s.config.verseNumbersSunday !== true;
+            s.saveConfig();
+          }}
+        />
+      </label>
       <label class="toggle">
         <span class="body">
           <span class="name">{t("settings.addedItalics")}</span>
@@ -671,42 +671,6 @@
           }}
         />
       </label>
-      <label class="toggle">
-        <span class="body">
-          <span class="name">{t("settings.human")}</span>
-          <span class="desc">{t("settings.humanDesc")}</span>
-        </span>
-        <input
-          type="checkbox"
-          checked={s.config.humanAnalysis === true}
-          onchange={() => toggleGate("humanAnalysis")}
-        />
-      </label>
-      <label class="toggle">
-        <span class="body">
-          <span class="name">{t("settings.machine")}</span>
-          <span class="desc">{t("settings.machineDesc")}</span>
-        </span>
-        <input
-          type="checkbox"
-          checked={s.config.machineAnalysis === true}
-          onchange={() => toggleGate("machineAnalysis")}
-        />
-      </label>
-      {#if s.config.machineAnalysis === true && s.rndState !== "ready"}
-        <div class="rnd-status">
-          {#if s.rndState === "loading"}
-            <span>
-              {s.rndPreparing
-                ? t("settings.rndPreparing")
-                : t("settings.rndDownloading", { percent: Math.round(s.rndProgress * 100) })}
-            </span>
-          {:else}
-            <span>{t("settings.rndAbsent")}</span>
-            <button class="rnd-now" onclick={() => void s.ensureRnd()}>{t("settings.rndNow")}</button>
-          {/if}
-        </div>
-      {/if}
         <hr />
       <p class="label">{t("settings.copyFormat")}</p>
       {#each copyOpts as token (token)}
@@ -785,16 +749,12 @@
       <div class="offline">
         {#if offlineBusy}
           <span class="off-note">
-            {s.rndPreparing
-              ? t("settings.rndPreparing")
-              : t("settings.offlineDownloading", {
-                  percent: Math.round((s.rndState === "ready" ? offlineProgress : s.rndProgress) * 100),
-                })}
+            {t("settings.offlineDownloading", { percent: Math.round(offlineProgress * 100) })}
           </span>
           <div class="off-bar">
             <div
               class="off-fill"
-              style:width={`${(s.rndState === "ready" ? offlineProgress : s.rndProgress) * 100}%`}
+              style:width={`${offlineProgress * 100}%`}
             ></div>
           </div>
         {:else if offlineComplete}
@@ -804,9 +764,6 @@
               ? ` ${t("settings.offlineUsing", { size: mb(offline.bytesOnDevice) })}`
               : ""}
           </span>
-          {#if preparingNote}
-            <span class="off-note">{preparingNote}</span>
-          {/if}
           <!-- "All downloaded" and "it will still be there" are different claims:
                browsers evict storage under pressure. Say which one is true. -->
           {#if offline?.persisted === false}
@@ -1000,22 +957,6 @@
   h2 {
     font-size: calc(17px * var(--uiScale, 1));
     font-weight: 600;
-  }
-  .rnd-status {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: calc(12.5px * var(--uiScale, 1));
-    color: var(--faded, #8a8276);
-    padding: 0 0 6px 2px;
-  }
-  .rnd-now {
-    font-size: calc(12.5px * var(--uiScale, 1));
-    font-weight: 600;
-    color: var(--gold, #9e7d38);
-    border: 1px solid var(--gold, #9e7d38);
-    border-radius: 5px;
-    padding: 1px 9px;
   }
   .advanced {
     border: 1px solid var(--rule, #d8cba8);

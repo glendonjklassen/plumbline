@@ -40,7 +40,6 @@ use std::sync::OnceLock;
 use plumbline_core::akjv;
 use plumbline_core::config;
 use plumbline_core::corpus::{self, Corpus};
-use plumbline_core::crossref::{self, XRefIx};
 use plumbline_core::memory;
 use plumbline_core::panel::{self, PanelSource};
 use plumbline_core::reading;
@@ -52,7 +51,6 @@ use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
 use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
 use plumbline_core::{canon, devotional, export, hymnal, i18n, notes, session_slot, theme, tombstone, usernote, VRef};
 use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, MeasureMemo, Memoized};
-use plumbline_rnd::{bridge, burst, concept, morph};
 
 pub mod backup;
 pub mod devotionals;
@@ -139,9 +137,6 @@ pub struct PlumblineEngine {
     /// index so a click does not build them whole on the first tap of a session.
     occ_partial: std::sync::Mutex<Option<strongs::OccurrenceIxBuilder>>,
     renderings_partial: std::sync::Mutex<Option<renderings::RenderingsBuilder>>,
-    concept_partial: std::sync::Mutex<Option<concept::ConceptBuilder>>,
-    xref_partial: std::sync::Mutex<Option<crossref::XRefIxBuilder>>,
-    leitwort_partial: std::sync::Mutex<Option<burst::LeitwortBuilder>>,
     /// How far the chunked warm has got. An explicit phase (rather than "build the next thing
     /// that is missing") guarantees the loop terminates even when a build cannot happen yet.
     warm_phase: std::sync::atomic::AtomicUsize,
@@ -166,15 +161,6 @@ pub struct PlumblineEngine {
     /// `*const PlumblineEngine` is safe to share across threads for reads, and a shell may
     /// author off one thread while another reads.
     study: std::sync::RwLock<StudyData>,
-    /// R&D tier: the fused OT↔NT bridge plus the optional morphology artifact. Loaded at open
-    /// when present in the home, but they may also arrive after it (the web fetches the R&D
-    /// pack in the background, then calls [`plumbline_engine_load_rnd_data`]) — hence
-    /// `OnceLock`, set-once through `&self`. Unset means "not (yet) available".
-    bridge: OnceLock<bridge::FusedBridge>,
-    morph: OnceLock<morph::MorphData>,
-    /// TSK topical cross-references, parsed lazily: an 8.5 MB TSV nobody should pay for at
-    /// every open.
-    xref_ix: OnceLock<XRefIx>,
     /// The hymnal, parsed lazily. Set only from a NON-EMPTY parse (the [`Self::strongs`]
     /// stance): on the web `data/hymnal.json` rides the study stage and lands after open, so a
     /// hymn tab opened in that gap probes empty and caching that probe would keep the book
@@ -193,10 +179,6 @@ pub struct PlumblineEngine {
     /// argument, so a shell cannot end up with one pane modernised and the next not; off until
     /// asked, because the text is the KJV.
     akjv_on: std::sync::atomic::AtomicBool,
-    /// The symbolic concept engine (collocations, distribution, communities) and the leitwort
-    /// scan — corpus-wide sweeps, built lazily and cached for the engine's lifetime.
-    concept: OnceLock<concept::Concept>,
-    leitwort: OnceLock<std::collections::HashMap<String, burst::Burst>>,
     /// Words per chapter for the whole canon — the reading map's denominators. Cached because
     /// the navigator asks for all 1,189 chapters every time it opens.
     reading_words: OnceLock<reading::ChapterWords>,
@@ -226,21 +208,6 @@ impl PlumblineEngine {
         if let Some(sd) = strongs {
             let _ = strongs_cell.set(sd);
         }
-        // Without a home nothing is probed on disk (a CWD-relative probe would be
-        // nondeterministic and a mild data-injection surface).
-        //
-        // KJV-only, and load-bearing rather than an optimisation: morphology is keyed by
-        // (refKey, token index) against `kjv1769-tok2`, and another language's corpus
-        // tokenizes the same verse into different words at different indices. Not a version
-        // check on the sidecar — the file is fine, the corpus is a different text.
-        let kjv_text = corpus.tokenization_version() == canon::TOKENIZATION_VERSION;
-        let morph = OnceLock::new();
-        if let (Some(h), true) = (&home, kjv_text) {
-            let data = h.join("data");
-            if let Some(m) = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl")) {
-                let _ = morph.set(m);
-            }
-        }
         let study = load_study(&home);
         PlumblineEngine {
             corpus,
@@ -250,24 +217,16 @@ impl PlumblineEngine {
             search_partial: std::sync::Mutex::new(None),
             occ_partial: std::sync::Mutex::new(None),
             renderings_partial: std::sync::Mutex::new(None),
-            concept_partial: std::sync::Mutex::new(None),
-            xref_partial: std::sync::Mutex::new(None),
-            leitwort_partial: std::sync::Mutex::new(None),
             warm_phase: std::sync::atomic::AtomicUsize::new(0),
             defer_builds: std::sync::atomic::AtomicBool::new(false),
             occ_ix: OnceLock::new(),
             renderings: OnceLock::new(),
             home,
             study: std::sync::RwLock::new(study),
-            bridge: OnceLock::new(),
-            morph,
-            xref_ix: OnceLock::new(),
             akjv: OnceLock::new(),
             akjv_on: std::sync::atomic::AtomicBool::new(false),
             hymnal: OnceLock::new(),
             devotionals: OnceLock::new(),
-            concept: OnceLock::new(),
-            leitwort: OnceLock::new(),
             reading_words: OnceLock::new(),
             families: OnceLock::new(),
             dwell: std::sync::Mutex::new(reading::DwellTracker::default()),
@@ -284,29 +243,6 @@ impl PlumblineEngine {
     /// Exclusive study state, for the authoring entry points.
     fn study_write(&self) -> std::sync::RwLockWriteGuard<'_, StudyData> {
         self.study.write().unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-
-    /// Load the optional R&D artifact (morphology) from the home if it was absent at open.
-    /// Idempotent; nothing loads twice.
-    fn load_rnd_data(&self) {
-        self.load_morph_only();
-    }
-
-    /// The morphology sidecar alone (~10 MB of JSONL to parse).
-    ///
-    /// KJV-only, the same gate `new` applies and for the same reason. What the gate buys here
-    /// is the work, not correctness ([`PanelSource::is_kjv_text`] already withholds the
-    /// gloss): without it a non-KJV reader parses 355,603 entries in one synchronous block, on
-    /// the only thread that answers taps, to build an index nothing would read.
-    fn load_morph_only(&self) {
-        let Some(h) = &self.home else { return };
-        if self.morph.get().is_some() || self.corpus.tokenization_version() != canon::TOKENIZATION_VERSION {
-            return;
-        }
-        let path = h.join("data").join("morphology.jsonl");
-        if let Some(m) = morph::load_morph(canon::TOKENIZATION_VERSION, path) {
-            let _ = self.morph.set(m);
-        }
     }
 
     /// Strong's — empty until the dictionary loads (never cached-empty: the
@@ -335,21 +271,6 @@ impl PlumblineEngine {
         if let Ok(parents) = strongs::load_derivations(h.join("data").join("derivation-families.json")) {
             let _ = self.families.set(strongs::Families::from_parents(&parents));
         }
-    }
-
-    /// The fused OT↔NT bridge — needs Strong's, so it is None until the
-    /// dictionary is in; built once on first use after that.
-    fn bridge(&self) -> Option<&bridge::FusedBridge> {
-        if let Some(b) = self.bridge.get() {
-            return Some(b);
-        }
-        let sd = self.strongs.get()?;
-        let built = match &self.home {
-            Some(h) => bridge::FusedBridge::build(sd, h),
-            None => bridge::FusedBridge::etymology_only(sd),
-        };
-        let _ = self.bridge.set(built);
-        self.bridge.get()
     }
 
     /// Load the stage-2 core data (Strong's dictionary; the study data — incl. the 1769 margin
@@ -483,38 +404,6 @@ impl PlumblineEngine {
         }
     }
 
-    fn xref_ix_ready(&self) -> Option<&XRefIx> {
-        if self.deferring() {
-            self.xref_ix.get()
-        } else {
-            Some(self.xref_ix())
-        }
-    }
-
-    fn concept_ready(&self) -> Option<&concept::Concept> {
-        if self.deferring() {
-            self.concept.get()
-        } else {
-            Some(self.concept())
-        }
-    }
-
-    fn leitwort_ready(&self) -> Option<&std::collections::HashMap<String, burst::Burst>> {
-        if self.deferring() {
-            self.leitwort.get()
-        } else {
-            Some(self.leitwort())
-        }
-    }
-
-    fn bridge_ready(&self) -> Option<&bridge::FusedBridge> {
-        if self.deferring() {
-            self.bridge.get()
-        } else {
-            self.bridge()
-        }
-    }
-
     /// Fold `n` more verses into the occurrence index. 1 while work remains.
     fn warm_occ_slice(&self, n: usize) -> i32 {
         if self.occ_ix.get().is_some() {
@@ -536,9 +425,8 @@ impl PlumblineEngine {
     ///
     /// `slice` is [`WARM_SLICE`] on every shipped path; a parameter only so tests can drive
     /// smaller steps. Without this warm every index is built on first use, and none survives
-    /// the tab, so the first word click of a session pays for all of them at once. The sliced
-    /// phases come first because they are the biggest; what stays a single build measured
-    /// small enough to be one (the bridge, 3 ms), so a tap between phases is still answered.
+    /// the tab, so the first word click of a session pays for all of them at once. Every phase
+    /// is sliced, so a tap between slices is still answered.
     ///
     /// `allow(dead_code)` for the same reason as [`WARM_SLICE`], and it covers the whole warm
     /// cluster this roots (the `warm_*_slice` helpers and the `*_partial` / `warm_phase`
@@ -555,92 +443,13 @@ impl PlumblineEngine {
                 0 => self.warm_search_slice(slice),
                 1 => self.warm_occ_slice(slice),
                 2 => self.warm_renderings_slice(slice),
-                3 => self.warm_xref_slice(slice),
-                4 => self.warm_concept_slice(slice),
-                5 => self.warm_leitwort_slice(slice),
-                6 => {
-                    self.bridge();
-                    0
-                }
                 _ => return 0,
             };
             if more == 1 {
                 return 1; // same phase, more slices to feed
             }
             self.warm_phase.store(phase + 1, Ordering::Relaxed);
-            // A single-shot phase did real work — yield now and come back.
-            if phase >= 3 {
-                return 1;
-            }
         }
-    }
-
-    /// Advance the concept model by one budgeted stage-slice. 1 while work remains. The
-    /// heaviest thing the warm does — twelve stages over the corpus (co-occurrence counts,
-    /// PPMI, kNN, label propagation) — and ~640 ms of blocked worker as one call.
-    fn warm_concept_slice(&self, n: usize) -> i32 {
-        if self.concept.get().is_some() {
-            return 0;
-        }
-        let Ok(mut guard) = self.concept_partial.lock() else {
-            return 0; // poisoned: leave it to the build-on-first-use path
-        };
-        let b = guard.get_or_insert_with(concept::ConceptBuilder::default);
-        if b.step(&self.corpus, n) {
-            return 1;
-        }
-        if let Some(model) = b.take() {
-            let _ = self.concept.set(model);
-        }
-        *guard = None;
-        0
-    }
-
-    /// Parse `n` more rows of the cross-reference TSV. 1 while work remains. 344k rows, 89 ms
-    /// as one call on a desktop — a phone's whole warm-chunk budget with the worker unable to
-    /// answer a tap.
-    fn warm_xref_slice(&self, n: usize) -> i32 {
-        if self.xref_ix.get().is_some() {
-            return 0;
-        }
-        let Ok(mut guard) = self.xref_partial.lock() else {
-            return 0; // poisoned: leave it to the build-on-first-use path
-        };
-        let b = guard.get_or_insert_with(|| match &self.home {
-            Some(h) => crossref::XRefIxBuilder::from_path(crossref::cross_refs_path(h)),
-            // No home: the same empty index `xref_ix()` would have made.
-            None => crossref::XRefIxBuilder::empty(),
-        });
-        // Rows, not verses: at ~12 references per source verse a verse-sized slice would be a
-        // twelfth of the work the other phases do per call.
-        if b.feed(n * 8) {
-            return 1;
-        }
-        if let Some(b) = guard.take() {
-            let _ = self.xref_ix.set(b.finish());
-        }
-        0
-    }
-
-    /// Advance leitwort discovery by one budgeted slice. 1 while work remains. Two cursored
-    /// stages (positions over the corpus, then the burst scan over the codes), 83 ms as a
-    /// single call.
-    fn warm_leitwort_slice(&self, n: usize) -> i32 {
-        if self.leitwort.get().is_some() {
-            return 0;
-        }
-        let Ok(mut guard) = self.leitwort_partial.lock() else {
-            return 0;
-        };
-        let b = guard.get_or_insert_with(|| burst::LeitwortBuilder::new(&burst::BurstParams::default()));
-        if b.step(&self.corpus, n) {
-            return 1;
-        }
-        if let Some(found) = b.take() {
-            let _ = self.leitwort.set(found.into_iter().map(|b| (b.strongs.clone(), b)).collect());
-        }
-        *guard = None;
-        0
     }
 
     /// Fold `n` more verses into the rendering lens. 1 while work remains.
@@ -662,14 +471,6 @@ impl PlumblineEngine {
     /// The rendering lens, built on first use.
     fn renderings(&self) -> &Renderings {
         self.renderings.get_or_init(|| Renderings::build(&self.corpus))
-    }
-
-    /// The TSK cross-references, parsed from the home on first use.
-    fn xref_ix(&self) -> &XRefIx {
-        self.xref_ix.get_or_init(|| match &self.home {
-            Some(h) => crossref::load_cross_refs(crossref::cross_refs_path(h)),
-            None => XRefIx::new(),
-        })
     }
 
     /// The hymnal, parsed from the home on first use — but never cached-empty: on the web
@@ -709,21 +510,6 @@ impl PlumblineEngine {
             }
             _ => empty(),
         }
-    }
-
-    /// The concept engine, built lazily on the first concept query.
-    fn concept(&self) -> &concept::Concept {
-        self.concept.get_or_init(|| concept::Concept::build(&self.corpus))
-    }
-
-    /// Leitwort discoveries keyed by Strong's code, built lazily alongside.
-    fn leitwort(&self) -> &std::collections::HashMap<String, burst::Burst> {
-        self.leitwort.get_or_init(|| {
-            burst::discover_leitworter(&burst::BurstParams::default(), &self.corpus)
-                .into_iter()
-                .map(|b| (b.strongs.clone(), b))
-                .collect()
-        })
     }
 }
 
@@ -1625,47 +1411,6 @@ pub unsafe extern "C" fn plumbline_engine_strongs_occurrences_json(
     })
 }
 
-/// The rendering lens for a Strong's code: every distinct English rendering of
-/// it, most frequent first, each with an occurrence count and its (capped)
-/// verse refs + token spans. `{"code","renderings":[{"rendering","total",
-/// "capped","refs":[{"verse","display","span":[start,end]}]}]}`. Each `refs`
-/// list is capped at [`OCCURRENCE_CAP`]; `renderings` is empty for an untagged
-/// or unknown code. Null only on a null engine. Caller-freed.
-///
-/// # Safety
-/// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_renderings_json(
-    engine: *const PlumblineEngine,
-    code: *const c_char,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(engine), Some(code)) = (engine.as_ref(), opt_str(code)) else {
-            return ptr::null_mut();
-        };
-        let renderings = engine
-            .renderings()
-            .renderings(code)
-            .into_iter()
-            .map(|r| {
-                let total = r.count;
-                let refs: Vec<wire::WireRenderingRef> = r
-                    .occs
-                    .iter()
-                    .take(OCCURRENCE_CAP)
-                    .map(|o| wire::WireRenderingRef {
-                        verse: o.vref.ref_key(),
-                        display: o.vref.display(),
-                        span: [o.span.0, o.span.1],
-                    })
-                    .collect();
-                wire::WireRendering { rendering: r.label.to_string(), total, capped: total > refs.len(), refs }
-            })
-            .collect();
-        out_json(&wire::WireRenderings { code: code.to_string(), renderings })
-    })
-}
-
 /// The reverse lens: the Strong's codes a surface English word translates,
 /// most frequent first. `{"word","codes":[{"code","count"}]}`. Reveals where
 /// one English word hides a Greek/Hebrew distinction ("love" ← agape and
@@ -1813,71 +1558,6 @@ pub unsafe extern "C" fn plumbline_engine_suggested_weaves_json(engine: *const P
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::suggested_weaves_to_wire(&e.study_read().weaves)),
         None => ptr::null_mut(),
-    })
-}
-
-// ── R&D tier: read (morphology, fused bridge) ────────────────────────────────
-//
-// These consume the offline artifacts loaded at open (see `data-prep`). Each returns null when
-// its artifact is absent, so a shell shows the section exactly when it exists.
-
-/// The fused OT↔NT bridge partners of a Strong's code as JSON:
-/// `{"code","partners":[{code,sources,prior}]}`, ranked by trust prior. The etymology layer
-/// works from the dictionary alone, so this is available even for a bytes-opened engine
-/// (external witnesses need a home). Null on a null engine / invalid code.
-///
-/// # Safety
-/// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_bridge_partners_json(
-    engine: *const PlumblineEngine,
-    code: *const c_char,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
-            return ptr::null_mut();
-        };
-        let partners = e
-            .bridge()
-            .map(|b| b.partners(code))
-            .unwrap_or_default()
-            .into_iter()
-            .map(|p| {
-                // Provenance classified once here, so the tier set and research-grade flag
-                // travel with each partner and no shell reimplements the mapping.
-                let tiers = bridge::tiers_of(&p.sources).into_iter().map(|t| t.wire_name().to_string()).collect();
-                let research_grade = p.sources.iter().any(|s| bridge::research_grade(s));
-                wire::WireBridgePartner { code: p.code, sources: p.sources, prior: p.prior, tiers, research_grade }
-            })
-            .collect();
-        out_json(&wire::WireBridgePartners { code: code.to_string(), partners })
-    })
-}
-
-/// The morphology of one token as JSON:
-/// `{"verse","tokenIndex","code","gloss"}`. Null when no morphology is loaded,
-/// the reference is unparseable, or that token carries no annotation.
-///
-/// # Safety
-/// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_morph_json(
-    engine: *const PlumblineEngine,
-    ref_key: *const c_char,
-    token_index: u32,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
-            return ptr::null_mut();
-        };
-        let (Some(md), Some(vref)) = (e.morph.get(), VRef::parse_ref_key(rk)) else {
-            return ptr::null_mut();
-        };
-        let Some(entry) = md.entries(&vref).iter().find(|en| en.tok == token_index) else {
-            return ptr::null_mut();
-        };
-        let Some(gloss) = md.gloss(&vref, token_index) else { return ptr::null_mut() };
-        out_json(&wire::WireMorph { verse: vref.ref_key(), token_index, code: entry.code.clone(), gloss })
     })
 }
 
@@ -2876,30 +2556,6 @@ pub unsafe extern "C" fn plumbline_engine_verse_notes_json(
     })
 }
 
-/// The verse's TSK study cross-references (best-voted first) as JSON, or null
-/// when the verse has none or the TSK artifact is absent.
-///
-/// # Safety
-/// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_study_xrefs_json(
-    engine: *const PlumblineEngine,
-    ref_key: *const c_char,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
-            return ptr::null_mut();
-        };
-        let Some(vref) = VRef::parse_ref_key(rk) else {
-            return ptr::null_mut();
-        };
-        match e.xref_ix_ready().and_then(|ix| ix.get(&vref)) {
-            Some(rs) if !rs.is_empty() => out_json(&wire::study_xrefs_to_wire(&vref, rs)),
-            _ => ptr::null_mut(),
-        }
-    })
-}
-
 /// The full weave library (canonical + suggested) with every link field a
 /// shell needs for connectors, compare cards, the chord map and the
 /// constellation. Never null on a live engine (empty library → empty list).
@@ -3019,72 +2675,6 @@ pub unsafe extern "C" fn plumbline_engine_constellation_json(
         let pins: Vec<usize> = opt_str(pins_json).and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default();
         out_json(&wire::constellation_to_wire(&e.study_read().weaves, &e.corpus, page as usize, &pins))
     })
-}
-
-/// The symbolic concept engine's view of a Strong's code: occurrence total,
-/// testament split, concentrating books, per-book dispersion counts,
-/// collocates, co-occurrence community, and the leitwort discovery when one
-/// exists. Null when the code never occurs. Built lazily on first call
-/// (corpus-wide sweep, ~seconds) and cached.
-///
-/// # Safety
-/// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_concept_json(
-    engine: *const PlumblineEngine,
-    code: *const c_char,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
-            return ptr::null_mut();
-        };
-        let Some(ce) = e.concept_ready() else {
-            return ptr::null_mut();
-        };
-        let Some(stat) = ce.stat(code) else {
-            return ptr::null_mut();
-        };
-        let (ot, nt) = ce.testament_split(code);
-        let leitwort = e.leitwort_ready().and_then(|l| l.get(code)).map(|b| wire::WireLeitwort {
-            n: b.n,
-            win_count: b.win_count,
-            score: b.score,
-            label: burst::span_label(|id| i18n::book_name(i18n::active(), id), &b.win_start, &b.win_end),
-        });
-        out_json(&wire::WireConcept {
-            code: code.to_string(),
-            total: stat.total,
-            ot,
-            nt,
-            top_books: ce
-                .top_books(code, 5)
-                .into_iter()
-                .map(|(book, count)| wire::WireBookCount {
-                    display: i18n::book_name(i18n::active(), &book),
-                    book,
-                    count,
-                })
-                .collect(),
-            by_book: stat.by_book.clone(),
-            // A concept's neighbours are concepts (see `name_noise`).
-            collocates: wire::scored_to_wire(
-                ce.collocates(code, 48).into_iter().filter(|(c, _)| !name_noise(e, c)).take(12).collect(),
-            ),
-            community: ce.community(code).into_iter().filter(|c| !name_noise(e, c)).take(12).collect(),
-            leitwort,
-        })
-    })
-}
-
-/// The proper nouns that stay in a concept neighbourhood: the divine name and Christ are
-/// concepts here, not incidental names.
-const CONCEPT_KEEP_NAMES: &[&str] = &["H3068", "H3069", "H3050", "H136", "G2424", "G5547"];
-
-/// Whether `code` is a proper noun that has no business ringing a concept — "faith" surrounded
-/// by Ephraim, Jerusalem and Shechem reads as noise. Only the collocate lists drop these;
-/// names stay reachable in word study, concordance and search.
-fn name_noise(e: &PlumblineEngine, code: &str) -> bool {
-    !CONCEPT_KEEP_NAMES.contains(&code) && e.strongs().get(code).is_some_and(strongs::is_proper_noun)
 }
 
 /// A short English gloss for a Strong's code — the modal KJV rendering across
@@ -3210,8 +2800,7 @@ fn usage_over(
 }
 
 impl PanelSource for PlumblineEngine {
-    /// Whether the open text is the KJV — the same question `new` asks before it wires
-    /// morphology and the overlay, and for the same reason.
+    /// Whether the open text is the KJV — the text the overlay is aligned to.
     fn is_kjv_text(&self) -> bool {
         self.corpus.tokenization_version() == canon::TOKENIZATION_VERSION
     }
@@ -3225,10 +2814,6 @@ impl PanelSource for PlumblineEngine {
     }
     fn verse_display(&self, refkey: &str) -> Option<String> {
         VRef::parse_ref_key(refkey).map(|v| v.display())
-    }
-    fn morph_gloss(&self, verse: &str, token: u32) -> Option<String> {
-        let (md, v) = (self.morph.get()?, VRef::parse_ref_key(verse)?);
-        md.gloss(&v, token)
     }
     fn occurrence_count(&self, code: &str) -> usize {
         self.occ_ix_ready().map_or(0, |ix| ix.verses(code).len())
@@ -3255,26 +2840,6 @@ impl PanelSource for PlumblineEngine {
             lemma: entry.and_then(|e| e.lemma.clone()),
             xlit: entry.and_then(|e| e.xlit.clone()),
         }
-    }
-    fn renderings(&self, code: &str) -> Vec<panel::RenderingView> {
-        let Some(rx) = self.renderings_ready() else { return Vec::new() };
-        rx.renderings(code)
-            .into_iter()
-            .map(|r| panel::RenderingView { rendering: r.label.to_string(), total: r.count as u32 })
-            .collect()
-    }
-    fn rendering_refs(&self, code: &str, rendering: &str) -> Option<panel::RenderingRefsView> {
-        let key = plumbline_core::renderings::normalize(rendering);
-        let r = self
-            .renderings_ready()?
-            .renderings(code)
-            .into_iter()
-            .find(|r| plumbline_core::renderings::normalize(r.label) == key)?;
-        Some(panel::RenderingRefsView {
-            rendering: r.label.to_string(),
-            total: r.count as u32,
-            refs: r.occs.iter().take(PANEL_OCC_CAP).map(|o| (o.vref.ref_key(), o.vref.display())).collect(),
-        })
     }
     fn word_codes(&self, word: &str) -> Vec<String> {
         // The SOLE renderings, not the whole reverse index: a tap on an untagged
@@ -3351,41 +2916,6 @@ impl PanelSource for PlumblineEngine {
     fn code_family(&self, code: &str) -> Vec<String> {
         self.families().map(|f| f.family(code)).unwrap_or_else(|| vec![code.to_string()])
     }
-    fn bridge_partners(&self, code: &str) -> Vec<panel::BridgePartnerView> {
-        self.bridge_ready()
-            .map(|b| b.partners(code))
-            .unwrap_or_default()
-            .into_iter()
-            .map(|p| panel::BridgePartnerView {
-                sources: p.sources.iter().map(|s| bridge::source_label(s).to_string()).collect(),
-                tiers: bridge::tiers_of(&p.sources).into_iter().map(|t| t.wire_name().to_string()).collect(),
-                research_grade: p.sources.iter().any(|s| bridge::research_grade(s)),
-                code: p.code,
-            })
-            .collect()
-    }
-    fn concept(&self, code: &str) -> Option<panel::ConceptView> {
-        let ce = self.concept_ready()?;
-        ce.stat(code)?;
-        let (ot, nt) = ce.testament_split(code);
-        let leitwort = self.leitwort_ready().and_then(|l| l.get(code)).map(|b| panel::LeitwortView {
-            n: b.n,
-            win_count: b.win_count,
-            score: b.score,
-            label: burst::span_label(|id| i18n::book_name(i18n::active(), id), &b.win_start, &b.win_end),
-        });
-        Some(panel::ConceptView {
-            community: ce.community(code),
-            top_books: ce
-                .top_books(code, 5)
-                .into_iter()
-                .map(|(b, n)| (i18n::book_name(i18n::active(), &b), n))
-                .collect(),
-            ot,
-            nt,
-            leitwort,
-        })
-    }
     fn verse_xrefs(&self, verse: &str) -> Vec<panel::XrefView> {
         let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
         let study = self.study_read();
@@ -3397,21 +2927,6 @@ impl PanelSource for PlumblineEngine {
                 panel::XrefView { verse: p.verse, display: p.display, weave: p.weave, weave_index }
             })
             .collect()
-    }
-    fn study_xrefs(&self, verse: &str) -> Vec<panel::StudyXrefView> {
-        let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
-        match self.xref_ix_ready().and_then(|ix| ix.get(&v)) {
-            Some(rs) => rs
-                .iter()
-                .map(|r| panel::StudyXrefView {
-                    to: r.to.ref_key(),
-                    to_display: r.to.display(),
-                    end: r.end.as_ref().map(|e| e.ref_key()),
-                    end_display: r.end.as_ref().map(|e| e.display()),
-                })
-                .collect(),
-            None => Vec::new(),
-        }
     }
     fn verse_tags(&self, verse: &str) -> Vec<(usize, String)> {
         self.study_read()
@@ -3627,8 +3142,8 @@ impl PanelSource for PlumblineEngine {
 }
 
 /// A panel view as the typed block list (`{blocks:[…]}`). Word study: the clicked
-/// word's dictionary + Full-study tiers + this verse's cross-references/notes.
-/// `full` gates the R&D tiers + author actions. Never null on a live engine.
+/// word's dictionary entries, then this verse's own rows, weave partners and
+/// margin notes. Never null on a live engine.
 ///
 /// # Safety
 /// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
@@ -3637,7 +3152,6 @@ pub unsafe extern "C" fn plumbline_engine_word_study_blocks_json(
     engine: *const PlumblineEngine,
     ref_key: *const c_char,
     token_index: u32,
-    full: bool,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
@@ -3647,84 +3161,25 @@ pub unsafe extern "C" fn plumbline_engine_word_study_blocks_json(
             .and_then(|v| e.corpus.verse(&v).and_then(|verse| verse.tokens.get(token_index as usize).cloned()))
             .map(|t| t.strongs)
             .unwrap_or_default();
-        out_json(&wire::blocks_to_wire(panel::word_study(e, full, rk, token_index, &codes)))
+        out_json(&wire::blocks_to_wire(panel::word_study(e, rk, token_index, &codes)))
     })
 }
 
-/// [`plumbline_engine_word_study_blocks_json`] with per-tier gates instead of the Simple/Full
-/// flag: `gates` bit 0 = curated-scholarship (human) analysis, bit 1 = learned/statistical
-/// (machine) analysis. The text and the reader's own data are always on.
+/// The standalone `code:CODE` study card: one Strong's code's dictionary entry
+/// and the way into its concordance. Never null on a live engine.
 ///
 /// # Safety
-/// `engine` is a live engine; `ref_key` is a valid NUL-terminated UTF-8 string.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_word_study_blocks2_json(
-    engine: *const PlumblineEngine,
-    ref_key: *const c_char,
-    token_index: u32,
-    gates: u32,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
-            return ptr::null_mut();
-        };
-        let codes: Vec<String> = VRef::parse_ref_key(rk)
-            .and_then(|v| e.corpus.verse(&v).and_then(|verse| verse.tokens.get(token_index as usize).cloned()))
-            .map(|t| t.strongs)
-            .unwrap_or_default();
-        out_json(&wire::blocks_to_wire(panel::word_study_gated(
-            e,
-            panel::Gates::from_bits(gates),
-            rk,
-            token_index,
-            &codes,
-        )))
-    })
-}
-
-/// The standalone `code:CODE[:word]` study card (the reverse rendering-lens
-/// target). `word` may be null. Never null on a live engine.
-///
-/// # Safety
-/// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+/// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
 pub unsafe extern "C" fn plumbline_engine_code_study_blocks_json(
     engine: *const PlumblineEngine,
     code: *const c_char,
-    word: *const c_char,
-    full: bool,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
             return ptr::null_mut();
         };
-        out_json(&wire::blocks_to_wire(panel::code_study_card(e, full, code, opt_str(word).unwrap_or(""))))
-    })
-}
-
-/// [`plumbline_engine_code_study_blocks_json`] with per-tier gates (bit 0 = human
-/// analysis, bit 1 = machine analysis).
-///
-/// # Safety
-/// `engine` is a live engine; `code` is valid NUL-terminated UTF-8; `word` is
-/// null or valid NUL-terminated UTF-8.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_code_study_blocks2_json(
-    engine: *const PlumblineEngine,
-    code: *const c_char,
-    word: *const c_char,
-    gates: u32,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
-            return ptr::null_mut();
-        };
-        out_json(&wire::blocks_to_wire(panel::code_study_card_gated(
-            e,
-            panel::Gates::from_bits(gates),
-            code,
-            opt_str(word).unwrap_or(""),
-        )))
+        out_json(&wire::blocks_to_wire(panel::code_study_card(e, code)))
     })
 }
 
@@ -3742,25 +3197,6 @@ pub unsafe extern "C" fn plumbline_engine_concordance_blocks_json(
             return ptr::null_mut();
         };
         out_json(&wire::blocks_to_wire(panel::concordance(e, code)))
-    })
-}
-
-/// The concordance filtered to one rendering of a code, as blocks. Never null
-/// on a live engine.
-///
-/// # Safety
-/// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_rendering_concordance_blocks_json(
-    engine: *const PlumblineEngine,
-    code: *const c_char,
-    rendering: *const c_char,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(e), Some(code), Some(rendering)) = (engine.as_ref(), opt_str(code), opt_str(rendering)) else {
-            return ptr::null_mut();
-        };
-        out_json(&wire::blocks_to_wire(panel::rendering_concordance(e, code, rendering)))
     })
 }
 
@@ -3841,8 +3277,8 @@ pub unsafe extern "C" fn plumbline_engine_suggested_blocks_json(engine: *const P
     })
 }
 
-/// A weave compare card as blocks (out-of-range index → empty). `full` adds the
-/// edit-notes action. Never null on a live engine.
+/// A weave compare card as blocks (out-of-range index → empty). Never null on a
+/// live engine.
 ///
 /// # Safety
 /// `engine` is a live engine (or null → null).
@@ -3850,10 +3286,9 @@ pub unsafe extern "C" fn plumbline_engine_suggested_blocks_json(engine: *const P
 pub unsafe extern "C" fn plumbline_engine_compare_blocks_json(
     engine: *const PlumblineEngine,
     index: u32,
-    full: bool,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
-        Some(e) => out_json(&wire::blocks_to_wire(panel::compare_card(e, full, index as usize))),
+        Some(e) => out_json(&wire::blocks_to_wire(panel::compare_card(e, index as usize))),
         None => ptr::null_mut(),
     })
 }
@@ -4243,8 +3678,8 @@ pub unsafe extern "C" fn plumbline_i18n_set_language(chosen: *const c_char, devi
     })
 }
 
-/// Force the lazy analytics indexes (concept engine, leitwort scan) to build now — call once
-/// on a background thread at startup in Full mode so the first study click doesn't stall. Safe
+/// Force the lazy indexes (search, occurrences, the rendering lens) to build now — call once
+/// on a background thread at startup so the first study click doesn't stall. Safe
 /// from any thread (the builds are `OnceLock`-guarded) and idempotent. Null on success, else
 /// an owned error.
 ///
@@ -4259,10 +3694,6 @@ pub unsafe extern "C" fn plumbline_engine_warm_indexes(engine: *const PlumblineE
         e.search_ix();
         e.occ_ix();
         e.renderings();
-        e.xref_ix();
-        e.bridge();
-        e.concept();
-        e.leitwort();
         ptr::null_mut()
     })
 }
@@ -4281,24 +3712,6 @@ pub unsafe extern "C" fn plumbline_engine_load_core_data(engine: *const Plumblin
             return out_string("null engine".to_string());
         };
         e.load_core_data();
-        ptr::null_mut()
-    })
-}
-
-/// Load the optional R&D artifact (the morphology sidecar) from the engine's home if it was
-/// absent at open — the web fetches the R&D pack in the background, writes it into the home,
-/// then calls this. Idempotent, cheap when the file is still missing, safe from any thread.
-/// Null on success, else an owned error.
-///
-/// # Safety
-/// `engine` is a live engine (or null → an error string).
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_load_rnd_data(engine: *const PlumblineEngine) -> *mut c_char {
-    guard_err(|| {
-        let Some(e) = engine.as_ref() else {
-            return out_string("null engine".to_string());
-        };
-        e.load_rnd_data();
         ptr::null_mut()
     })
 }

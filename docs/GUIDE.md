@@ -1,6 +1,6 @@
 # Using Plumbline
 
-The daily-driver manual: getting around, search, the study panel tier by tier,
+The daily-driver manual: getting around, search, the study panel,
 weaves, and where your work is kept. Install and shortcuts live in the
 [README](../README.md).
 
@@ -19,8 +19,6 @@ weaves, and where your work is kept. Install and shortcuts live in the
   click anywhere on it to send the active pane there.
 - **1769 notes.** The margin notes of the 1769 edition (literal Hebrew
   renderings, variants) appear in the study panel for verses that have them.
-- **Analysis.** The curated and machine-derived study sections are on by
-  default; Settings ▸ Advanced turns either off.
 
 ## Search
 
@@ -48,44 +46,22 @@ yet implemented** — the box will say so rather than guess.
 
 Hovering any word underlines it if it carries a Strong's tag and shows a quick
 gloss. **`Ctrl`+click** (or double-click) opens the full panel. What you see,
-top to bottom — and how much weight to give each tier:
+top to bottom:
 
-**Dictionary tier (facts about the word):**
-
-- **The Strong's entry** — lemma, transliteration, pronunciation, definition,
-  and the KJV's own renderings, with an *N occurrences ▸* link that pages
-  through every verse carrying the code.
-- **Morphology** — the original-language parse of the exact word you clicked
-  (tense, voice, mood, case…), when the sidecar annotates it.
-
-**Analytics tier (statistics over the corpus — study prompts, not authorities):**
-
-- **SAME ROOT ACROSS TESTAMENTS** — cross-language cognates: Strong's own
-  etymology fused with external witnesses (Septuagint alignment, Abbott-Smith,
-  proper-name links), each chip naming its sources. *“disputed by usage”*
-  marks a link a self-trained text model disbelieves — the text's own usage
-  pushing back on the tradition.
-- **APPEARS ALONGSIDE** — the collocation community: concepts that share this
-  one's verses.
-- **MOST USED IN** — top books by occurrence count (`Genesis ×12`) and the
-  OT/NT split.
-- **LEITWORT** — flagged when the word's occurrences pack into one stretch far
-  denser than chance (a repeated motif), with the span and how many of its
-  uses cluster there.
-
-Removed 2026-07-30, all three machine-generated from the concept embedding and
-judged to be noise: SIMILAR CONCEPTS, the radial concept map, and "verses like
-this". The embedding artifact no longer ships.
-
-**Curated tier:**
-
+- **The word and where it is used** — every verse that uses it, in context,
+  with a chip for each original word behind it; a chip switches the list to
+  that Hebrew or Greek word's occurrences, widened to its family on request.
+- **The Strong's entry** — lemma, transliteration, pronunciation and
+  definition, with an *N occurrences ▸* link that pages through every verse
+  carrying the code.
+- **Your own rows** — your notes on the verse, **＋ tag verse / ＋ add to
+  thread**, the weaves the verse is in, and your **tags** on it.
 - **cross-references** — weave links touching this verse (yours and shipped).
-- **study cross-references (TSK)** — the Treasury of Scripture Knowledge's
-  ~343,000 curated references, best-voted first. Clearly labelled; never
-  blessed into weaves automatically.
+- The verse's **1769 margin notes**.
 
-Plus **＋ tag verse / ＋ add to thread** authoring links, your **tags** on the
-verse, and the verse's **1769 margin notes**.
+The analysis sections — renderings, morphology, same root across testaments,
+appears alongside, most used in, leitwort, and the Treasury of Scripture
+Knowledge cross-references — were removed 2026-11-22.
 
 ## Weaves
 

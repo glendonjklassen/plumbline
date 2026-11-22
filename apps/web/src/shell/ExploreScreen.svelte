@@ -308,10 +308,10 @@
                   <p class="pace-sub">{t("explore.paceReading")}</p>
                   {#if paceId === "day"}
                     <p class="pace-line">
-                      {plural("explore.paceTodayChapters.one", "explore.paceTodayChapters.other", pace?.chapters ?? 0, { n: nf.format(pace?.chapters ?? 0) })}
+                      {plural("explore.paceTodayWords.one", "explore.paceTodayWords.other", pace?.words ?? 0, { n: nf.format(pace?.words ?? 0) })}
                     </p>
                     <p class="pace-line">
-                      {plural("explore.paceTodayWords.one", "explore.paceTodayWords.other", pace?.words ?? 0, { n: nf.format(pace?.words ?? 0) })}
+                      {plural("explore.paceTodayChapters.one", "explore.paceTodayChapters.other", pace?.chapters ?? 0, { n: nf.format(pace?.chapters ?? 0) })}
                     </p>
                   {:else}
                     <p class="pace-line">{t("explore.paceWords", { n: nf0.format(pace?.wordsPerDay ?? 0) })}</p>
@@ -552,14 +552,6 @@
     .settled {
       animation: none;
     }
-  }
-  .band h3 {
-    margin: 0 0 2px;
-    font-size: calc(12px * var(--uiScale, 1));
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--section, #776537);
   }
   .row {
     min-height: auto;

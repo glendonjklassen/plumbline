@@ -1,7 +1,7 @@
 // "Is all of it on this device?" — the survey and the repair behind
-// Settings → Offline. Most of the app is local after a first visit, but the
-// machine tier is deferred on phones until asked for, downloads fail, and browsers
-// evict under pressure — none of which announces itself. So this checks every file
+// Settings → Offline. Most of the app is local after a first visit, but
+// downloads fail and browsers evict under pressure — neither of which announces
+// itself. So this checks every file
 // the manifest lists against the depot and re-fetches what is missing.
 
 import { depotBytes, depotHas, requestPersistence } from "./depot";

@@ -11,8 +11,6 @@ export interface BootInfo {
   config: any;
   version: string;
   bundledOn: boolean;
-  /** This session fetches the machine tier by itself — don't offer a button. */
-  rndAuto: boolean;
   /** Reader faces the worker actually loaded — 2 for a family with an italic, 1 for
    *  one without. A failed load is otherwise silent: the worker measures in platform
    *  metrics while the main thread paints the real face, so lines wrap where they are
@@ -97,16 +95,10 @@ export class EngineRpc {
   /** A warm pass finished: indexes a study opened mid-warm had to skip exist now, so
    *  anything on screen should re-fetch. */
   onWarmReady: () => void = () => {};
-  /** The deferred R&D pack finished loading — machine tiers just lit up. */
-  onRndReady: () => void = () => {};
-  /** R&D pack download progress (0..1) — drives the "load analysis" UI. */
-  onRndProgress: (fraction: number) => void = () => {};
   /** How far the language-pack download has got, 0..1. */
   onLangPackProgress: (fraction: number) => void = () => {};
   /** Download progress for a language a PANE asked for (0..1). */
   onPaneLangProgress: (code: string, fraction: number) => void = () => {};
-  /** Download finished; the engine is now parsing it (seconds on a phone). */
-  onRndPreparing: () => void = () => {};
   /** A save to this device's storage did not land — quota, blocked storage, a browser
    *  that dropped the database. Deliberately not the fatal path below: a failed save is
    *  recoverable, so routing it through `#die` would kill a session over a full disk. */
@@ -163,9 +155,6 @@ export class EngineRpc {
       if (m.type === "readingWrote") return this.onReadingWrote();
       if (m.type === "coreReady") return this.onCoreReady();
       if (m.type === "warmReady") return this.onWarmReady();
-      if (m.type === "rndReady") return this.onRndReady();
-      if (m.type === "rndProgress") return this.onRndProgress(m.fraction ?? 0);
-      if (m.type === "rndPreparing") return this.onRndPreparing();
       if (m.type === "persistFailed")
         return this.onPersistFailed({ detail: String(m.detail ?? ""), retrying: m.retrying === true });
       if (m.type === "persistOk") return this.onPersistOk();
@@ -223,16 +212,13 @@ export class EngineRpc {
     this.onFatal(e);
   }
 
-  /** `deferRnd` skips the automatic machine-tier download (phones offer an explicit
-   *  "load analysis" action instead).
-   *
-   *  `lang` is what this device resolved last time (`localStorage`); `locale` is the
+  /** `lang` is what this device resolved last time (`localStorage`); `locale` is the
    *  device's language, which decides only when the reader has not chosen one. Both
    *  are needed and neither is enough: `lang` is empty on a first visit, so a corpus
    *  chosen from it alone opens the KJV for a phone we are about to speak Arabic to.
    *  See `corpusRoleFor`. */
   boot(
-    opts: { deferRnd?: boolean; locale?: string; lang?: string; sharedLang?: string; textFont?: string } = {},
+    opts: { locale?: string; lang?: string; sharedLang?: string; textFont?: string } = {},
   ): Promise<BootInfo> {
     const base = new URL(import.meta.env.BASE_URL, location.href).href;
     // Armed for the whole boot, rearmed by every message, dropped when boot settles
@@ -247,7 +233,6 @@ export class EngineRpc {
       // before the first layout, and the first layout is answered the moment boot
       // replies.
       textFont: opts.textFont ?? DEFAULT_FONT,
-      deferRnd: opts.deferRnd === true,
       locale: opts.locale ?? "",
       // A `?lang=` off the link that opened this visit. Separate from `lang`,
       // which is what this DEVICE resolved last time: one is a choice made for
@@ -331,9 +316,6 @@ export class EngineRpc {
   setTextFont(token: string): Promise<number> {
     const base = new URL(import.meta.env.BASE_URL, location.href).href;
     return this.#send({ op: "setTextFont", base, token });
-  }
-  loadRnd(): Promise<void> {
-    return this.#send({ op: "loadRnd" });
   }
   /** Reclaim superseded packs and shell assets. Runs in the worker, where the pin
    *  lives — the pin is the authority on what to keep. */

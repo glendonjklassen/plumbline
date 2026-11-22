@@ -11,10 +11,6 @@
 
   const s = getSession();
 
-  // NO EMBEDDED MAP CARD. The machine tier's sections are the symbolic concept
-  // engine's, and they are ordinary blocks — they come through `blocks` below
-  // like everything else.
-
   // Notes browser (Explore ▸ Notes parity): every personal note, tap → verse,
   // edit in place. Built shell-side from user_notes_json (no block producer).
   const notes = $derived.by(() => {
@@ -33,7 +29,7 @@
       // `qIn` with no language IS `q`, so a study opened from an ordinary pane
       // takes exactly the path it always did.
       case "wordStudy":
-        return s.qIn(p.lang, "wordStudyBlocks", p.refKey, p.tokenIndex, s.gates)?.blocks;
+        return s.qIn(p.lang, "wordStudyBlocks", p.refKey, p.tokenIndex)?.blocks;
       case "wordUsage":
         return s.qIn(
           p.lang,
@@ -44,17 +40,14 @@
           p.tokenIndex ?? 0,
           p.scope,
           p.page,
-          s.gates,
           p.family === true,
           p.books === true,
           p.allCodes === true,
         )?.blocks;
       case "codeStudy":
-        return s.qIn(p.lang, "codeStudyBlocks", p.code, p.word, s.gates)?.blocks;
+        return s.qIn(p.lang, "codeStudyBlocks", p.code)?.blocks;
       case "concordance":
         return s.qIn(p.lang, "concordanceBlocks", p.code)?.blocks;
-      case "renderingConcordance":
-        return s.qIn(p.lang, "renderingConcordanceBlocks", p.code, p.rendering)?.blocks;
       case "threads":
         return s.q("threadsBlocks")?.blocks;
       case "thread":
@@ -68,7 +61,7 @@
       case "suggested":
         return s.q("suggestedBlocks")?.blocks;
       case "compare":
-        return s.q("compareBlocks", p.index, true)?.blocks;
+        return s.q("compareBlocks", p.index)?.blocks;
       case "guide":
         return s.qs("guideBlocks")?.blocks;
       case "about":
@@ -107,25 +100,6 @@
   /** refKey → the core's `go:` verb, split on the LAST space, as core `go_uri`
    *  does. Also in App.svelte and MemorizeHost — see App.svelte for why. */
   const goUri = (refKey: string): string => `go:${refKey.replace(/ (?=\S*$)/, ":")}`;
-
-  // The "load analysis" offer — a LAST RESORT, not a progress bar. The load does
-  // not block the one thread that answers taps; sections appear as their data
-  // arrives, so a progress bar over a study that is already usable would narrate
-  // a problem the reader does not have.
-  //
-  // What remains is the one case that is a genuine ASK rather than a status: a
-  // reader on Data Saver who has not got the pack, where downloading it is their
-  // decision to make. `rndDeferred` is false whenever the load is already coming,
-  // so this stays invisible for everyone else — otherwise every phone launch
-  // would put a one-time-download button in front of someone who had already
-  // taken the download.
-  const rndOffer = $derived.by(() => {
-    const k = s.panel?.kind;
-    if (!(k === "wordStudy" || k === "wordUsage" || k === "codeStudy" || k === "concordance")) return false;
-    if (!(s.gates & 2) || s.rndState === "ready") return false;
-    // Only the ask. A load already under way says nothing and shows nothing.
-    return s.rndDeferred && s.rndState !== "loading";
-  });
 
   // NO "first look is slow" warning. The engine does not build an index inside a
   // reader's request, so a study answers immediately with what is ready and fills
@@ -171,12 +145,6 @@
           </div>
         {/each}
       {:else}
-        {#if rndOffer}
-          <div class="rnd-offer">
-            <span class="rnd-note">{t("panel.rndOffer")}</span>
-            <button class="rnd-load" onclick={() => void s.ensureRnd()}>{t("panel.rndLoad")}</button>
-          </div>
-        {/if}
         {#if akjvWord}
           <p class="akjv">
             <span class="akjv-now">{akjvWord.akjv}</span>
@@ -343,32 +311,6 @@
     font-size: calc(14.5px * var(--uiScale, 1));
     margin-top: 2px;
     white-space: pre-wrap;
-  }
-  .rnd-offer {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 9px;
-    background: var(--paper, #fcf9f4);
-    padding: 10px 12px;
-    margin: 6px 0;
-  }
-  .rnd-note {
-    font-size: calc(12.5px * var(--uiScale, 1));
-    color: var(--faded, #8a8276);
-  }
-  .rnd-load {
-    align-self: flex-start;
-    font-size: calc(13px * var(--uiScale, 1));
-    font-weight: 600;
-    color: var(--gold, #9e7d38);
-    border: 1px solid var(--gold, #9e7d38);
-    border-radius: 6px;
-    padding: 3px 12px;
-  }
-  .rnd-load:hover {
-    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
   /* Phones: bottom sheet (Compose-phone pattern).
 

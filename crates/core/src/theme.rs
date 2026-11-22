@@ -328,12 +328,7 @@ impl Palette {
             Faded => &self.faded,
             Gold => &self.gold,
             Section => &self.section,
-            TierGod => &self.tier_god,
-            TierHuman => &self.tier_human,
-            TierMachine => &self.tier_machine,
-            TierResearch => &self.tier_research,
             Mono => &self.mono,
-            Morph => &self.morph,
             Lemma => &self.lemma,
         })
     }
@@ -1059,7 +1054,7 @@ mod tests {
         let p = palette(Theme::Light);
         assert_eq!(p.panel_color(crate::panel::Color::Ink), None);
         assert_eq!(p.panel_color(crate::panel::Color::Gold), Some(p.gold.as_str()));
-        assert_eq!(p.panel_color(crate::panel::Color::TierHuman), Some(p.tier_human.as_str()));
+        assert_eq!(p.panel_color(crate::panel::Color::Mono), Some(p.mono.as_str()));
     }
 }
 

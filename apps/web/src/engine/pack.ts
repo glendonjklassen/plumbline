@@ -16,10 +16,8 @@ import { shippedBase } from "../lib/locale";
 export type PackStage =
   /** Needed before the reader sees a word: the corpus cache + the stock set. */
   | "text"
-  /** Strong's, margin notes, cross-references, the overlay, bridge witnesses. */
+  /** Strong's, its derivation families, margin notes, the overlay, the hymnal. */
   | "study"
-  /** The machine tier — background, and deferred behind an action on phones. */
-  | "analysis"
   /** Every language's Bible except the one this boot opens: downloaded in the
    *  background once there is text on screen, so picking a language is a switch
    *  rather than a download. Only the opened one is inflated into the home
@@ -173,7 +171,7 @@ async function fetchFiles(
   onProgress?: (p: PackProgress) => void,
 ): Promise<Map<string, Uint8Array>> {
   const totalGz = files.reduce((s, f) => s + f.gzBytes, 0);
-  // Bytes as they arrive, not files as they finish: one analysis file dwarfs the
+  // Bytes as they arrive, not files as they finish: one large file dwarfs the
   // rest, so per-file reporting would sit at 0% for the whole download.
   let received = 0;
   const out = new Map<string, Uint8Array>();
@@ -320,8 +318,8 @@ export function fetchPack(
   );
 }
 
-/** Stage 2 — Strong's, cross-references, margin notes, the overlay and the bridge
- *  witnesses, fetched right after the reader hands over. A device with a language's
+/** Stage 2 — Strong's, its derivation families, margin notes, the overlay and the
+ *  hymnal, fetched right after the reader hands over. A device with a language's
  *  corpus installed also gets that language's lexicon here, so the engine's
  *  `strongs_for` finds it in the home before `loadCoreData`. */
 export function fetchStage2Pack(
@@ -349,14 +347,6 @@ export function fetchPackEntries(
   onProgress?: (p: PackProgress) => void,
 ): Promise<Map<string, Uint8Array>> {
   return fetchFiles(version, files, onProgress);
-}
-
-/** The machine tier — background after first paint, never on the boot path. */
-export function fetchRndPack(
-  manifest: PackManifest,
-  onProgress?: (p: PackProgress) => void,
-): Promise<Map<string, Uint8Array>> {
-  return fetchFiles(manifest.version, manifest.files.filter((f) => f.stage === "analysis"), onProgress);
 }
 
 /** Whether an optional pack file is one THIS home has asked for.
