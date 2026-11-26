@@ -165,7 +165,15 @@
           <button
             class="primary"
             disabled={dueRefs.length === 0}
-            onclick={() => (s.memorize = { view: "review" })}
+            onclick={() => {
+              // The queue the reader tapped on, handed over. Left to the reset
+              // effect to read, `dueRefs` could go empty between this tap and
+              // that effect — a study refresh re-keys the read, and the answer
+              // is null until it lands — and the review opened on "nothing
+              // due" with cards due. The typed-recall spec lost that race in
+              // CI (2026-11-25).
+              if (dueRefs.length > 0) s.memorize = { view: "review", queue: [...dueRefs] };
+            }}
           >
             {t("memorize.reviewDue", { n: dueRefs.length })}
           </button>
