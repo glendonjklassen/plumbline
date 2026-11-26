@@ -4025,11 +4025,28 @@ pub extern "C" fn plumbline_panel_guide_blocks_json() -> *mut c_char {
     guard(ptr::null_mut(), || out_json(&wire::blocks_to_wire(panel::guide_blocks())))
 }
 
-/// The About card as panel blocks. Engine-independent (static content). Never
-/// null.
+/// The About card as panel blocks: [`panel::ABOUT_VERSES`] from `engine`'s
+/// Bible, then the static content. A null engine, or a Bible without one of
+/// the verses, leaves that verse out. Never null.
+///
+/// # Safety
+/// `engine` is a live engine or null.
 #[no_mangle]
-pub extern "C" fn plumbline_panel_about_blocks_json() -> *mut c_char {
-    guard(ptr::null_mut(), || out_json(&wire::blocks_to_wire(panel::about_blocks())))
+pub unsafe extern "C" fn plumbline_panel_about_blocks_json(engine: *const PlumblineEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let verses: Vec<panel::AboutVerse> = match engine.as_ref() {
+            None => Vec::new(),
+            Some(e) => panel::ABOUT_VERSES
+                .iter()
+                .filter_map(|r| {
+                    let vref = VRef::parse_ref_key(r)?;
+                    let body = e.corpus.verse(&vref)?.body();
+                    Some(panel::AboutVerse { refkey: r.to_string(), display: vref.display(), body })
+                })
+                .collect(),
+        };
+        out_json(&wire::blocks_to_wire(panel::about_blocks(&verses)))
+    })
 }
 
 /// Parse a `(kind, value)` pair into a [`TagTarget`].

@@ -65,7 +65,14 @@
   $effect(() => {
     void pairs;
     void s.palette;
-    void s.paneVerseGeom;
+    // Each pane's geometry BY INDEX. `void s.paneVerseGeom` alone subscribed to
+    // the array being replaced, which never happens: a pane writes its own slot
+    // (`s.paneVerseGeom[i] = geom`, ReaderPane), and a slot write wakes only a
+    // reader of that slot. So a layout landing after the last frame drew nothing
+    // new, and the connectors appeared only if something unrelated redrew later
+    // — any query answer does, through `pairs` — which is a race the weave
+    // connector spec lost in CI (2026-11-25).
+    for (let i = 0; i < s.panes.length; i++) void s.paneVerseGeom[i];
     void s.panes.map((p) => `${p.book}:${p.chapter}:${p.scrollY}`).join();
     void cssW;
     void cssH;

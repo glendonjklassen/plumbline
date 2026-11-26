@@ -292,16 +292,22 @@ export class StudyEngine {
   // ── the prayer list ──────────────────────────────────────────────────────────
 
   /** The prayer list at `today` (the reader's own `YYYY-MM-DD`):
-   *  `{praying:[…],answered:[…]}`. Lives in the home (`prayers/<id>.json`), so
-   *  it rides the backup and merges. */
+   *  `{praying:[…],answered:[…],kinds:[…]}`, both lists newest first. Lives in
+   *  the home (`prayers/<id>.json`), so it is in every backup. */
   prayers(today: string): any {
     return this.#json("plumbline_engine_prayers_json", today);
   }
-  prayerAdd(title: string, stamp: string): string | null {
-    return this.#author("plumbline_engine_prayer_add", (f, ...p) => f(this.#engine, ...p), [title, stamp]);
+  /** Days prayed on over the reading pace's windows:
+   *  `{windows:[{id,days,prayedDays}]}`, empty with no prayers. */
+  prayerPace(today: string): any {
+    return this.#json("plumbline_engine_prayer_pace_json", today);
   }
-  prayerEdit(id: string, title: string, stamp: string): string | null {
-    return this.#author("plumbline_engine_prayer_edit", (f, ...p) => f(this.#engine, ...p), [id, title, stamp]);
+  /** `kind` is one of the list's `kinds` ids. */
+  prayerAdd(title: string, kind: string, stamp: string): string | null {
+    return this.#author("plumbline_engine_prayer_add", (f, ...p) => f(this.#engine, ...p), [title, kind, stamp]);
+  }
+  prayerEdit(id: string, title: string, kind: string, stamp: string): string | null {
+    return this.#author("plumbline_engine_prayer_edit", (f, ...p) => f(this.#engine, ...p), [id, title, kind, stamp]);
   }
   /** Record that a prayer was prayed for on `day`. Once a day; a repeat is a no-op. */
   prayerPrayed(id: string, day: string): string | null {
@@ -445,6 +451,11 @@ export class StudyEngine {
       (this.#w.exports.plumbline_engine_thread_blocks2_json as Function)(this.#engine, index, edit ? 1 : 0) as number,
     );
     return s === null ? null : JSON.parse(s);
+  }
+  /** The About card: three verses from the open Bible, then the edition,
+   *  provenance and covenant. On the engine, not the static path, for the verses. */
+  aboutBlocks(): any {
+    return this.#json("plumbline_panel_about_blocks_json");
   }
   tagsBlocks(): any {
     return this.#json("plumbline_engine_tags_blocks_json");
@@ -1003,10 +1014,6 @@ export function guideBlocks(w: WasmEngine): any {
   return s === null ? null : JSON.parse(s);
 }
 
-export function aboutBlocks(w: WasmEngine): any {
-  const s = w.takeStr((w.exports.plumbline_panel_about_blocks_json as Function)() as number);
-  return s === null ? null : JSON.parse(s);
-}
 
 export function engineVersion(w: WasmEngine): string {
   return w.takeStr((w.exports.plumbline_version as Function)() as number) ?? "?";

@@ -395,13 +395,12 @@ test.describe("the guide", () => {
     await pick(page, EN, "de");
 
     await page.getByLabel(DE["common.menu"]).click();
-    await page.locator(".menu").getByRole("button", { name: DE["shell.guideAndAbout"] }).click();
+    await page.locator(".menu").getByRole("button", { name: DE["shell.guide"], exact: true }).click();
 
     const card = page.locator('[data-surface="study panel"]').first();
     await expect(card).toContainText(DE["guide.title"], { timeout: 30_000 });
     // The German headings, and none of the English the card used to be built from.
     await expect(card).toContainText(DE["guide.memorize.title"]);
-    await expect(card).toContainText(DE["about.covenant.title"]);
     await expect(card).not.toContainText(EN["guide.title"]);
     await expect(card).not.toContainText("HIDE IT IN YOUR HEART");
     await expect(card).not.toContainText("MAKE IT YOURS");

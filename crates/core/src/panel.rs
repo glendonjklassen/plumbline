@@ -1985,7 +1985,6 @@ pub fn guide_blocks() -> Vec<Block> {
 /// above is the one-line wrapper the shells call.
 pub fn guide_blocks_in(lang: i18n::Lang) -> Vec<Block> {
     let mut out = vec![Block::para(vec![Run::new(i18n::t(lang, "guide.title", &[]), sz::TITLE, Color::Ink).bold()])];
-    out.push(Block::para(vec![Run::new(i18n::t(lang, "guide.lede", &[]), sz::BODY, Color::Faded)]));
 
     guide_section(&mut out, lang, "guide.read.title", &["guide.read.p1", "guide.read.p2", "guide.read.p3"]);
     // "If the older English is hard going" — the Modernized wording setting,
@@ -2012,16 +2011,37 @@ pub fn guide_blocks_in(lang: i18n::Lang) -> Vec<Block> {
 
     out.push(Block::Rule);
     out.push(Block::para(vec![Run::new(i18n::t(lang, "panel.shortcutsHint", &[]), sz::SMALL, Color::Faded)]));
-    // Guide & About are one combined card — inline the About content here.
-    out.push(Block::Rule);
-    about_body(&mut out, lang);
     out
 }
 
-/// The About content (edition, provenance, covenant), pushed onto `out` so both
-/// the standalone About card and the combined guide can reuse it verbatim.
-fn about_body(out: &mut Vec<Block>, lang: i18n::Lang) {
+/// The verses the About card opens with, as refKeys: what Scripture is, the
+/// charge to war a good warfare, and who that warfare is against. Verses only —
+/// the card puts no words of its own beside them (maintainer, 2026-11-25).
+pub const ABOUT_VERSES: [&str; 3] = ["2Tim 3:16", "1Tim 1:18", "Eph 6:12"];
+
+/// One of [`ABOUT_VERSES`], resolved by whoever holds the Bible: the text in
+/// the reader's own edition and the reference as that language writes it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AboutVerse {
+    pub refkey: String,
+    pub display: String,
+    pub body: String,
+}
+
+/// The About content (the verses, then edition, provenance, covenant).
+fn about_body(out: &mut Vec<Block>, lang: i18n::Lang, verses: &[AboutVerse]) {
     out.push(Block::para(vec![Run::new(i18n::t(lang, "about.heading", &[]), sz::TITLE, Color::Ink).bold()]));
+    // Each verse, then its reference, which opens it in the reader.
+    for v in verses {
+        out.push(Block::para(vec![
+            Run::new(&v.body, sz::BODY, Color::Ink),
+            Run::new("  ", sz::SMALL, Color::Faded),
+            Run::new(&v.display, sz::SMALL, Color::Gold).link(go_uri(&v.refkey)),
+        ]));
+    }
+    if !verses.is_empty() {
+        out.push(Block::Rule);
+    }
     out.push(Block::para(vec![Run::new(i18n::t(lang, "about.lede", &[]), sz::BODY, Color::Ink)]));
     // Every address the app is served from, so a reader whose link stopped
     // working knows the other one. Hosts, not URLs: this is read, not tapped.
@@ -2047,16 +2067,17 @@ fn about_body(out: &mut Vec<Block>, lang: i18n::Lang) {
     guide_section(out, lang, "about.covenant.title", &["about.covenant.p1"]);
 }
 
-/// The About card: edition, provenance, and the covenant (also inlined at the
-/// end of [`guide_blocks`] so Guide & About read as one card).
-pub fn about_blocks() -> Vec<Block> {
-    about_blocks_in(i18n::active())
+/// The About card: [`ABOUT_VERSES`] as the caller resolved them (none, with no
+/// Bible open), then edition, provenance, and the covenant. A card of its own,
+/// apart from the guide.
+pub fn about_blocks(verses: &[AboutVerse]) -> Vec<Block> {
+    about_blocks_in(i18n::active(), verses)
 }
 
 /// [`about_blocks`] in an explicit language — see [`guide_blocks_in`].
-pub fn about_blocks_in(lang: i18n::Lang) -> Vec<Block> {
+pub fn about_blocks_in(lang: i18n::Lang, verses: &[AboutVerse]) -> Vec<Block> {
     let mut out = Vec::new();
-    about_body(&mut out, lang);
+    about_body(&mut out, lang, verses);
     out
 }
 

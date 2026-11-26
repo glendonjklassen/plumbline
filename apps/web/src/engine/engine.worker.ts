@@ -56,7 +56,6 @@ import {
   SCRIPT_FALLBACK_BY_TOKEN,
 } from "./fonts.generated";
 import {
-  aboutBlocks,
   configLoad,
   configSave,
   engineVersion,
@@ -711,7 +710,6 @@ function statics(): Record<string, (...a: any[]) => any> {
     i18nCatalog: (chosen: string, device: string) => i18nCatalog(w, chosen, device),
     i18nSetLanguage: (chosen: string, device: string) => i18nSetLanguage(w, chosen, device),
     guideBlocks: () => guideBlocks(w),
-    aboutBlocks: () => aboutBlocks(w),
     engineVersion: () => engineVersion(w),
     // Engine-independent, so they are on the static path and the shell can ask for
     // them before (or without) an engine — what the church button and the dwell timer

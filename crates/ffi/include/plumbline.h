@@ -1064,9 +1064,13 @@ char *plumbline_engine_memory_score_json(const struct PlumblineEngine *engine,
 // null.
 char *plumbline_panel_guide_blocks_json(void);
 
-// The About card as panel blocks. Engine-independent (static content). Never
-// null.
-char *plumbline_panel_about_blocks_json(void);
+// The About card as panel blocks: [`panel::ABOUT_VERSES`] from `engine`'s
+// Bible, then the static content. A null engine, or a Bible without one of
+// the verses, leaves that verse out. Never null.
+//
+// # Safety
+// `engine` is a live engine or null.
+char *plumbline_panel_about_blocks_json(const struct PlumblineEngine *engine);
 
 // Free a buffer returned by [`plumbline_backup_encrypt`] or
 // [`plumbline_backup_decrypt`]. `len` is the length that call reported. Null is
@@ -1401,31 +1405,48 @@ char *plumbline_engine_plan_set_appearance(struct PlumblineEngine *engine,
                                            const char *icon,
                                            const char *color);
 
-// The prayer list at `today` (`YYYY-MM-DD`) as `{praying:[…],answered:[…]}`,
-// each `{id,title,created,prayedDays,prayedToday,lastPrayed?,answered?,
-// answer?}`. Never null on a live engine.
+// The prayer list at `today` (`YYYY-MM-DD`) as
+// `{praying:[…],answered:[…],kinds:[…],confession:[{label,verses}]}`, each prayer
+// `{id,title,kind,created,prayedDays,prayedToday,lastPrayed?,answered?,
+// answer?}` and each kind `{id,answerable,example,exampleLabel}`. Both lists
+// are newest first: `praying` by the day added, `answered` by the day
+// answered. Never null on a live engine.
 //
 // # Safety
 // `engine` is a live engine (or null → null); `today` is null or valid
 // NUL-terminated UTF-8.
 char *plumbline_engine_prayers_json(const struct PlumblineEngine *engine, const char *today);
 
-// Add a prayer. `stamp` is a caller-supplied UTC timestamp. An empty title is refused. Null
-// on success, else an owned error string.
+// Prayer activity over the reading pace's windows, as
+// `{windows:[{id,days,prayedDays}]}` — [`prayer::pace`] over the home's
+// prayers at `today` (`YYYY-MM-DD`). No prayers, or no home, answers no
+// windows. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null); `today` is null or valid
+// NUL-terminated UTF-8.
+char *plumbline_engine_prayer_pace_json(const struct PlumblineEngine *engine, const char *today);
+
+// Add a prayer of type `kind` (one of the `kinds` ids). `stamp` is a
+// caller-supplied UTC timestamp. An empty title and an unknown type are
+// refused. Null on success, else an owned error string.
 //
 // # Safety
 // `engine` is a live engine; the string args are valid NUL-terminated UTF-8.
 char *plumbline_engine_prayer_add(struct PlumblineEngine *engine,
                                   const char *title,
+                                  const char *kind,
                                   const char *stamp);
 
-// Replace prayer `id`'s title. Null on success, else an owned error string.
+// Replace prayer `id`'s title and type. An answered prayer cannot take a type
+// that is not answerable. Null on success, else an owned error string.
 //
 // # Safety
 // `engine` is a live engine; the string args are valid NUL-terminated UTF-8.
 char *plumbline_engine_prayer_edit(struct PlumblineEngine *engine,
                                    const char *id,
                                    const char *title,
+                                   const char *kind,
                                    const char *stamp);
 
 // Record that prayer `id` was prayed for on `day` (`YYYY-MM-DD`). Repeating a
@@ -1438,7 +1459,7 @@ char *plumbline_engine_prayer_prayed(struct PlumblineEngine *engine,
                                      const char *day);
 
 // Mark prayer `id` answered on `day` (`YYYY-MM-DD`), with an optional
-// `comment` (empty for none). Null on success, else an owned error string.
+// `comment` (empty for none). A type that is not answerable is refused. Null on success, else an owned error string.
 //
 // # Safety
 // `engine` is a live engine; the string args are valid NUL-terminated UTF-8.

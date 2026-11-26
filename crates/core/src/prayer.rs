@@ -5,9 +5,10 @@
 //! devices: a restore merges by it ([`crate::merge`]) — the newer edit wins, and
 //! the days prayed on are a union of both sides.
 //!
-//! A prayer has a title, the days the reader marked it prayed for, and — once
-//! answered — the day and an optional comment. It stays until the reader
-//! deletes it; there is no expiry.
+//! A prayer has a title, a type ([`KINDS`]), the days the reader marked it
+//! prayed for, and — once answered — the day and an optional comment. Only the
+//! types that ask for something can be answered; praise, thanks and lament stay on the
+//! list. A prayer stays until the reader deletes it; there is no expiry.
 //!
 //! Days are the reader's own calendar days (`YYYY-MM-DD`), handed in by the
 //! shell; `created` and `updated` are UTC stamps. Marking a day prayed does not
@@ -18,6 +19,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::civil::date_to_days;
 use crate::Error;
 
 /// The format every prayer is written in. Frozen: these files ship inside
@@ -28,6 +30,65 @@ pub const FORMAT: &str = "plumbline-prayer-v1";
 /// home-relative path.
 pub const DIR: &str = "prayers";
 
+/// One type of prayer. The name and definition a reader sees are the shell's
+/// strings (`prayer.kind.<id>`, `prayer.kindDef.<id>`); what a type can do is
+/// here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Kind {
+    /// The token stored in the file's `kind` key.
+    pub id: &'static str,
+    /// Whether a prayer of this type can be marked answered.
+    pub answerable: bool,
+    /// A prayer of this type in Scripture: the refKey of its first verse.
+    pub example: &'static str,
+    /// The example's last verse, when it runs past the first.
+    pub example_to: Option<u8>,
+}
+
+/// The type a prayer has when its file names none: every prayer written before
+/// types existed was a request.
+pub const REQUEST: &str = "request";
+
+/// Every type, in the order a picker lists them.
+pub const KINDS: [Kind; 6] = [
+    Kind { id: REQUEST, answerable: true, example: "1Sam 1:11", example_to: None },
+    Kind { id: "intercession", answerable: true, example: "Num 14:19", example_to: None },
+    Kind { id: "praise", answerable: false, example: "Ps 145:1", example_to: Some(3) },
+    Kind { id: "thanks", answerable: false, example: "Ps 136:1", example_to: None },
+    Kind { id: "lament", answerable: false, example: "Ps 13:1", example_to: Some(2) },
+    Kind { id: "imprecation", answerable: true, example: "Ps 69:24", example_to: None },
+];
+
+/// What a reader who picks Confession is shown: verses, and nothing to add.
+/// Confession is deliberately not one of [`KINDS`] — it is never put on the
+/// list. Each is `(first verse's refKey, last verse)`: David's confession,
+/// then the two promises about a sin confessed.
+pub const CONFESSION: [(&str, Option<u8>); 3] = [("Ps 51:1", Some(4)), ("Ps 103:12", None), ("Heb 8:12", None)];
+
+/// The type with token `id`. A token this build has never heard of behaves as a
+/// request, and stays in the file as it was written.
+pub fn kind_of(id: &str) -> &'static Kind {
+    KINDS.iter().find(|k| k.id == id).unwrap_or(&KINDS[0])
+}
+
+/// A type argument: one of [`KINDS`]' tokens.
+fn kind_arg(id: &str) -> Result<String, Error> {
+    let id = id.trim();
+    if KINDS.iter().any(|k| k.id == id) {
+        Ok(id.to_string())
+    } else {
+        Err(Error::Corpus(format!("not a type of prayer: {id}")))
+    }
+}
+
+fn request() -> String {
+    REQUEST.to_string()
+}
+
+fn is_request(kind: &String) -> bool {
+    kind == REQUEST
+}
+
 /// One prayer, as it is on disk.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +97,10 @@ pub struct Prayer {
     /// 32 lowercase hex chars (`store::new_id`).
     pub id: String,
     pub title: String,
+    /// One of [`KINDS`]' tokens. Left out of the file for a request, which is
+    /// also what an absent key means.
+    #[serde(default = "request", skip_serializing_if = "is_request")]
+    pub kind: String,
     pub created: String,
     #[serde(default)]
     pub updated: String,
@@ -135,13 +200,15 @@ fn title_of(title: &str) -> Result<String, Error> {
     Ok(t.to_string())
 }
 
-/// Add a prayer. `id` is the caller's fresh identity (`store::new_id`), `stamp`
-/// a UTC timestamp. An empty title is refused.
-pub fn add(home: impl AsRef<Path>, title: &str, id: &str, stamp: &str) -> Result<PathBuf, Error> {
+/// Add a prayer of type `kind`. `id` is the caller's fresh identity
+/// (`store::new_id`), `stamp` a UTC timestamp. An empty title and an unknown
+/// type are refused.
+pub fn add(home: impl AsRef<Path>, title: &str, kind: &str, id: &str, stamp: &str) -> Result<PathBuf, Error> {
     let prayer = Prayer {
         format: FORMAT.to_string(),
         id: id.to_string(),
         title: title_of(title)?,
+        kind: kind_arg(kind)?,
         created: stamp.to_string(),
         updated: stamp.to_string(),
         prayed: Vec::new(),
@@ -165,11 +232,21 @@ fn change(home: impl AsRef<Path>, id: &str, f: impl FnOnce(&mut Prayer) -> Resul
     write(&lp.file, &prayer)
 }
 
-/// Replace a prayer's title.
-pub fn edit(home: impl AsRef<Path>, id: &str, title: &str, stamp: &str) -> Result<(), Error> {
+/// Replace a prayer's title and type. An answered prayer cannot take a type
+/// that has no answer; it is moved back to the list first.
+pub fn edit(home: impl AsRef<Path>, id: &str, title: &str, kind: &str, stamp: &str) -> Result<(), Error> {
     let title = title_of(title)?;
+    let kind = kind_arg(kind)?;
     change(home, id, |p| {
+        if p.answered.is_some() && !kind_of(&kind).answerable {
+            return Err(Error::Corpus(format!("an answered prayer cannot become {kind}")));
+        }
         p.title = title;
+        // The same type leaves the stored token alone, so a token from a later
+        // build survives an edit of the title.
+        if kind_of(&p.kind).id != kind {
+            p.kind = kind;
+        }
         p.updated = stamp.to_string();
         Ok(())
     })
@@ -190,10 +267,14 @@ pub fn mark_prayed(home: impl AsRef<Path>, id: &str, on: &str) -> Result<(), Err
 
 /// Mark prayer `id` answered on `on`, with an optional comment (`None` or empty
 /// is no comment). Answering an answered prayer replaces the day and comment.
+/// A type that has no answer (praise, thanks, lament) is refused.
 pub fn answer(home: impl AsRef<Path>, id: &str, comment: Option<&str>, on: &str, stamp: &str) -> Result<(), Error> {
     let on = day(on)?;
     let comment = comment.map(str::trim).filter(|c| !c.is_empty()).map(str::to_string);
     change(home, id, |p| {
+        if !kind_of(&p.kind).answerable {
+            return Err(Error::Corpus(format!("a prayer of {} is not answered", kind_of(&p.kind).id)));
+        }
         p.answered = Some(on);
         p.answer = comment;
         p.updated = stamp.to_string();
@@ -224,6 +305,36 @@ pub fn delete(home: impl AsRef<Path>, id: &str) -> Result<Option<String>, Error>
     Ok(Some(lp.prayer.updated))
 }
 
+/// One window of prayer activity: the last `days` calendar days through today.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrayerWindow {
+    /// `day`, `week`, `month` or `all`.
+    pub id: &'static str,
+    /// Calendar days in the window, today included (never below 1).
+    pub days: i64,
+    /// Days in the window on which any prayer was marked prayed.
+    pub prayed_days: u32,
+}
+
+/// The days prayed on today, over the last 7 days, the last 30, and since the
+/// first prayer — the reading pace's windows, each ending at `today`
+/// (`YYYY-MM-DD`, the reader's own day). `None` with no prayers. A day counts
+/// once however many prayers were prayed on it, and a day after today counts in
+/// every window, as the reading pace counts it. A deleted prayer takes its days
+/// with it.
+pub fn pace(prayers: &[LoadedPrayer], today: &str) -> Option<Vec<PrayerWindow>> {
+    let today = date_to_days(today)?;
+    let prayed: std::collections::BTreeSet<i64> =
+        prayers.iter().flat_map(|p| &p.prayer.prayed).filter_map(|d| date_to_days(d)).collect();
+    let first = prayers.iter().filter_map(|p| date_to_days(&p.prayer.created)).chain(prayed.first().copied()).min()?;
+    let window = |id: &'static str, days: i64| {
+        let from = today - days + 1;
+        PrayerWindow { id, days, prayed_days: prayed.range(from..).count() as u32 }
+    };
+    Some(vec![window("day", 1), window("week", 7), window("month", 30), window("all", (today - first).max(0) + 1)])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,7 +357,7 @@ mod tests {
     #[test]
     fn a_new_prayer_is_written_exactly_so() {
         let home = scratch("golden");
-        let path = add(&home, "  Anna's surgery ", ID_A, "2026-11-21T10:00:00Z").unwrap();
+        let path = add(&home, "  Anna's surgery ", REQUEST, ID_A, "2026-11-21T10:00:00Z").unwrap();
         assert_eq!(path.file_name().unwrap(), format!("{ID_A}.json").as_str());
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
@@ -269,8 +380,8 @@ mod tests {
     fn a_prayer_is_prayed_for_answered_reopened_and_deleted() {
         let home = scratch("life");
         assert!(load(&home).0.is_empty());
-        add(&home, "Anna's surgery", ID_A, "2026-11-01T00:00:00Z").unwrap();
-        add(&home, "A new job", ID_B, "2026-11-02T00:00:00Z").unwrap();
+        add(&home, "Anna's surgery", REQUEST, ID_A, "2026-11-01T00:00:00Z").unwrap();
+        add(&home, "A new job", REQUEST, ID_B, "2026-11-02T00:00:00Z").unwrap();
         assert_eq!(load(&home).0.iter().map(|p| p.prayer.id.as_str()).collect::<Vec<_>>(), [ID_A, ID_B]);
 
         // Praying is recorded once a day, and is not an edit.
@@ -312,7 +423,7 @@ mod tests {
             ),
         )
         .unwrap();
-        edit(&home, ID_A, "new", "2026-11-02T00:00:00Z").unwrap();
+        edit(&home, ID_A, "new", REQUEST, "2026-11-02T00:00:00Z").unwrap();
         let back: Value = serde_json::from_str(&std::fs::read_to_string(prayer_file(&home, ID_A)).unwrap()).unwrap();
         assert_eq!(back["title"], "new");
         assert_eq!(back["created"], "2026-11-01T00:00:00Z");
@@ -325,14 +436,93 @@ mod tests {
     #[test]
     fn empty_titles_bad_days_and_unknown_ids_are_refused() {
         let home = scratch("refuse");
-        assert!(add(&home, "   ", ID_A, "t").is_err());
+        assert!(add(&home, "   ", REQUEST, ID_A, "t").is_err());
         assert!(load(&home).0.is_empty(), "a refused prayer was written");
-        add(&home, "x", ID_A, "t").unwrap();
-        assert!(edit(&home, ID_A, " ", "t2").is_err());
+        add(&home, "x", REQUEST, ID_A, "t").unwrap();
+        assert!(edit(&home, ID_A, " ", REQUEST, "t2").is_err());
+        assert!(edit(&home, ID_A, "x", "vow", "t2").is_err());
+        assert!(add(&home, "x", "vow", ID_B, "t").is_err());
+        assert!(add(&home, "x", "confession", ID_B, "t").is_err(), "a confession was put on the list");
         assert!(mark_prayed(&home, ID_A, "today").is_err());
         assert!(mark_prayed(&home, ID_A, "2026-13-40").is_err());
         assert!(mark_prayed(&home, ID_B, "2026-11-01").is_err());
         assert!(answer(&home, ID_B, None, "2026-11-01", "t2").is_err());
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A file with no `kind` is a request and is written back without one; the
+    /// other types are stored, and only the ones that ask can be answered.
+    #[test]
+    fn a_prayer_has_a_type_and_praise_and_thanks_are_never_answered() {
+        let home = scratch("kind");
+        add(&home, "Anna's surgery", REQUEST, ID_A, "2026-11-01T00:00:00Z").unwrap();
+        assert_eq!(one(&home, ID_A).kind, REQUEST);
+        assert!(!std::fs::read_to_string(prayer_file(&home, ID_A)).unwrap().contains("kind"));
+
+        add(&home, "A good harvest", "thanks", ID_B, "2026-11-02T00:00:00Z").unwrap();
+        assert!(std::fs::read_to_string(prayer_file(&home, ID_B)).unwrap().contains(r#""kind": "thanks""#));
+        assert!(answer(&home, ID_B, None, "2026-11-03", "2026-11-03T00:00:00Z").is_err());
+        assert_eq!(one(&home, ID_B).answered, None, "thanks was answered");
+
+        // A request becomes an intercession and is still answered…
+        edit(&home, ID_A, "Anna's surgery", "intercession", "2026-11-04T00:00:00Z").unwrap();
+        answer(&home, ID_A, None, "2026-11-05", "2026-11-05T00:00:00Z").unwrap();
+        // …and, answered, cannot become praise until it is moved back.
+        assert!(edit(&home, ID_A, "Anna's surgery", "praise", "2026-11-06T00:00:00Z").is_err());
+        assert_eq!(one(&home, ID_A).kind, "intercession");
+        reopen(&home, ID_A, "2026-11-07T00:00:00Z").unwrap();
+        edit(&home, ID_A, "Anna's surgery", "praise", "2026-11-08T00:00:00Z").unwrap();
+        assert_eq!(one(&home, ID_A).kind, "praise");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A type from a later build acts as a request here and is not rewritten by
+    /// an edit that leaves the type alone.
+    #[test]
+    fn an_unknown_type_acts_as_a_request_and_survives_an_edit() {
+        let home = scratch("later-kind");
+        std::fs::create_dir_all(home.join(DIR)).unwrap();
+        std::fs::write(
+            prayer_file(&home, ID_A),
+            format!(
+                r#"{{"format":"plumbline-prayer-v1","id":"{ID_A}","title":"old","kind":"vow","created":"t","updated":"t"}}"#
+            ),
+        )
+        .unwrap();
+        assert_eq!(kind_of(&one(&home, ID_A).kind).id, REQUEST);
+        edit(&home, ID_A, "new", REQUEST, "t2").unwrap();
+        assert_eq!(one(&home, ID_A).kind, "vow");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn every_type_has_an_example_verse_that_parses() {
+        let passages = KINDS.iter().map(|k| (k.example, k.example_to)).chain(CONFESSION);
+        for (first, to) in passages {
+            let r = crate::VRef::parse_ref_key(first).unwrap_or_else(|| panic!("{first}"));
+            assert!(to.is_none_or(|to| u16::from(to) > r.verse), "{first}: the passage ends before it starts");
+        }
+        assert_eq!(KINDS[0].id, REQUEST, "kind_of falls back to the first type");
+    }
+
+    #[test]
+    fn pace_counts_each_day_prayed_once_over_four_windows() {
+        let home = scratch("pace");
+        assert!(pace(&load(&home).0, "2026-11-25").is_none(), "no prayers, no windows");
+        add(&home, "a", REQUEST, ID_A, "2026-11-01T00:00:00Z").unwrap();
+        add(&home, "b", "praise", ID_B, "2026-11-10T00:00:00Z").unwrap();
+        let days = |today: &str| -> Vec<(i64, u32)> {
+            pace(&load(&home).0, today).unwrap().iter().map(|w| (w.days, w.prayed_days)).collect()
+        };
+        // Nothing prayed yet: the windows are there, and empty.
+        assert_eq!(days("2026-11-25"), [(1, 0), (7, 0), (30, 0), (25, 0)]);
+        // Two prayers on one day are one day prayed.
+        for (id, on) in [(ID_A, "2026-11-25"), (ID_B, "2026-11-25"), (ID_A, "2026-11-20"), (ID_B, "2026-11-02")] {
+            mark_prayed(&home, id, on).unwrap();
+        }
+        assert_eq!(days("2026-11-25"), [(1, 1), (7, 2), (30, 3), (25, 3)]);
+        // The next day, today has not been prayed on.
+        assert_eq!(days("2026-11-26"), [(1, 0), (7, 2), (30, 3), (26, 3)]);
         let _ = std::fs::remove_dir_all(&home);
     }
 
@@ -345,7 +535,7 @@ mod tests {
         std::fs::write(d.join("truncated.json"), r#"{"format":"plumbline-prayer-v1","id":"x","title":"ha"#).unwrap();
         std::fs::write(d.join("later.json"), r#"{"format":"plumbline-prayer-v2","id":"x","title":"x","created":"t"}"#)
             .unwrap();
-        add(&home, "x", ID_A, "t").unwrap();
+        add(&home, "x", REQUEST, ID_A, "t").unwrap();
         let (prayers, errs) = load(&home);
         assert_eq!(prayers.len(), 1);
         assert_eq!(errs.len(), 2, "{errs:?}");

@@ -65,7 +65,7 @@
       case "guide":
         return s.qs("guideBlocks")?.blocks;
       case "about":
-        return s.qs("aboutBlocks")?.blocks;
+        return s.q("aboutBlocks")?.blocks;
       default:
         return null;
     }
@@ -164,12 +164,10 @@
                tag identifies the code,
                the pack version identifies the DATA (it moves independently),
                and the build id separates two deploys of the same tag.
-               On the guide too: the ≡ menu opens "Guide & About" as the guide
-               panel, which inlines About at its end, and nothing in the shell
-               opens the bare about panel — gated on "about" alone, this line
-               was unreachable. (The site archive's download link that used to
-               sit under it is on the Backup dialog now.) -->
-          {#if s.panel.kind === "about" || s.panel.kind === "guide"}
+               On About, which the ≡ menu opens as its own card. (The site
+               archive's download link that used to sit under it is on the
+               Backup dialog now.) -->
+          {#if s.panel.kind === "about"}
             <p class="version">
               Plumbline <strong>{__APP_VERSION__}</strong><br />
               <span class="vsub">engine {s.engineVersion} · data {s.packVersion.slice(0, 8)} · build {__BUILD_ID__}</span>

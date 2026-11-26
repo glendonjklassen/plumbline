@@ -824,15 +824,27 @@ fn word_study_shows_personal_note_and_edit_link_in_both_modes() {
 }
 
 #[test]
-fn guide_and_about_render_combined() {
-    // Guide & About are now one combined card: the guide opens with its tour and
-    // inlines the About content (edition + covenant) at the end.
+fn guide_and_about_are_two_cards_and_about_opens_with_its_verses() {
+    // The guide is the tour and nothing else: no About content at its end.
     let guide = guide_blocks();
     assert!(guide.iter().any(|b| text_of(b).contains("Using Plumbline")));
-    assert!(guide.iter().any(|b| text_of(b).contains("COVENANT")));
-    // The standalone About card (the `about` link verb) still renders on its own.
-    let about = about_blocks();
-    assert!(about.iter().any(|b| text_of(b).contains("covenant") || text_of(b).contains("COVENANT")));
+    assert!(!guide.iter().any(|b| text_of(b).contains("COVENANT")), "About is still inlined in the guide");
+    // About: its heading, then each verse it was handed with a reference that
+    // opens it, then the edition and the covenant.
+    let verses: Vec<AboutVerse> = ABOUT_VERSES
+        .iter()
+        .map(|r| AboutVerse { refkey: r.to_string(), display: format!("<{r}>"), body: format!("text of {r}") })
+        .collect();
+    let about = about_blocks(&verses);
+    let text: Vec<String> = about.iter().map(text_of).collect();
+    assert!(text[0].contains("About Plumbline"));
+    for (i, r) in ABOUT_VERSES.iter().enumerate() {
+        assert!(text[i + 1].contains(&format!("text of {r}")) && text[i + 1].contains(&format!("<{r}>")), "{text:?}");
+        assert!(crate::VRef::parse_ref_key(r).is_some(), "{r} is not a refKey");
+    }
+    assert!(text.iter().any(|t| t.contains("COVENANT")));
+    // With no Bible to read them from, the card is the rest of itself.
+    assert!(about_blocks(&[]).iter().any(|b| text_of(b).contains("COVENANT")));
 }
 
 /// THE GUIDE IS THE LAST PLACE ENGLISH HID.
@@ -857,7 +869,7 @@ fn guide_and_about_render_combined() {
 /// and green in `every_shipped_string_is_translated`, which is why both exist.
 #[test]
 fn the_guide_is_readable_by_a_german_reader() {
-    const ENGLISH_ONLY_IN_THE_OLD_GUIDE: [&str; 10] = [
+    const ENGLISH_ONLY_IN_THE_OLD_GUIDE: [&str; 9] = [
         "Using Plumbline",
         "READ THE BIBLE",
         "SHARE THE GOSPEL",
@@ -866,14 +878,19 @@ fn the_guide_is_readable_by_a_german_reader() {
         "HIDE IT IN YOUR HEART",
         "MAKE IT YOURS",
         "THE COVENANT",
-        "Whatever you came here to do",
         "A weave is a connection you FIND",
     ];
     // `guide_blocks_in`, NOT `set_active`: the active language is a process global,
     // so the first draft of this test set it to German and broke eight unrelated
     // tests that were reading English in parallel at the time. That is what the
     // explicit-language entry point is for.
-    let german = guide_blocks_in(crate::i18n::Lang::De).iter().map(text_of).collect::<Vec<_>>().join("\n");
+    // The guide and About are two cards now; a German reader opens both.
+    let german = guide_blocks_in(crate::i18n::Lang::De)
+        .iter()
+        .chain(&about_blocks_in(crate::i18n::Lang::De, &[]))
+        .map(text_of)
+        .collect::<Vec<_>>()
+        .join("\n");
 
     for phrase in ENGLISH_ONLY_IN_THE_OLD_GUIDE {
         assert!(
