@@ -153,8 +153,35 @@
   type MemoryWindow = { id: string; days: number; reviews: number; added: number };
   const memWindows = $derived((s.qStale("memoryPace", dayStamp())?.windows ?? []) as MemoryWindow[]);
   const mem = $derived(memWindows.find((w) => w.id === paceId) ?? null);
-  /** The block shows once either half has anything to report. */
-  const hasPace = $derived(paceWindows.length > 0 || memWindows.length > 0);
+  // Prayer over the same windows (`prayer::pace`): the days on which anything
+  // on the prayer list was marked prayed. Empty until there is a prayer. Asked
+  // by the reader's own day, as the prayer list is.
+  type PrayerWindow = { id: string; days: number; prayedDays: number };
+  const prayWindows = $derived((s.qStale("prayerPace", localDay())?.windows ?? []) as PrayerWindow[]);
+  const pray = $derived(prayWindows.find((w) => w.id === paceId) ?? null);
+  /** The block shows once any part has anything to report. */
+  const hasPace = $derived(paceWindows.length > 0 || memWindows.length > 0 || prayWindows.length > 0);
+
+  // Reading against the next broader window: today against the 7 days, those
+  // against the 30, those against all time. Up when this window's rate is the
+  // higher, down when it is the lower, nothing when they are level — and
+  // nothing for all time, which has no broader window to be measured against.
+  //
+  // Nothing either until the reading goes back further than this window. A
+  // reader three days in has the same words in every window, so the 7 days
+  // would always beat the 30 and the 30 always trail all time: an arrow drawn
+  // from two divisors, not from how much was read.
+  const broader = $derived(paceWindows[paceWindows.findIndex((w) => w.id === paceId) + 1] ?? null);
+  const paceSpan = $derived(paceWindows.find((w) => w.id === "all")?.days ?? 0);
+  type Trend = { up: boolean; label: string } | null;
+  function trend(mine: number | undefined, theirs: number | undefined): Trend {
+    if (!pace || !broader || paceSpan <= pace.days) return null;
+    if (mine == null || theirs == null || mine === theirs) return null;
+    const up = mine > theirs;
+    return { up, label: t(up ? "explore.paceAbove" : "explore.paceBelow", { window: t(PACE_LABEL[broader.id]) }) };
+  }
+  const wordsTrend = $derived(trend(pace?.wordsPerDay, broader?.wordsPerDay));
+  const chaptersTrend = $derived(trend(pace?.chaptersPerDay, broader?.chaptersPerDay));
   const nf0 = $derived(new Intl.NumberFormat(lang(), { maximumFractionDigits: 0 }));
   const nf1 = $derived(new Intl.NumberFormat(lang(), { maximumFractionDigits: 1 }));
 
@@ -272,6 +299,14 @@
   // came before.
 </script>
 
+<!-- The mark beside a reading rate. Drawn in CSS and empty of text, so the
+     line still reads as its number alone; what it means is in its label. -->
+{#snippet arrow(tr: Trend)}
+  {#if tr}
+    <span class="trend" class:up={tr.up} role="img" aria-label={tr.label} title={tr.label} data-trend={tr.up ? "up" : "down"}></span>
+  {/if}
+{/snippet}
+
 <section class="screen" aria-label={t("nav.study")}>
   <ScreenBar top title={t("nav.study")} onBack={() => s.goRead()} onMenu={() => (s.menuOpen = true)} />
   <div class="content">
@@ -308,14 +343,14 @@
                   <p class="pace-sub">{t("explore.paceReading")}</p>
                   {#if paceId === "day"}
                     <p class="pace-line">
-                      {plural("explore.paceTodayWords.one", "explore.paceTodayWords.other", pace?.words ?? 0, { n: nf.format(pace?.words ?? 0) })}
+                      {plural("explore.paceTodayWords.one", "explore.paceTodayWords.other", pace?.words ?? 0, { n: nf.format(pace?.words ?? 0) })}{@render arrow(wordsTrend)}
                     </p>
                     <p class="pace-line">
-                      {plural("explore.paceTodayChapters.one", "explore.paceTodayChapters.other", pace?.chapters ?? 0, { n: nf.format(pace?.chapters ?? 0) })}
+                      {plural("explore.paceTodayChapters.one", "explore.paceTodayChapters.other", pace?.chapters ?? 0, { n: nf.format(pace?.chapters ?? 0) })}{@render arrow(chaptersTrend)}
                     </p>
                   {:else}
-                    <p class="pace-line">{t("explore.paceWords", { n: nf0.format(pace?.wordsPerDay ?? 0) })}</p>
-                    <p class="pace-line">{t("explore.paceChapters", { n: nf1.format(pace?.chaptersPerDay ?? 0) })}</p>
+                    <p class="pace-line">{t("explore.paceWords", { n: nf0.format(pace?.wordsPerDay ?? 0) })}{@render arrow(wordsTrend)}</p>
+                    <p class="pace-line">{t("explore.paceChapters", { n: nf1.format(pace?.chaptersPerDay ?? 0) })}{@render arrow(chaptersTrend)}</p>
                   {/if}
                 </div>
                 <div class="pace-col" data-surface="pace-memory">
@@ -327,6 +362,23 @@
                     {plural("explore.paceAdded.one", "explore.paceAdded.other", mem?.added ?? 0, { n: nf.format(mem?.added ?? 0) })}
                   </p>
                 </div>
+                {#if pray}
+                  <!-- Only with a prayer list: without one there is no day to
+                       count from. -->
+                  <div class="pace-col" data-surface="pace-prayer">
+                    <p class="pace-sub">{t("explore.pacePrayer")}</p>
+                    <p class="pace-fact">
+                      {#if paceId === "day"}
+                        {t(pray.prayedDays > 0 ? "explore.pacePrayedYes" : "explore.pacePrayedNo")}
+                      {:else}
+                        {t(pray.days === 1 ? "explore.pacePrayedDays.one" : "explore.pacePrayedDays.other", {
+                          n: nf.format(pray.prayedDays),
+                          days: nf.format(pray.days),
+                        })}
+                      {/if}
+                    </p>
+                  </div>
+                {/if}
               </div>
             </div>
           {/if}
@@ -844,6 +896,21 @@
     margin: 0;
     font-size: calc(15px * var(--uiScale, 1));
     color: var(--ink, #211f1a);
+  }
+  /* Above or below the broader window's average: a triangle in the palette's
+     green or red, which every theme holds to body-text contrast. */
+  .trend {
+    display: inline-block;
+    margin-inline-start: 6px;
+    width: 0;
+    height: 0;
+    border-inline: 5px solid transparent;
+    border-top: 8px solid var(--planRose, #a8453f);
+    vertical-align: 1px;
+  }
+  .trend.up {
+    border-top: none;
+    border-bottom: 8px solid var(--planMoss, #55733f);
   }
   /* The forecast under the bar: the date in ink, its basis quieter. */
   .cov-forecast {

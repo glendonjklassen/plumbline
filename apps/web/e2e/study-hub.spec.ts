@@ -234,6 +234,13 @@ test("the pace shows what was read today", async ({ page }) => {
   await expect(pace.locator(".pace-line").nth(0)).toHaveText(/^[\d,]+ words$/);
   await expect(pace.locator(".pace-line").nth(1)).toHaveText("1 chapter");
   await expect(pace).not.toContainText("a day");
+  // Today against the 7 days: a chapter read today is seven times the week's
+  // rate, so both lines point up, and the label names the window measured
+  // against. An inverted comparison draws "down"; a comparison with the wrong
+  // window changes the label. The mark holds no text — the lines above are
+  // matched whole, with it inside them.
+  await expect(pace.locator('[data-trend="up"]')).toHaveCount(2);
+  await expect(pace.locator("[data-trend]").first()).toHaveAttribute("aria-label", "Above average (7 days)");
 });
 
 test("coverage counts the chapters actually read", async ({ page }) => {
@@ -263,7 +270,16 @@ test("coverage counts the chapters actually read", async ({ page }) => {
   await expect(pace).toBeVisible();
   await pace.locator(".chip", { hasText: "7 days" }).click();
   await expect(pace).toContainText("0 chapters a day");
+  // Nothing read in the 7 days or the 30: level, so no mark. The 30 days against
+  // all time, which holds the fifty chapters: down. All time has nothing broader.
+  // A mark drawn whenever two windows exist fails the first and the last; one
+  // that points the wrong way fails the middle.
+  await expect(pace.locator("[data-trend]")).toHaveCount(0);
+  await pace.locator(".chip", { hasText: "30 days" }).click();
+  await expect(pace.locator('[data-trend="down"]')).toHaveCount(2);
+  await expect(pace.locator("[data-trend]").first()).toHaveAttribute("aria-label", "Below average (All time)");
   await pace.locator(".chip", { hasText: "All time" }).click();
+  await expect(pace.locator("[data-trend]")).toHaveCount(0);
   const line = (await pace.locator(".pace-line").nth(1).textContent()) ?? "";
   const perDay = Number.parseFloat(line.replace(",", "."));
   expect(perDay).toBeGreaterThan(0);

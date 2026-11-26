@@ -454,11 +454,18 @@
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={() => (s.menuOpen = false)}></div>
   <div class="menu" role="menu" aria-label={t("common.menu")}>
-    <button onclick={go(() => (s.showHistory = true))}>{t("shell.history")}</button>
-    <button onclick={go(() => (s.panel = { kind: "guide" }))}>{t("shell.guideAndAbout")}</button>
-    <button onclick={go(() => (s.showShortcuts = true))}>{t("shell.shortcuts")}</button>
-    <button onclick={go(() => (s.showBackup = true))}>{t("shell.backup")}</button>
+    <!-- Two groups, each in the order it is reached for. First what is the
+         reader's own: how the app is set, where they have been, and their copy
+         of it all. Then what the app says about itself: how to use it, its
+         keys, and what it is — About last, where every menu keeps it. -->
     <button onclick={go(() => (s.showSettings = true))}>{t("shell.settings")}</button>
+    <button onclick={go(() => (s.showHistory = true))}>{t("shell.history")}</button>
+    <button onclick={go(() => (s.showBackup = true))}>{t("shell.backup")}</button>
+    <hr />
+    <button onclick={go(() => (s.panel = { kind: "guide" }))}>{t("shell.guide")}</button>
+    <!-- Not on a phone or tablet: there is no keyboard to have shortcuts on. -->
+    <button class="keys" onclick={go(() => (s.showShortcuts = true))}>{t("shell.shortcuts")}</button>
+    <button onclick={go(() => (s.panel = { kind: "about" }))}>{t("shell.about")}</button>
   </div>
 {/if}
 
@@ -804,6 +811,20 @@
     text-align: start;
     padding: 5px 8px;
     border-radius: 5px;
+  }
+  .menu hr {
+    width: 100%;
+    margin: 4px 0;
+    border: none;
+    border-top: 1px solid var(--rule, #d8cba8);
+  }
+  /* A device whose only pointer is a finger has no keyboard shortcuts to list.
+     A tablet with a keyboard attached reports a fine pointer or hover and keeps
+     the row. */
+  @media (hover: none) and (pointer: coarse) {
+    .menu .keys {
+      display: none;
+    }
   }
   .menu button:disabled {
     opacity: 0.45;

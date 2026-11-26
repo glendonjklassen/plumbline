@@ -346,7 +346,7 @@ export class Session {
   /** The weekly feature card (shell/spotlight.ts): the feature id it is open
    *  on, or null. The chip itself reads `config.spotlight`. */
   spotlight = $state<string | null>(null);
-  /** The ≡ utilities menu (History · Guide & about · shortcuts · Settings).
+  /** The ≡ utilities menu (Settings · History · Backup, then Guide · shortcuts · About).
    *  Session state, not Shell-local, so every destination's ScreenBar can raise
    *  the same menu — Settings must not cost a trip back to Read. */
   menuOpen = $state(false);

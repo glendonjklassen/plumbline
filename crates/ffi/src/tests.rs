@@ -1273,7 +1273,7 @@ fn tier0_endpoints_via_abi() {
         assert_eq!(palette["dark"], true);
         let guide: Value = serde_json::from_str(&take(plumbline_panel_guide_blocks_json()).unwrap()).unwrap();
         assert!(!guide["blocks"].as_array().unwrap().is_empty());
-        assert!(!take(plumbline_panel_about_blocks_json()).unwrap().is_empty());
+        assert!(!take(plumbline_panel_about_blocks_json(ptr::null())).unwrap().is_empty());
 
         // A temp home for the authoring endpoints.
         let home = std::env::temp_dir().join(format!("plumbline-ffi-tier0-{}", std::process::id()));
@@ -2660,17 +2660,52 @@ fn the_prayer_list_round_trips_via_abi() {
 
         let t1 = c"2026-11-21T10:00:00Z";
         let t2 = c"2026-11-21T11:00:00Z";
-        assert!(plumbline_engine_prayer_add(e, c"Anna's surgery".as_ptr(), t1.as_ptr()).is_null());
-        assert!(plumbline_engine_prayer_add(e, c"Exams".as_ptr(), t2.as_ptr()).is_null());
-        assert!(!plumbline_engine_prayer_add(e, c" ".as_ptr(), t2.as_ptr()).is_null(), "no title");
+        let (req, thanks) = (c"request", c"thanks");
+        assert!(plumbline_engine_prayer_add(e, c"Exams".as_ptr(), req.as_ptr(), t1.as_ptr()).is_null());
+        assert!(plumbline_engine_prayer_add(e, c"Anna's surgery".as_ptr(), req.as_ptr(), t2.as_ptr()).is_null());
+        assert!(!plumbline_engine_prayer_add(e, c" ".as_ptr(), req.as_ptr(), t2.as_ptr()).is_null(), "no title");
+        assert!(
+            !plumbline_engine_prayer_add(e, c"x".as_ptr(), c"confession".as_ptr(), t2.as_ptr()).is_null(),
+            "no type"
+        );
         let v = list(today);
+        // The latest added leads.
         assert_eq!(titles(&v["praying"]), ["Anna's surgery", "Exams"]);
         assert_eq!(
             v["praying"][1].as_object().unwrap().keys().collect::<Vec<_>>(),
-            ["created", "id", "prayedDays", "prayedToday", "title"]
+            ["created", "id", "kind", "prayedDays", "prayedToday", "title"]
         );
+        assert_eq!(v["praying"][1]["kind"], "request");
+        // The five types, each with what it can do and its example.
+        let kinds = v["kinds"].as_array().unwrap();
+        assert_eq!(
+            kinds.iter().map(|k| (k["id"].as_str().unwrap(), k["answerable"].as_bool().unwrap())).collect::<Vec<_>>(),
+            [
+                ("request", true),
+                ("intercession", true),
+                ("praise", false),
+                ("thanks", false),
+                ("lament", false),
+                ("imprecation", true)
+            ]
+        );
+        // Confession is verses to read, not a type.
+        assert_eq!(v["confession"][0]["label"], "Ps 51:1\u{2013}4");
+        assert_eq!(v["confession"][0]["verses"], serde_json::json!(["Ps 51:1", "Ps 51:2", "Ps 51:3", "Ps 51:4"]));
+        assert_eq!(v["confession"][2]["verses"], serde_json::json!(["Heb 8:12"]));
+        assert_eq!(
+            (&kinds[2]["example"], &kinds[2]["exampleLabel"]),
+            (&serde_json::json!("Ps 145:1"), &serde_json::json!("Ps 145:1\u{2013}3"))
+        );
+        assert_eq!(kinds[0]["exampleLabel"], "1Sam 1:11");
         let id_of = |v: &Value, k: usize| std::ffi::CString::new(v["praying"][k]["id"].as_str().unwrap()).unwrap();
         let (anna, exams) = (id_of(&v, 0), id_of(&v, 1));
+        let pace = |today: &std::ffi::CStr| -> Vec<u64> {
+            let v: Value =
+                serde_json::from_str(&take(plumbline_engine_prayer_pace_json(e, today.as_ptr())).unwrap()).unwrap();
+            v["windows"].as_array().unwrap().iter().map(|w| w["prayedDays"].as_u64().unwrap()).collect()
+        };
+        assert_eq!(pace(today), [0, 0, 0, 0]);
 
         // Prayed for today: counted once however often it is tapped.
         assert!(plumbline_engine_prayer_prayed(e, anna.as_ptr(), today.as_ptr()).is_null());
@@ -2681,9 +2716,19 @@ fn the_prayer_list_round_trips_via_abi() {
             (&serde_json::json!(1), &serde_json::json!(true))
         );
         assert_eq!(list(c"2026-11-22")["praying"][0]["prayedToday"], false, "yesterday's prayer is not today's");
+        assert_eq!(pace(today), [1, 1, 1, 1]);
+        assert_eq!(pace(c"2026-11-22"), [0, 1, 1, 1], "yesterday's prayer is not today's");
 
-        assert!(plumbline_engine_prayer_edit(e, exams.as_ptr(), c"Final exams".as_ptr(), t2.as_ptr()).is_null());
-        assert_eq!(titles(&list(today)["praying"]), ["Anna's surgery", "Final exams"]);
+        // An edit carries the title and the type; thanks is never answered.
+        assert!(plumbline_engine_prayer_edit(e, exams.as_ptr(), c"Final exams".as_ptr(), thanks.as_ptr(), t2.as_ptr())
+            .is_null());
+        let v = list(today);
+        assert_eq!(titles(&v["praying"]), ["Anna's surgery", "Final exams"]);
+        assert_eq!(v["praying"][1]["kind"], "thanks");
+        assert!(
+            !plumbline_engine_prayer_answer(e, exams.as_ptr(), c"".as_ptr(), today.as_ptr(), t2.as_ptr()).is_null(),
+            "thanks was answered"
+        );
 
         // Answered, with a comment: off the list and into the answered one.
         assert!(plumbline_engine_prayer_answer(e, anna.as_ptr(), c"Went well".as_ptr(), today.as_ptr(), t2.as_ptr())
