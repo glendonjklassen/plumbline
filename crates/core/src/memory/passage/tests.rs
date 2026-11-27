@@ -330,14 +330,14 @@ fn a_single_verse_runs_as_a_passage_of_one() {
     write_card(&home.0, &Card::new(v.clone(), TOK, &day(1))).unwrap();
     let run = home.deck().run(&v, &day(1)).unwrap();
     assert_eq!((run.label.as_str(), run.verses.len()), ("John 3:16", 1));
-    assert_eq!(run.fresh, [v.clone()]);
+    assert_eq!(run.fresh, std::slice::from_ref(&v));
     assert!(run.due.is_empty() && run.actionable());
 
     grade(&home.0, &home.cards(), &v, TOK, Grade::Hard, &day(1)).unwrap();
     let run = home.deck().run(&v, &day(1)).unwrap();
     assert!(run.fresh.is_empty() && run.due.is_empty() && !run.actionable());
     let run = home.deck().run(&v, &day(2)).unwrap();
-    assert_eq!(run.due, [v.clone()]);
+    assert_eq!(run.due, std::slice::from_ref(&v));
     assert_eq!(run.learned, 1);
 }
 
