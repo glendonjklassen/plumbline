@@ -1658,16 +1658,32 @@ pub struct WireMemoryActivity {
 pub struct WireMemoryDrill {
     #[serde(rename = "ref")]
     pub reference: String,
-    /// What the drill is called on screen — `"Ps 23:1–6"` for a passage card
-    /// (additive).
+    /// What the drill is called on screen: the verse's refKey.
     pub label: String,
-    /// Verses in the drill (1 unless this card is a passage).
+    /// Verses in the drill. Always 1 since a passage is drilled a verse at a
+    /// time; kept because the key is on the wire.
     pub verses: u32,
+    /// The passage this verse is being memorized in, `"Ps 23:1–6"` (additive).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub passage: Option<String>,
+    /// The verse before it in that passage, shown in full above the prompt so
+    /// each verse is learned joined to the one it follows. Absent for the
+    /// passage's first verse and for a verse on its own (additive).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lead_in: Option<WireMemoryLeadIn>,
     pub text: String,
     pub first_letters: String,
     pub blanked: String,
     pub level: u8,
     pub max_level: u8,
+}
+
+/// The verse shown above a drill: see [`WireMemoryDrill::lead_in`].
+#[derive(Serialize)]
+pub struct WireMemoryLeadIn {
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub text: String,
 }
 
 /// What the AKJV does to one token (`plumbline_engine_akjv_token_json`).

@@ -1465,10 +1465,18 @@ fn tier0_endpoints_via_abi() {
         assert!(plumbline_engine_memory_remove(e, c("John 3:16").as_ptr()).is_null());
         assert!(plumbline_engine_memory_card_json(e, c("John 3:16").as_ptr()).is_null());
 
-        // A passage memorized as ONE chunk: the card is keyed by
-        // its first verse, labelled as a range, and drilled/scored over the
-        // whole span — not one card per verse. (This fixture holds John 3:16 and
-        // 3:18 only, which also exercises a span whose middle verse is absent.)
+        // A passage: one row keyed by its first verse and labelled as a range,
+        // worked a verse at a time. (This fixture holds John 3:16 and 3:18 only,
+        // which also exercises a span whose middle verse is absent.)
+        use crate::memory_today::plumbline_engine_memory_run_json;
+        let run = |e, r: &str, at: &CString| -> Value {
+            serde_json::from_str(&take(plumbline_engine_memory_run_json(e, c(r).as_ptr(), at.as_ptr())).unwrap())
+                .unwrap()
+        };
+        let drill = |e, r: &str| -> Value {
+            serde_json::from_str(&take(plumbline_engine_memory_drill_json(e, c(r).as_ptr(), 0)).unwrap()).unwrap()
+        };
+        assert!(plumbline_engine_memory_run_json(e, c("John 3:16").as_ptr(), stamp.as_ptr()).is_null());
         assert!(plumbline_engine_memory_add_passage(
             e,
             c("John 3:16").as_ptr(),
@@ -1482,19 +1490,45 @@ fn tier0_endpoints_via_abi() {
         assert_eq!(pc["ref"], "John 3:16");
         assert_eq!(pc["label"], "John 3:16\u{2013}18");
         assert_eq!(pc["through"], "John 3:18");
-        // Only the first verse addresses the card — inner verses are not cards.
+        // A verse the reader has not reached has no card yet.
         assert!(plumbline_engine_memory_card_json(e, c("John 3:18").as_ptr()).is_null());
 
-        let pd: Value =
-            serde_json::from_str(&take(plumbline_engine_memory_drill_json(e, c("John 3:16").as_ptr(), 0)).unwrap())
-                .unwrap();
-        assert_eq!(pd["label"], "John 3:16\u{2013}18");
-        assert_eq!(pd["verses"], 2, "two of the three verses exist in this fixture");
-        let ptext = pd["text"].as_str().unwrap().to_string();
-        assert_eq!(ptext, "For God so loved the world. He that believeth");
-        assert_eq!(pd["firstLetters"], "F G s l t w. H t b");
-        // Typing only the opening verse of a passage cannot score full marks.
-        let half: Value = serde_json::from_str(
+        // The run: nothing to review, and the verses this Bible has, in order.
+        // 3:17 is not in the fixture, so no drill is ever asked for it.
+        let r0 = run(e, "John 3:16", &stamp);
+        assert_eq!(
+            (r0["label"].as_str(), r0["total"].as_u64(), r0["learned"].as_u64()),
+            (Some("John 3:16\u{2013}18"), Some(3), Some(0))
+        );
+        assert_eq!(r0["due"], serde_json::json!([]));
+        assert_eq!(r0["fresh"], serde_json::json!(["John 3:16", "John 3:18"]));
+        assert_eq!(r0["all"], serde_json::json!(["John 3:16", "John 3:18"]));
+
+        // The buttons' captions: a new verse is back tomorrow, tomorrow, in 2
+        // days, in 4 — read without writing a card for it.
+        use crate::memory_today::plumbline_engine_memory_next_json;
+        let next: Value = serde_json::from_str(
+            &take(plumbline_engine_memory_next_json(e, c("John 3:18").as_ptr(), stamp.as_ptr())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(next, serde_json::json!({"again": 1, "hard": 1, "good": 2, "easy": 4}));
+        assert!(plumbline_engine_memory_card_json(e, c("John 3:18").as_ptr()).is_null());
+
+        // Each verse is drilled and scored alone. The first has no lead-in; the
+        // next is led in by the verse before it that this Bible has.
+        let d16 = drill(e, "John 3:16");
+        assert_eq!(d16["text"], "For God so loved the world.");
+        assert_eq!((d16["label"].as_str(), d16["verses"].as_u64()), (Some("John 3:16"), Some(1)));
+        assert_eq!(d16["passage"], "John 3:16\u{2013}18");
+        assert!(d16["leadIn"].is_null());
+        let d18 = drill(e, "John 3:18");
+        assert_eq!(d18["text"], "He that believeth");
+        assert_eq!(d18["firstLetters"], "H t b");
+        assert_eq!(d18["passage"], "John 3:16\u{2013}18");
+        assert_eq!(d18["leadIn"], serde_json::json!({"ref": "John 3:16", "text": "For God so loved the world."}));
+        // The first verse typed back is the first verse in full — it is not
+        // marked down for the rest of the passage.
+        let first: Value = serde_json::from_str(
             &take(plumbline_engine_memory_score_json(
                 e,
                 c("John 3:16").as_ptr(),
@@ -1503,33 +1537,61 @@ fn tier0_endpoints_via_abi() {
             .unwrap(),
         )
         .unwrap();
-        let acc = half["accuracy"].as_f64().unwrap();
-        assert!(acc > 0.5 && acc < 1.0, "half a passage scores partial, got {acc}");
-        // Typing the whole passage back scores it in full.
-        let whole: Value = serde_json::from_str(
-            &take(plumbline_engine_memory_score_json(e, c("John 3:16").as_ptr(), c(&ptext).as_ptr())).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(whole["accuracy"], 1.0);
+        assert_eq!(first["accuracy"], 1.0);
+        assert_eq!(first["words"].as_array().unwrap().len(), 6);
 
-        // The hub lists ONE row for the passage; the map shades every verse of it.
+        // The hub lists ONE row for the passage; the map holds every verse of it.
         let pcov: Value =
             serde_json::from_str(&take(plumbline_engine_memory_coverage_json(e, stamp.as_ptr())).unwrap()).unwrap();
         assert_eq!(pcov["cards"].as_array().unwrap().len(), 1);
         assert_eq!(pcov["cards"][0]["ref"], "John 3:16");
         assert_eq!(pcov["cards"][0]["label"], "John 3:16\u{2013}18");
-        assert_eq!(pcov["cards"][0]["verses"], 3);
+        assert_eq!((pcov["cards"][0]["verses"].as_u64(), pcov["cards"][0]["learned"].as_u64()), (Some(3), Some(0)));
         assert_eq!(
             pcov["verses"].as_array().unwrap().iter().map(|v| v["ref"].as_str().unwrap()).collect::<Vec<_>>(),
             ["John 3:16", "John 3:17", "John 3:18"]
         );
-        // Grading the passage keeps it one card, still spanning.
-        assert!(plumbline_engine_memory_grade(e, c("John 3:16").as_ptr(), c("good").as_ptr(), stamp.as_ptr()).is_null());
+
+        // Grading the first verse grades the first verse: the passage still
+        // spans, the next verse is the one offered, and it has no card until
+        // it is graded itself.
+        assert!(plumbline_engine_memory_grade(e, c("John 3:16").as_ptr(), c("hard").as_ptr(), stamp.as_ptr()).is_null());
         let graded: Value =
             serde_json::from_str(&take(plumbline_engine_memory_card_json(e, c("John 3:16").as_ptr())).unwrap())
                 .unwrap();
         assert_eq!((graded["reps"].as_u64(), graded["through"].as_str()), (Some(1), Some("John 3:18")));
+        assert!(plumbline_engine_memory_card_json(e, c("John 3:18").as_ptr()).is_null());
+        let r1 = run(e, "John 3:16", &stamp);
+        assert_eq!((r1["learned"].as_u64(), &r1["fresh"]), (Some(1), &serde_json::json!(["John 3:18"])));
+        // Worked today, nothing due: off the queue, though a verse is left.
+        let due: Value =
+            serde_json::from_str(&take(plumbline_engine_memory_due_json(e, stamp.as_ptr())).unwrap()).unwrap();
+        assert_eq!(due["refs"], serde_json::json!([]));
+        assert!(plumbline_engine_memory_grade(e, c("John 3:18").as_ptr(), c("hard").as_ptr(), stamp.as_ptr()).is_null());
+        let inner: Value =
+            serde_json::from_str(&take(plumbline_engine_memory_card_json(e, c("John 3:18").as_ptr())).unwrap())
+                .unwrap();
+        assert!(inner["through"].is_null(), "a verse of a passage is a plain card");
+        // The day after: both verses to review, in order, as ONE entry.
+        let next_day = c("2026-01-02T12:00:00Z");
+        let r2 = run(e, "John 3:16", &next_day);
+        assert_eq!(r2["due"], serde_json::json!(["John 3:16", "John 3:18"]));
+        assert_eq!(r2["fresh"], serde_json::json!([]));
+        let due: Value =
+            serde_json::from_str(&take(plumbline_engine_memory_due_json(e, next_day.as_ptr())).unwrap()).unwrap();
+        assert_eq!(due["refs"], serde_json::json!(["John 3:16"]));
+
+        // Removing the passage removes both cards, each with its own record: a
+        // verse left without one would come back, alone, on the next restore.
         assert!(plumbline_engine_memory_remove(e, c("John 3:16").as_ptr()).is_null());
+        assert!(plumbline_engine_memory_card_json(e, c("John 3:16").as_ptr()).is_null());
+        assert!(plumbline_engine_memory_card_json(e, c("John 3:18").as_ptr()).is_null());
+        for file in ["john-3-16.json", "john-3-18.json"] {
+            assert!(
+                plumbline_core::tombstone::load(&home).contains_key(&plumbline_core::tombstone::card(file)),
+                "removing the passage left no record for {file}"
+            );
+        }
 
         // A backwards end is not a passage — it seeds a plain single-verse card.
         assert!(plumbline_engine_memory_add_passage(

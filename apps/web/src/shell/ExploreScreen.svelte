@@ -252,15 +252,37 @@
     if (c) void dispatchLink(s, goUri(`${c.book} ${c.chapter}:1`), ev);
   }
 
-  // The library tools, each with the count of what is IN it. Plans and Memorize
-  // carry no count: they are activities rather than collections, and the band
-  // above already says what they ask for today.
-  const cards = $derived([
+  // The two daily activities lead the page, side by side above everything
+  // else (maintainer, 2026-11-27: Memorize was a card below the activity and
+  // reading bands, off the first screen). Memorize carries what is due today.
+  const lead = $derived([
     // One card for devotionals AND reading plans — they open the same screen.
     // A door rather than a shortcut into today's entry: that screen also offers
     // starting a second booklet and stopping this one.
-    { id: "plans", count: null as number | null, go: openPlans },
-    { id: "memorize", count: null as number | null, go: openMemorize },
+    // A calendar page; a stack of cards.
+    // `full` is what the door is called where there is room to say it: the
+    // short name fits two across on a phone, the full one is its tooltip and
+    // what a screen reader hears.
+    {
+      id: "plans",
+      name: "explore.plansShort",
+      full: "explore.plans",
+      icon: "M5 6h14v13H5zM5 10h14M9 4v4M15 4v4",
+      count: 0,
+      go: openPlans,
+    },
+    {
+      id: "memorize",
+      name: "explore.memorize",
+      full: "explore.memorize",
+      icon: "M4 9h13v10H4zM7 9V6h13v10h-3",
+      count: dueCount,
+      go: openMemorize,
+    },
+  ]);
+
+  // The library tools, each with the count of what is IN it.
+  const cards = $derived([
     // Its own door, not a section of Plans (maintainer, 2026-10-29): a sweep for
     // a theme is a study activity in its own right, with its own reader mode.
     { id: "conceptStudy", count: null as number | null, go: openConceptStudy },
@@ -310,7 +332,24 @@
 <section class="screen" aria-label={t("nav.study")}>
   <ScreenBar top title={t("nav.study")} onBack={() => s.goRead()} onMenu={() => (s.menuOpen = true)} />
   <div class="content">
-    <!-- Where the reader stands, first: activity, then the projected finish,
+    <div class="lead" data-surface="study-lead">
+      {#each lead as c (c.id)}
+        <!-- `ex-card` is the door's name to the tests; the look is `.lead`'s. -->
+        <button
+          class="ex-card"
+          data-lead={c.id}
+          title={t(c.full)}
+          aria-label={c.count > 0 ? `${t(c.full)} · ${nf.format(c.count)}` : t(c.full)}
+          onclick={c.go}
+        >
+          <svg class="lead-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={c.icon} /></svg>
+          <span class="lead-name">{t(c.name)}</span>
+          {#if c.count > 0}<span class="ex-count">{nf.format(c.count)}</span>{/if}
+        </button>
+      {/each}
+    </div>
+
+    <!-- Where the reader stands, next: activity, then the projected finish,
          then times through the Bible (maintainer, 2026-11-21). One card style
          for all three. What is in flight today comes after. -->
     <section class="band" aria-label={t("explore.pace")}>
@@ -928,6 +967,45 @@
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     align-content: start;
   }
+  /* Two across at every width, a phone included: one short line each — an
+     icon, a name and what is due — in the in-progress rows' own look. No
+     chevron: on a phone it cost "Memorize" its last four letters. */
+  .lead {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lead .ex-card {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    background: var(--paper, #fcf9f4);
+  }
+  .lead-icon {
+    flex: none;
+    width: calc(20px * var(--uiScale, 1));
+    height: calc(20px * var(--uiScale, 1));
+    fill: none;
+    stroke: var(--gold, #9e7d38);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .lead-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: calc(15.5px * var(--uiScale, 1));
+    font-weight: 600;
+    color: var(--ink, #211f1a);
+  }
+  .lead .ex-count {
+    flex: none;
+    margin-inline-start: auto;
+  }
+
   .ex-card {
     min-height: auto;
     display: flex;

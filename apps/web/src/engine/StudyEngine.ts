@@ -648,7 +648,8 @@ export class StudyEngine {
   memoryAdd(verseRef: string, now: string): string | null {
     return this.#author("plumbline_engine_memory_add", (f, ...p) => f(this.#engine, ...p), [verseRef, now]);
   }
-  /** One card for a whole passage (`startRef`…`throughRef`, same chapter). */
+  /** Memorize a passage (`startRef`…`throughRef`, same chapter): one row,
+   *  worked a verse at a time. */
   memoryAddPassage(startRef: string, throughRef: string, now: string): string | null {
     return this.#author("plumbline_engine_memory_add_passage", (f, ...p) => f(this.#engine, ...p), [
       startRef,
@@ -696,6 +697,17 @@ export class StudyEngine {
       [verseRef],
     );
     return s === null ? null : JSON.parse(s);
+  }
+  /** What working one hub row means now: `{ref, label, total, learned, due,
+   *  fresh, all}` — the verses to review, then the ones not learned yet. Null
+   *  when nothing is being memorized at `verseRef`. */
+  memoryRun(verseRef: string, now: string): any {
+    return this.#json("plumbline_engine_memory_run_json", verseRef, now);
+  }
+  /** Days until `verseRef` comes back for each grade, were it graded at
+   *  `now`: `{again, hard, good, easy}`. */
+  memoryNext(verseRef: string, now: string): any {
+    return this.#json("plumbline_engine_memory_next_json", verseRef, now);
   }
   memoryScore(verseRef: string, typed: string): any {
     return this.#json("plumbline_engine_memory_score_json", verseRef, typed);

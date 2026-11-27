@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Pick the end of a passage — to memorize as one chunk (§Memorization), or
+  // Pick the end of a passage — to memorize verse by verse (§Memorization), or
   // to copy as one text (Copy passage…). The two share this sheet because the
   // question is the same: this verse starts it, which verse ends it?
   //

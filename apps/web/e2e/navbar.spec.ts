@@ -136,7 +136,7 @@ test("phone: the bottom bar switches destinations and tracks which is current", 
   await expect(nav.locator("button.on")).toHaveText(/Study/);
 
   // Memorize is a Study-hub card, and its screen lights the Study tab.
-  await page.locator(".ex-card", { hasText: /^Memorize/ }).click();
+  await page.locator('[data-lead="memorize"]').click();
   await expect(nav.locator("button.on")).toHaveText(/Study/);
   // Deliberately not asserted: that Memorize discards the Explore panel. The web
   // layers its surfaces, and on a desktop width the study panel is a sidebar, so

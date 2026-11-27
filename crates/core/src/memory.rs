@@ -2,7 +2,7 @@
 //! priority). The KJV is *the* memorization text (homeschool, AWANA, Bible
 //! bees); this is the core every shell drives.
 //!
-//! One SRS card per verse (keyed by [`VRef`]), scheduled with **SM-2** (the
+//! One SRS card per verse (keyed by [`VRef`]), scheduled with a lightly adapted **SM-2** (the
 //! proven SuperMemo/Anki-classic algorithm). Each card keeps its full **review
 //! log** — that log is the data, "by construction", behind both views the
 //! product wants: a **coverage map** across the canon (per-verse mastery +
@@ -14,8 +14,14 @@
 //! shell renders the same drill. Decks are sourced from a tag or thread by the
 //! shell (it passes the verse set); this module owns the per-verse cards.
 //!
+//! A **passage** is memorized verse by verse too: the card on its first verse
+//! names where it ends (`through`), every verse of it keeps its own card, and
+//! the passage is ONE row and one place in the queue — see [`passage`].
+//!
 //! Personal study data: one plain JSON file per verse under `home/memory/`,
 //! `format` stamped, additive-friendly, refKey inside (the filename is a slug).
+
+pub mod passage;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -32,6 +38,10 @@ const FORMAT: &str = "overlay-memory-v1";
 /// The starting ease factor (SM-2 EF); the floor it can never drop below.
 const EASE_START: f32 = 2.5;
 const EASE_FLOOR: f32 = 1.3;
+/// From the third pass: Hard grows the interval by this much, and Easy by this
+/// much over what the ease alone would (Anki's two multipliers).
+const HARD_FACTOR: f32 = 1.2;
+const EASY_BONUS: f32 = 1.3;
 /// Interval (days) at/above which a card counts as "mature" (Anki's convention).
 const MATURE_DAYS: u32 = 21;
 /// Blank-out levels: 0 = full text … [`MAX_BLANK_LEVEL`] = every word masked.
@@ -75,7 +85,7 @@ impl Grade {
             Grade::Easy => 5,
         }
     }
-    fn passed(self) -> bool {
+    pub(crate) fn passed(self) -> bool {
         self.quality() >= 3
     }
 }
@@ -98,8 +108,9 @@ pub struct Review {
 
 // ── the card ─────────────────────────────────────────────────────────────────
 
-/// An SRS card for one verse — or, when `through` is set, for a passage read
-/// and recalled as one chunk: its SM-2 schedule plus every review.
+/// An SRS card for one verse: its SM-2 schedule plus every review. When
+/// `through` is set the card also opens a passage, each of whose verses has a
+/// card of its own ([`passage`]).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Card {
     pub verse: VRef,
@@ -110,6 +121,12 @@ pub struct Card {
     /// formats). Always the same book and chapter as `verse` — see
     /// [`Card::new_passage`].
     pub through: Option<VRef>,
+    /// Set on a passage whose verses each keep their own card — every passage
+    /// made since passages were split. A passage card WITHOUT it is from a
+    /// build that drilled the passage as one chunk, and its one schedule
+    /// stands for every verse until the first grade splits it
+    /// ([`passage::grade`]).
+    pub per_verse: bool,
     pub tok_version: String,
     pub created: String,
     /// SM-2 ease factor (EF), ≥ 1.3.
@@ -149,6 +166,9 @@ struct CardRepr {
     /// Additive: the passage's last verse as a refKey.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     through: Option<String>,
+    /// Additive: see [`Card::per_verse`]. Absent unless set.
+    #[serde(rename = "perVerse", default, skip_serializing_if = "std::ops::Not::not")]
+    per_verse: bool,
     tokenization: String,
     created: String,
     ease: f32,
@@ -169,6 +189,7 @@ impl Card {
         Card {
             verse: vref,
             through: None,
+            per_verse: false,
             tok_version: tok_version.to_string(),
             created: created.to_string(),
             ease: EASE_START,
@@ -195,8 +216,14 @@ impl Card {
     /// crossing a chapter boundary can be allowed later without a format
     /// change.)
     pub fn new_passage(start: VRef, through: &VRef, tok_version: &str, created: &str) -> Card {
-        let spans = through.book == start.book && through.chapter == start.chapter && through.verse > start.verse;
-        Card { through: spans.then(|| through.clone()), ..Card::new(start, tok_version, created) }
+        let spans = Card::spans(&start, through);
+        Card { through: spans.then(|| through.clone()), per_verse: spans, ..Card::new(start, tok_version, created) }
+    }
+
+    /// Whether `start`…`through` is a run a passage can cover: forward, and
+    /// inside one chapter.
+    pub fn spans(start: &VRef, through: &VRef) -> bool {
+        through.book == start.book && through.chapter == start.chapter && through.verse > start.verse
     }
 
     /// Every verse this card covers, in order — one entry for a single-verse
@@ -224,6 +251,7 @@ impl Card {
             format: FORMAT.to_string(),
             ref_key: self.verse.ref_key(),
             through: self.through.as_ref().map(VRef::ref_key),
+            per_verse: self.per_verse && self.through.is_some(),
             tokenization: self.tok_version.clone(),
             created: self.created.clone(),
             ease: self.ease,
@@ -255,7 +283,27 @@ pub enum Mastery {
 
 /// Apply a review `grade` at `now` (RFC3339 UTC): update the SM-2 schedule and
 /// append to the review log. On a lapse the card resets to relearning; on a
-/// pass the interval grows (1 → 6 → ×ease). The ease factor moves per SM-2.
+/// pass the interval grows. The ease factor moves per SM-2.
+///
+/// Where this leaves SM-2: **the three passing grades never schedule the same
+/// day.** SM-2 sends every first pass to tomorrow and every second to six days
+/// on, whatever the grade, and after that separates them only by what the
+/// grade did to the ease — a day or none. The shell prints each button's
+/// interval on it ([`next_intervals`]), and three buttons that say the same
+/// thing are three buttons that do the same thing (maintainer, 2026-11-27).
+///
+/// | pass | Hard | Good | Easy |
+/// |------|------|------|------|
+/// | 1st  | 1    | 2    | 4    |
+/// | 2nd  | 3    | 6    | 10   |
+/// | later | ×1.2 | ×ease | ×ease×1.3 |
+///
+/// Good is SM-2's own figure from the second pass on; Hard and Easy are Anki's
+/// multipliers either side of it. From the second pass the three are forced
+/// apart by at least a day where rounding would close them up, and none is
+/// shorter than the interval the card already had. The first pass matters to a passage
+/// most: it is worked from its beginning each day, and the verse the reader
+/// already has should not be in tomorrow's run beside the ones they do not.
 pub fn review(card: &mut Card, grade: Grade, now: &str) {
     let q = grade.quality() as f32;
     // SM-2 ease update; never below the floor.
@@ -263,10 +311,25 @@ pub fn review(card: &mut Card, grade: Grade, now: &str) {
 
     if grade.passed() {
         card.reps += 1;
+        let pick = |hard: u32, good: u32, easy: u32| match grade {
+            Grade::Easy => easy,
+            Grade::Good => good,
+            _ => hard,
+        };
+        // Pushed apart, and never below the interval the card already had: a
+        // verse first graded Easy (4 days) and then Hard is not back in 3.
+        let base = card.interval_days;
+        let apart = |hard: u32, good: u32, easy: u32| {
+            let hard = hard.max(base + 1);
+            let good = good.max(hard + 1);
+            pick(hard, good, easy.max(good + 1))
+        };
+        let grown = |factor: f32| (base.max(1) as f32 * factor).round() as u32;
         card.interval_days = match card.reps {
-            1 => 1,
-            2 => 6,
-            _ => ((card.interval_days.max(1) as f32) * card.ease).round().max(1.0) as u32,
+            1 => pick(1, 2, 4),
+            2 => apart(3, 6, 10),
+            // Each grade against the ease IT leaves.
+            _ => apart(grown(HARD_FACTOR), grown(card.ease), grown(card.ease * EASY_BONUS)),
         };
     } else {
         card.lapses += 1;
@@ -276,6 +339,18 @@ pub fn review(card: &mut Card, grade: Grade, now: &str) {
 
     card.due = add_days(now, card.interval_days as i64);
     card.reviews.push(Review { at: now.to_string(), grade, interval_days: card.interval_days, extra: Map::new() });
+}
+
+/// The days until `card` comes back for each grade, in the order Again, Hard,
+/// Good, Easy — what a shell prints under its four buttons, so a reader picks
+/// by what the button does and not by what its word might mean. Computed by
+/// running [`review`] on a copy, so it cannot drift from the schedule.
+pub fn next_intervals(card: &Card, now: &str) -> [u32; 4] {
+    [Grade::Again, Grade::Hard, Grade::Good, Grade::Easy].map(|g| {
+        let mut probe = card.clone();
+        review(&mut probe, g, now);
+        probe.interval_days
+    })
 }
 
 /// Whether the card is due for review at `now` (RFC3339 UTC) — `due` on or
@@ -289,7 +364,9 @@ pub fn is_due(card: &Card, now: &str) -> bool {
 
 /// The card's mastery bucket (coverage-map shading).
 pub fn mastery(card: &Card) -> Mastery {
-    if card.reviews.is_empty() {
+    // `reps` too: a verse of a passage split from one chunk has that chunk's
+    // schedule and no reviews of its own (`passage::spread`).
+    if card.reviews.is_empty() && card.reps == 0 {
         Mastery::New
     } else if card.reps == 0 || card.interval_days < 1 {
         Mastery::Learning // brand-new-but-touched, or relearning after a lapse
@@ -348,13 +425,10 @@ fn parse_card(path: &Path, bytes: &[u8]) -> Result<Card, String> {
     };
     // An unparseable or nonsensical `through` degrades to a single-verse card
     // rather than sinking the file.
-    let through = r
-        .through
-        .as_deref()
-        .and_then(VRef::parse_ref_key)
-        .filter(|t| t.book == vref.book && t.chapter == vref.chapter && t.verse > vref.verse);
+    let through = r.through.as_deref().and_then(VRef::parse_ref_key).filter(|t| Card::spans(&vref, t));
     Ok(Card {
         verse: vref,
+        per_verse: r.per_verse && through.is_some(),
         through,
         tok_version: r.tokenization,
         created: r.created,
@@ -402,6 +476,10 @@ pub fn write_card(home: impl AsRef<Path>, card: &Card) -> Result<(), Error> {
 ///
 /// A card file that exists but is absent from `loaded` (i.e. it failed to parse)
 /// is refused rather than clobbered — see [`write_card`].
+///
+/// One verse is graded, whatever it belongs to: a passage's verses are graded
+/// one at a time, and the first grade inside a passage from before the split
+/// gives every verse of it a card first ([`passage::grade`]).
 pub fn grade_verse(
     home: impl AsRef<Path>,
     loaded: &HashMap<VRef, Card>,
@@ -410,10 +488,7 @@ pub fn grade_verse(
     grade: Grade,
     now: &str,
 ) -> Result<Card, Error> {
-    let mut card = loaded.get(vref).cloned().unwrap_or_else(|| Card::new(vref.clone(), tok_version, now));
-    review(&mut card, grade, now);
-    write_card(&home, &card)?;
-    Ok(card)
+    passage::grade(home, loaded, vref, tok_version, grade, now)
 }
 
 /// Remove a verse's card (stop memorizing it).
@@ -426,46 +501,37 @@ pub fn remove_card(home: impl AsRef<Path>, vref: &VRef) -> Result<(), Error> {
     }
 }
 
-/// The verses due for review at `now`, in reading order — the study queue.
+/// What there is to work on at `now`, in reading order — the study queue. One
+/// entry per row of the hub: a single verse, or a passage by its first verse
+/// ([`passage::Deck::queue`]).
 pub fn due_queue(cards: &HashMap<VRef, Card>, now: &str) -> Vec<VRef> {
-    let mut due: Vec<&VRef> = cards.keys().filter(|v| is_due(&cards[*v], now)).collect();
-    due.sort_by_key(|v| v.reading_key());
-    due.into_iter().cloned().collect()
+    passage::Deck::new(cards).queue(now)
 }
 
-/// Today's memorization work, as the plans surface schedules it: the due cards
-/// a daily cap still has room for, beside what the cap is and how much of it
-/// is already spent.
+/// Today's memorization work, as the plans surface schedules it: the rows a
+/// daily cap still has room for, beside what the cap is and how much of it is
+/// already spent.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TodayQueue {
-    /// The cards to review now, most overdue first (reading order within a
+    /// The rows to work on now, most overdue first (reading order within a
     /// day), cut to what the cap leaves. Empty when the day's work is done.
     pub refs: Vec<VRef>,
-    /// Every due card, capped or not — so a tile can say "3 of 12 today".
+    /// Every row with work in it, capped or not — so a tile can say "3 of 12 today".
     pub due_total: usize,
-    /// Cards reviewed on `now`'s calendar day, which is what the cap counts.
+    /// Rows worked on `now`'s calendar day, which is what the cap counts. A
+    /// passage is one, however many of its verses were graded.
     pub reviewed_today: usize,
     /// The cap as given; `0` means no limit.
     pub cap: u32,
 }
 
 /// [`due_queue`] under a daily cap (`0` = unlimited): a reader who set "ten
-/// verses a day" and has reviewed four gets at most six, the most overdue
-/// first so a card never starves behind a later book. A card graded today
-/// counts against the cap whatever the grade, so a lapse does not reopen the
-/// day — it is due again tomorrow anyway (`review`).
+/// a day" and has worked four gets at most six, the most overdue first so a
+/// row never starves behind a later book. A row graded today counts against
+/// the cap whatever the grade, so a lapse does not reopen the day — it is due
+/// again tomorrow anyway (`review`). See [`passage::Deck::today`].
 pub fn today_queue(cards: &HashMap<VRef, Card>, now: &str, cap: u32) -> TodayQueue {
-    let today = now.get(..10).unwrap_or(now);
-    let reviewed_today = cards.values().filter(|c| c.reviews.iter().any(|r| r.at.starts_with(today))).count();
-    let mut due: Vec<&Card> = cards.values().filter(|c| is_due(c, now)).collect();
-    due.sort_by_key(|c| (date_to_days(&c.due).unwrap_or(i64::MIN), c.verse.reading_key()));
-    let room = if cap == 0 { usize::MAX } else { (cap as usize).saturating_sub(reviewed_today) };
-    TodayQueue {
-        refs: due.iter().take(room).map(|c| c.verse.clone()).collect(),
-        due_total: due.len(),
-        reviewed_today,
-        cap,
-    }
+    passage::Deck::new(cards).today(now, cap)
 }
 
 // ── drills (pure text over a verse's words) ──────────────────────────────────
@@ -607,31 +673,15 @@ pub struct VerseCoverage {
 }
 
 /// Per-verse coverage across every card — the spatial map "shaded by verses
-/// memorized and review depth/recency", in reading order.
-/// A passage card shades every verse it covers — the map answers "have I
-/// memorized this verse", and a verse learned inside a chunk has been.
+/// memorized and review depth/recency", in reading order. Every verse of a
+/// passage is on it, the ones not reached yet as [`Mastery::New`].
 pub fn coverage(cards: &HashMap<VRef, Card>, now: &str) -> Vec<VerseCoverage> {
-    let mut out: Vec<VerseCoverage> = cards
-        .values()
-        .flat_map(|c| {
-            let (m, due) = (mastery(c), is_due(c, now));
-            c.verses().into_iter().map(move |v| VerseCoverage {
-                ref_key: v.ref_key(),
-                mastery: m,
-                reps: c.reps,
-                lapses: c.lapses,
-                last_at: c.reviews.last().map(|r| r.at.clone()),
-                due,
-            })
-        })
-        .collect();
-    out.sort_by_key(|v| VRef::parse_ref_key(&v.ref_key).map(|r| r.reading_key()));
-    out
+    passage::Deck::new(cards).coverage(now)
 }
 
-/// One card as the memorize hub lists it — the row a reader drills or removes.
-/// Distinct from [`VerseCoverage`], which is per-verse shading: a passage card
-/// is ONE row here and every verse it covers there.
+/// One row of the memorize hub — what a reader drills or removes: a single
+/// verse, or a whole passage. Distinct from [`VerseCoverage`], which is
+/// per-verse shading: a passage is ONE row here and every verse it covers there.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CardSummary {
     /// The card's key — its first verse. Every card endpoint takes this.
@@ -641,33 +691,19 @@ pub struct CardSummary {
     pub label: String,
     /// How many verses this card covers (1 unless it's a passage).
     pub verses: u32,
+    /// Of those, the verses passed at least once (additive).
+    pub learned: u32,
+    /// The lowest standing among the verses learned so far.
     pub mastery: Mastery,
     pub reps: u32,
     pub lapses: u32,
+    /// Whether the row is in the queue at `now` ([`passage::Run::actionable`]).
     pub due: bool,
 }
 
-/// Every card, one entry each, in reading order — the memorize hub's list.
+/// Every row, in reading order — the memorize hub's list.
 pub fn card_list(cards: &HashMap<VRef, Card>, now: &str) -> Vec<CardSummary> {
-    let mut out: Vec<(_, CardSummary)> = cards
-        .values()
-        .map(|c| {
-            (
-                c.verse.reading_key(),
-                CardSummary {
-                    ref_key: c.verse.ref_key(),
-                    label: c.label(),
-                    verses: c.verses().len() as u32,
-                    mastery: mastery(c),
-                    reps: c.reps,
-                    lapses: c.lapses,
-                    due: is_due(c, now),
-                },
-            )
-        })
-        .collect();
-    out.sort_by_key(|a| a.0);
-    out.into_iter().map(|(_, s)| s).collect()
+    passage::Deck::new(cards).list(now)
 }
 
 /// Reviews on one calendar day — the temporal activity heatmap.
@@ -706,7 +742,8 @@ pub struct MemoryWindow {
     pub days: i64,
     /// Reviews graded in the window.
     pub reviews: u32,
-    /// Verses whose cards were created in the window (a passage counts each).
+    /// Verses added in the window. A passage counts every verse it covers on
+    /// the day it was added, not as each is first graded.
     pub added: u32,
 }
 
@@ -717,6 +754,7 @@ pub struct MemoryWindow {
 pub fn pace(cards: &HashMap<VRef, Card>, now: &str) -> Option<Vec<MemoryWindow>> {
     let today = date_to_days(now)?;
     let first = cards.values().filter_map(|c| date_to_days(&c.created)).min()?;
+    let deck = passage::Deck::new(cards);
     let window = |id: &'static str, days: i64| {
         let from = today - days + 1;
         let within = |stamp: &str| date_to_days(stamp).is_some_and(|d| d >= from);
@@ -724,7 +762,7 @@ pub fn pace(cards: &HashMap<VRef, Card>, now: &str) -> Option<Vec<MemoryWindow>>
         for c in cards.values() {
             reviews += c.reviews.iter().filter(|r| within(&r.at)).count() as u32;
             if within(&c.created) {
-                added += c.verses().len() as u32;
+                added += deck.added_by(c);
             }
         }
         MemoryWindow { id, days, reviews, added }
@@ -739,10 +777,10 @@ pub struct SectionCoverage {
     /// The section's name in the reader's language — see
     /// [`crate::reference::segment_label`].
     pub label: String,
-    /// Verses being memorized in this section — a passage card counts every
-    /// verse it covers, so this stays "how much of the section do I know".
+    /// Verses being memorized in this section — a passage counts every verse
+    /// it covers, reached yet or not.
     pub cards: u32,
-    /// Of those verses, the ones whose card has reached `Mature`.
+    /// Of those verses, the ones whose own card has reached `Mature`.
     pub mature: u32,
     /// Total reviews logged against this section.
     pub reviews: u32,
@@ -760,15 +798,24 @@ pub fn coverage_by_section(cards: &HashMap<VRef, Card>) -> Vec<SectionCoverage> 
             reviews: 0,
         })
         .collect();
-    for c in cards.values() {
-        let Some(bi) = crate::canon::book_order(&c.verse.book) else { continue };
-        if let Some(si) = CANON_SEGMENTS.iter().position(|(_, lo, hi)| bi >= *lo && bi <= *hi) {
-            let verses = c.verses().len() as u32;
-            acc[si].cards += verses;
-            acc[si].reviews += c.reviews.len() as u32;
-            if mastery(c) == Mastery::Mature {
-                acc[si].mature += verses;
+    let section = |v: &VRef| {
+        let bi = crate::canon::book_order(&v.book)?;
+        CANON_SEGMENTS.iter().position(|(_, lo, hi)| bi >= *lo && bi <= *hi)
+    };
+    let deck = passage::Deck::new(cards);
+    for (verse, card) in deck.verses() {
+        if let Some(si) = section(&verse) {
+            acc[si].cards += 1;
+            if card.is_some_and(|c| mastery(c) == Mastery::Mature) {
+                acc[si].mature += 1;
             }
+        }
+    }
+    // The log is counted where it was written: a verse split from one chunk
+    // has none of its own, so the chunk's reviews are not multiplied.
+    for c in cards.values() {
+        if let Some(si) = section(&c.verse) {
+            acc[si].reviews += c.reviews.len() as u32;
         }
     }
     acc
@@ -793,6 +840,7 @@ mod tests {
             cards.insert(v.clone(), Card::new(v, "kjv1769-tok2", now));
         }
         let mut later = Card::new(VRef::new("Ps", 23, 1), "kjv1769-tok2", T0);
+        review(&mut later, Grade::Good, T0);
         later.due = "2026-01-17".to_string();
         cards.insert(later.verse.clone(), later);
 
@@ -825,8 +873,8 @@ mod tests {
     #[test]
     fn sm2_interval_progression_on_good() {
         let mut c = Card::new(VRef::new("John", 3, 16), "kjv1769-tok2", T0);
-        review(&mut c, Grade::Good, T0); // rep 1 → 1 day
-        assert_eq!((c.reps, c.interval_days), (1, 1));
+        review(&mut c, Grade::Good, T0); // rep 1 → 2 days (Hard 1, Easy 4)
+        assert_eq!((c.reps, c.interval_days), (1, 2));
         review(&mut c, Grade::Good, "2026-01-02T00:00:00Z"); // rep 2 → 6 days
         assert_eq!((c.reps, c.interval_days), (2, 6));
         review(&mut c, Grade::Good, "2026-01-08T00:00:00Z"); // rep 3 → 6*ease
@@ -932,8 +980,9 @@ mod tests {
         let ps = VRef::new("Ps", 119, 11);
         grade_verse(&home, &loaded, &ps, "kjv1769-tok2", Grade::Easy, T0).unwrap();
         let (loaded, _) = load_cards(&home);
-        let q = due_queue(&loaded, "2026-01-02T00:00:00Z");
-        assert!(q.contains(&jn)); // John 3:16 was due after 1 day
+        assert!(due_queue(&loaded, "2026-01-02T00:00:00Z").is_empty(), "Good waits two days");
+        let q = due_queue(&loaded, "2026-01-03T00:00:00Z");
+        assert_eq!(q, [jn]); // John 3:16 was due after 2 days; the psalm, Easy, after 4
         let _ = std::fs::remove_dir_all(&home);
     }
 

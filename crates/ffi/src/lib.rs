@@ -3722,6 +3722,9 @@ pub unsafe extern "C" fn plumbline_engine_load_core_data(engine: *const Plumblin
 /// first review; SM-2 reschedules and appends to the review log. `grade` is one
 /// of `again` / `hard` / `good` / `easy`. Null on success, else an owned error.
 ///
+/// One verse, always: a passage is graded a verse at a time, each by its own ref
+/// (`plumbline_engine_memory_run_json` says which, in what order).
+///
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
@@ -3792,13 +3795,14 @@ pub unsafe extern "C" fn plumbline_engine_memory_add(
     })
 }
 
-/// Start memorizing the passage `start_ref`…`through_ref` (inclusive) as ONE card, keyed and
-/// listed by `start_ref`.
+/// Start memorizing the passage `start_ref`…`through_ref` (inclusive): one row and one place
+/// in the queue, keyed by `start_ref`, worked a verse at a time (`core::memory::passage`).
 ///
 /// `through_ref` must name a later verse of the same chapter; anything else seeds a plain
-/// single-verse card. Already memorizing `start_ref` is a no-op, so re-running with a
-/// different end does NOT re-span the card — remove it first. Null on success, else an owned
-/// error.
+/// single-verse card. A `start_ref` already memorized on its own becomes the passage's first
+/// verse and keeps its schedule; one that already opens a passage is left as it is, so
+/// re-running with a different end does NOT re-span it — remove it first. Null on success,
+/// else an owned error.
 ///
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -3827,18 +3831,16 @@ pub unsafe extern "C" fn plumbline_engine_memory_add_passage(
             return out_string("no such verse".to_string());
         }
         let (cards, _) = memory::load_cards(&home);
-        if cards.contains_key(&start) {
-            return ptr::null_mut();
-        }
-        let card = memory::Card::new_passage(start, &through, canon::TOKENIZATION_VERSION, now);
-        match memory::write_card(&home, &card) {
+        match memory::passage::add(&home, &cards, &start, &through, canon::TOKENIZATION_VERSION, now) {
             Ok(()) => ptr::null_mut(),
             Err(e) => out_string(e.to_string()),
         }
     })
 }
 
-/// Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
+/// Stop memorizing `verse_ref` (remove its card); a missing card is a no-op. When `verse_ref`
+/// opens a passage, the card of every verse in it goes, each with its own deletion record —
+/// except a verse another passage still covers (`core::memory::passage::removal`).
 /// Null on success, else an owned error.
 ///
 /// # Safety
@@ -3858,14 +3860,26 @@ pub unsafe extern "C" fn plumbline_engine_memory_remove(
         let Some(vref) = opt_str(verse_ref).and_then(VRef::parse_ref_key) else {
             return out_string("bad ref".to_string());
         };
-        let keys = vec![tombstone::card(&file_name_of(&memory::card_file(&home, &vref)))];
-        match memory::remove_card(&home, &vref) {
-            Ok(()) => {
-                record_deleted(&engine.home, keys, "");
-                ptr::null_mut()
+        let (cards, _) = memory::load_cards(&home);
+        let plan = memory::passage::removal(&cards, &vref);
+        // Whatever was deleted before a failure is recorded all the same: a
+        // delete without its record comes back on the next restore.
+        let mut keys = Vec::new();
+        let mut failed = None;
+        for v in &plan.delete {
+            match memory::remove_card(&home, v) {
+                Ok(()) => keys.push(tombstone::card(&file_name_of(&memory::card_file(&home, v)))),
+                Err(e) => {
+                    failed = Some(e.to_string());
+                    break;
+                }
             }
-            Err(e) => out_string(e.to_string()),
         }
+        if let (None, Some(card)) = (&failed, &plan.rewrite) {
+            failed = memory::write_card(&home, card).err().map(|e| e.to_string());
+        }
+        record_deleted(&engine.home, keys, "");
+        failed.map_or(ptr::null_mut(), out_string)
     })
 }
 
@@ -3892,8 +3906,9 @@ pub unsafe extern "C" fn plumbline_engine_memory_card_json(
     })
 }
 
-/// Verses due for review at `now` (RFC3339), in reading order, as `{refs:[...]}`. Never null
-/// on a live engine (empty when nothing is due).
+/// The rows with work in them at `now` (RFC3339), in reading order, as `{refs:[...]}` — a
+/// single verse, or a passage by its first verse. Never null on a live engine (empty when
+/// nothing is due).
 ///
 /// # Safety
 /// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
@@ -3949,25 +3964,10 @@ pub unsafe extern "C" fn plumbline_engine_memory_activity_json(engine: *const Pl
     })
 }
 
-/// What a memorize card is drilled and scored against: `(label, text, verses)`. A passage
-/// card's verses are joined into one continuous text, so the drill prompts for — and the check
-/// scores — the whole chunk. A ref with no card yet (or an engine with no home) falls back to
-/// the single verse. None if the verse doesn't exist.
-fn memory_span(e: &PlumblineEngine, vref: &VRef) -> Option<(String, String, u32)> {
-    let card = e.home.as_ref().and_then(|h| memory::load_cards(h).0.remove(vref));
-    let refs = card.as_ref().map_or_else(|| vec![vref.clone()], memory::Card::verses);
-    let bodies: Vec<String> = refs.iter().filter_map(|r| e.corpus.verse(r)).map(|v| v.body()).collect();
-    if bodies.is_empty() {
-        return None;
-    }
-    let label = card.as_ref().map_or_else(|| vref.ref_key(), memory::Card::label);
-    Some((label, bodies.join(" "), bodies.len() as u32))
-}
-
-/// A drill prompt for `verse_ref` at blank-out `level` (0 = full text … max):
-/// the text, its first-letter skeleton, and the blanked form. When `verse_ref`
-/// is a passage card's first verse, the drill covers the whole passage. Null if
-/// the verse isn't found.
+/// A drill prompt for the ONE verse `verse_ref` at blank-out `level` (0 = full text … max):
+/// the text, its first-letter skeleton, and the blanked form. A verse inside a passage also
+/// carries the passage's label and, unless it opens the passage, the verse before it as a
+/// lead-in. Null if the verse isn't found.
 ///
 /// # Safety
 /// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
@@ -3981,12 +3981,15 @@ pub unsafe extern "C" fn plumbline_engine_memory_drill_json(
         let (Some(e), Some(vref)) = (engine.as_ref(), opt_str(verse_ref).and_then(VRef::parse_ref_key)) else {
             return ptr::null_mut();
         };
-        let Some((label, text, verses)) = memory_span(e, &vref) else { return ptr::null_mut() };
+        let Some(text) = e.corpus.verse(&vref).map(|v| v.body()) else { return ptr::null_mut() };
+        let (passage, lead_in) = memory_today::passage_context(e, &vref);
         let level = level.min(u8::MAX as u32) as u8;
         out_json(&wire::WireMemoryDrill {
             reference: vref.ref_key(),
-            label,
-            verses,
+            label: vref.ref_key(),
+            verses: 1,
+            passage,
+            lead_in,
             first_letters: memory::first_letters(&text),
             blanked: memory::blank_out(&text, level),
             text,
@@ -3996,7 +3999,7 @@ pub unsafe extern "C" fn plumbline_engine_memory_drill_json(
     })
 }
 
-/// Score a typed recall of `verse_ref` against the verse text — `{accuracy,
+/// Score a typed recall of `verse_ref` against that verse's text — `{accuracy,
 /// words:[{word,ok}]}`, LCS-aligned. Null if the verse isn't found.
 ///
 /// # Safety
@@ -4013,7 +4016,7 @@ pub unsafe extern "C" fn plumbline_engine_memory_score_json(
         else {
             return ptr::null_mut();
         };
-        let Some((_, actual, _)) = memory_span(e, &vref) else { return ptr::null_mut() };
+        let Some(actual) = e.corpus.verse(&vref).map(|v| v.body()) else { return ptr::null_mut() };
         out_json(&memory::score_recall(typed, &actual))
     })
 }

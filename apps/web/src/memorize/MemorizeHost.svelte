@@ -4,6 +4,12 @@
   // (first letters / blank-out slider / typed recall + four grades), and the
   // stats view (8-section coverage rollup + reviews-per-day activity).
   //
+  // A row of the hub is a verse or a passage, and the review walks ROWS. A
+  // passage is one row however long it is, and is drilled a verse at a time
+  // (core `memory::passage`): its learned verses that are due, in order, then
+  // the first verse not learned yet. Passing that one offers the next; Again
+  // keeps it; "Stop here" leaves the rest for another day.
+  //
   // Its own SCREEN, not a modal: it fills the body between the top bar and the
   // destination nav, exactly as ui/MemorizeScreen.kt does — the app's
   // second-biggest surface should not feel like a confirmation prompt.
@@ -12,7 +18,7 @@
   import { nowStamp } from "../engine/StudyEngine";
   import { dispatchLink } from "../study/links";
   import ScreenBar from "../lib/ScreenBar.svelte";
-  import { t } from "../lib/i18n.svelte";
+  import { plural, t } from "../lib/i18n.svelte";
 
   const MAX_BLANK_LEVEL = 4; // core memory::MAX_BLANK_LEVEL
 
@@ -75,8 +81,21 @@
   }
 
   // ── review state ──
+  type Run = { ref: string; label: string; total: number; learned: number; due: string[]; fresh: string[]; all: string[] };
+  /** The rows to work, by first verse, and the one being worked. */
   let queue = $state<string[]>([]);
   let qi = $state(0);
+  /** The row being worked, as it stood when it was opened. */
+  let run = $state<Run | null>(null);
+  /** Its verses still to review, in order: drilled before anything new. */
+  let pending = $state<string[]>([]);
+  /** Its verses not learned yet. The head is offered once `pending` is empty,
+   *  and only a pass moves on to the one after it. */
+  let fresh = $state<string[]>([]);
+  /** True from opening a row until the engine has said what is in it. */
+  let opening = $state(false);
+  /** Bumped per row opened, so an answer for a row already left is dropped. */
+  let openSeq = 0;
   let mode = $state<"first" | "blank" | "typed">("first");
   let level = $state(2);
   let typed = $state("");
@@ -97,25 +116,96 @@
       // slice) is walked as given; one card from the hub's drill button; else
       // everything due.
       queue = v.queue ? [...v.queue] : v.only ? [v.only] : [...dueRefs];
-      qi = 0;
       mode = "first";
       typed = "";
       score = null;
+      // The hub's drill button is "let me practise this": a row with nothing
+      // due and nothing new is walked whole. The queue only ever holds rows
+      // with work in them.
+      void openRow(0, !!v.only);
     });
   });
 
-  const currentRef = $derived(view?.view === "review" ? queue[qi] : undefined);
+  /** Open row `i` of the queue: ask the engine what is in it and take that as
+   *  the run, fixed for as long as the row is worked. A row with nothing in it
+   *  (removed since the queue was made) is stepped over. */
+  async function openRow(i: number, whole = false): Promise<void> {
+    const seq = ++openSeq;
+    qi = i;
+    run = null;
+    pending = [];
+    fresh = [];
+    const head = queue[i];
+    if (!head) {
+      opening = false;
+      return;
+    }
+    opening = true;
+    // Straight to the worker, not through the read cache: the answer changes
+    // with every grade, and the grades sent so far are ahead of this in the
+    // worker's one queue, so it is read after them.
+    const r = (await s.rpc.call("memoryRun", head, nowStamp()).catch(() => null)) as Run | null;
+    if (seq !== openSeq) return;
+    const idle = !r || (r.due.length === 0 && r.fresh.length === 0);
+    if (idle && !(whole && r?.all.length)) {
+      void openRow(i + 1, whole);
+      return;
+    }
+    run = r;
+    pending = idle ? [...r!.all] : [...r!.due];
+    fresh = [...r!.fresh];
+    opening = false;
+  }
+
+  /** The verse on screen: the next review, else the next new verse. */
+  const currentRef = $derived(view?.view === "review" ? (pending[0] ?? fresh[0]) : undefined);
+  /** A verse not learned yet is on screen. */
+  const onFresh = $derived(pending.length === 0 && fresh.length > 0);
   const drill = $derived(currentRef ? s.q("memoryDrill", currentRef, level) : null);
+
+  // ── the four grades ──
+  // Each button says how well the verse was known and, under it, when that
+  // answer brings the verse back — the schedule's own figure for this verse
+  // (`memoryNext`), not a fixed caption. "Again", "Hard", "Good" and "Easy" are
+  // the algorithm's names and say neither (maintainer, 2026-11-27).
+  const GRADES = [
+    { id: "again", key: "memorize.gradeAgain" },
+    { id: "hard", key: "memorize.gradeHard" },
+    { id: "good", key: "memorize.gradeGood" },
+    { id: "easy", key: "memorize.gradeEasy" },
+  ] as const;
+  const nextDays = $derived(currentRef ? (s.q("memoryNext", currentRef, stamp) as Record<string, number> | null) : null);
+  /** When `g` brings this verse back; empty until the engine has answered. */
+  function comesBack(g: (typeof GRADES)[number]["id"]): string {
+    // A new verse failed is not put off: it is asked again on the spot.
+    if (g === "again" && onFresh) return t("memorize.backNow");
+    const n = nextDays?.[g];
+    if (!n) return "";
+    return n === 1 ? t("memorize.backTomorrow") : plural("memorize.backInDays.one", "memorize.backInDays.other", n);
+  }
+
+  function nextVerse(): void {
+    typed = "";
+    score = null;
+    mode = "first";
+    if (pending.length === 0 && fresh.length === 0) void openRow(qi + 1);
+  }
 
   function grade(g: "again" | "hard" | "good" | "easy"): void {
     if (!currentRef) return;
     void s.author("memoryGrade", currentRef, g, nowStamp()).then((err) => {
       if (err) s.showToast(err);
     });
-    typed = "";
-    score = null;
-    mode = "first";
-    qi++;
+    if (pending.length > 0) pending = pending.slice(1);
+    // A new verse failed stays the one offered: the next opens on a pass.
+    else if (g !== "again") fresh = fresh.slice(1);
+    nextVerse();
+  }
+
+  /** Leave the rest of this passage's new verses for another day. */
+  function stopHere(): void {
+    fresh = [];
+    nextVerse();
   }
   // The engine lives in the worker, so scoring is a round trip. `s.engine` is
   // the console/e2e proxy and returns a PROMISE — assigning it straight to
@@ -189,6 +279,9 @@
             <div class="card">
               <button class="ref" onclick={() => goRef(v.ref)}>{v.label ?? v.ref}</button>
               <span class="mastery" style:color={masteryColor[v.mastery] ?? "inherit"}>{v.mastery}</span>
+              {#if v.verses > 1}
+                <span class="progress">{t("memorize.progress", { learned: v.learned ?? 0, n: v.verses })}</span>
+              {/if}
               {#if v.due}<span class="due">{t("memorize.due")}</span>{/if}
               <span class="spacer"></span>
               <button class="drill" onclick={() => (s.memorize = { view: "review", only: v.ref })}>{t("memorize.drill")}</button>
@@ -203,15 +296,25 @@
       </div>
     {:else if view.view === "review"}
       <div class="content">
-        {#if !currentRef}
+        {#if opening}
+          <!-- Nothing: the row's verses are a moment away, and "Nothing due"
+               flashed in the gap would be false. -->
+        {:else if !currentRef}
           <p class="empty">
             {queue.length === 0 ? t("memorize.nothingDue") : t("memorize.allReviewed")}
           </p>
         {:else if drill}
-          <p class="drillref">
+          <p class="drillref" data-surface="memorize-verse" data-ref={currentRef}>
             {drill.label ?? currentRef}
+            {#if run && run.total > 1}<span class="psg" data-surface="memorize-passage">{run.label}</span>{/if}
             <span class="pos">{qi + 1} / {queue.length}</span>
+            {#if onFresh && run && run.total > 1}<span class="fresh">{t("memorize.newVerse")}</span>{/if}
           </p>
+          {#if drill.leadIn}
+            <!-- The verse before, in full: each verse is learned joined to the
+                 one it follows. Only the verse under it is drilled and graded. -->
+            <p class="leadin" data-surface="memorize-leadin" aria-label={t("memorize.leadIn")}>{drill.leadIn.text}</p>
+          {/if}
           <div class="modes">
             <button class:checked={mode === "first"} onclick={() => (mode = "first")}>{t("memorize.modeFirst")}</button>
             <button class:checked={mode === "blank"} onclick={() => (mode = "blank")}>{t("memorize.modeBlank")}</button>
@@ -236,12 +339,18 @@
             {/if}
           {/if}
           <details class="reveal"><summary>{t("memorize.showVerse")}</summary><p class="drilltext">{drill.text}</p></details>
-          <div class="grades">
-            <button onclick={() => grade("again")}>{t("memorize.gradeAgain")}</button>
-            <button onclick={() => grade("hard")}>{t("memorize.gradeHard")}</button>
-            <button onclick={() => grade("good")}>{t("memorize.gradeGood")}</button>
-            <button onclick={() => grade("easy")}>{t("memorize.gradeEasy")}</button>
+          <p class="ask" id="grade-ask">{t("memorize.gradeAsk")}</p>
+          <div class="grades" role="group" aria-labelledby="grade-ask">
+            {#each GRADES as g (g.id)}
+              <button data-grade={g.id} onclick={() => grade(g.id)}>
+                <span class="how">{t(g.key)}</span>
+                <span class="when">{comesBack(g.id)}</span>
+              </button>
+            {/each}
           </div>
+          {#if onFresh && run && run.total > 1}
+            <button class="stop" onclick={stopHere}>{t("memorize.stopHere")}</button>
+          {/if}
         {/if}
       </div>
     {:else}
@@ -360,10 +469,41 @@
     color: var(--faded, #8a8276);
     font-size: calc(12px * var(--uiScale, 1));
   }
+  .progress {
+    font-size: calc(12px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+    font-variant-numeric: tabular-nums;
+  }
   .drillref {
     font-weight: 600;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
   }
-  .pos {
+  .fresh {
+    font-weight: 400;
+    font-size: calc(11px * var(--uiScale, 1));
+    color: var(--gold, #9e7d38);
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  .leadin {
+    color: var(--faded, #8a8276);
+    font-size: calc(15px * var(--uiScale, 1));
+    line-height: 1.45;
+  }
+  .stop {
+    align-self: flex-start;
+    padding: 6px 12px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 7px;
+    color: var(--faded, #8a8276);
+    font-size: calc(13px * var(--uiScale, 1));
+  }
+  .pos,
+  .psg {
     color: var(--faded, #8a8276);
     font-weight: 400;
     font-size: calc(12.5px * var(--uiScale, 1));
@@ -417,16 +557,39 @@
     color: var(--faded, #8a8276);
     font-size: calc(13px * var(--uiScale, 1));
   }
-  .grades {
-    display: flex;
-    gap: 8px;
+  .ask {
     margin-top: 8px;
+    color: var(--faded, #8a8276);
+    font-size: calc(13px * var(--uiScale, 1));
+  }
+  /* Four across; two by two on a phone, where four captions side by side do
+     not fit. Never three and one. */
+  .grades {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  @media (max-width: 560px) {
+    .grades {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
   .grades button {
-    flex: 1;
-    padding: 7px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 7px 4px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 7px;
+  }
+  .grades .how {
+    font-weight: 600;
+  }
+  .grades .when {
+    min-height: 1.2em;
+    color: var(--faded, #8a8276);
+    font-size: calc(12px * var(--uiScale, 1));
   }
   .grades button:hover {
     border-color: var(--gold, #9e7d38);
