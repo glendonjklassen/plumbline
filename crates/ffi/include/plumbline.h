@@ -972,6 +972,9 @@ char *plumbline_engine_load_core_data(const struct PlumblineEngine *engine);
 // first review; SM-2 reschedules and appends to the review log. `grade` is one
 // of `again` / `hard` / `good` / `easy`. Null on success, else an owned error.
 //
+// One verse, always: a passage is graded a verse at a time, each by its own ref
+// (`plumbline_engine_memory_run_json` says which, in what order).
+//
 // # Safety
 // `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 char *plumbline_engine_memory_grade(struct PlumblineEngine *engine,
@@ -989,13 +992,14 @@ char *plumbline_engine_memory_add(struct PlumblineEngine *engine,
                                   const char *verse_ref,
                                   const char *now);
 
-// Start memorizing the passage `start_ref`…`through_ref` (inclusive) as ONE card, keyed and
-// listed by `start_ref`.
+// Start memorizing the passage `start_ref`…`through_ref` (inclusive): one row and one place
+// in the queue, keyed by `start_ref`, worked a verse at a time (`core::memory::passage`).
 //
 // `through_ref` must name a later verse of the same chapter; anything else seeds a plain
-// single-verse card. Already memorizing `start_ref` is a no-op, so re-running with a
-// different end does NOT re-span the card — remove it first. Null on success, else an owned
-// error.
+// single-verse card. A `start_ref` already memorized on its own becomes the passage's first
+// verse and keeps its schedule; one that already opens a passage is left as it is, so
+// re-running with a different end does NOT re-span it — remove it first. Null on success,
+// else an owned error.
 //
 // # Safety
 // `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
@@ -1004,7 +1008,9 @@ char *plumbline_engine_memory_add_passage(struct PlumblineEngine *engine,
                                           const char *through_ref,
                                           const char *now);
 
-// Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
+// Stop memorizing `verse_ref` (remove its card); a missing card is a no-op. When `verse_ref`
+// opens a passage, the card of every verse in it goes, each with its own deletion record —
+// except a verse another passage still covers (`core::memory::passage::removal`).
 // Null on success, else an owned error.
 //
 // # Safety
@@ -1019,8 +1025,9 @@ char *plumbline_engine_memory_remove(struct PlumblineEngine *engine, const char 
 char *plumbline_engine_memory_card_json(const struct PlumblineEngine *engine,
                                         const char *verse_ref);
 
-// Verses due for review at `now` (RFC3339), in reading order, as `{refs:[...]}`. Never null
-// on a live engine (empty when nothing is due).
+// The rows with work in them at `now` (RFC3339), in reading order, as `{refs:[...]}` — a
+// single verse, or a passage by its first verse. Never null on a live engine (empty when
+// nothing is due).
 //
 // # Safety
 // `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
@@ -1040,10 +1047,10 @@ char *plumbline_engine_memory_coverage_json(const struct PlumblineEngine *engine
 // `engine` is a live engine (or null → null).
 char *plumbline_engine_memory_activity_json(const struct PlumblineEngine *engine);
 
-// A drill prompt for `verse_ref` at blank-out `level` (0 = full text … max):
-// the text, its first-letter skeleton, and the blanked form. When `verse_ref`
-// is a passage card's first verse, the drill covers the whole passage. Null if
-// the verse isn't found.
+// A drill prompt for the ONE verse `verse_ref` at blank-out `level` (0 = full text … max):
+// the text, its first-letter skeleton, and the blanked form. A verse inside a passage also
+// carries the passage's label and, unless it opens the passage, the verse before it as a
+// lead-in. Null if the verse isn't found.
 //
 // # Safety
 // `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
@@ -1051,7 +1058,7 @@ char *plumbline_engine_memory_drill_json(const struct PlumblineEngine *engine,
                                          const char *verse_ref,
                                          uint32_t level);
 
-// Score a typed recall of `verse_ref` against the verse text — `{accuracy,
+// Score a typed recall of `verse_ref` against that verse's text — `{accuracy,
 // words:[{word,ok}]}`, LCS-aligned. Null if the verse isn't found.
 //
 // # Safety
@@ -1250,6 +1257,29 @@ char *plumbline_engine_hymn_favourite_set(struct PlumblineEngine *engine,
                                           const char *id,
                                           bool on,
                                           const char *now);
+
+// The run for the row at `verse_ref` at `now` (RFC3339 UTC), as
+// `{ref, label, total, learned, due, fresh, all}`. A verse this Bible does not
+// have is left out of all three lists, so a shell never asks for a drill that
+// cannot be served. Null when nothing is being memorized at `verse_ref`.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_memory_run_json(const struct PlumblineEngine *engine,
+                                       const char *verse_ref,
+                                       const char *now);
+
+// What each grade would do to `verse_ref` if given at `now` (RFC3339 UTC), as
+// `{again, hard, good, easy}` in days until the verse comes back —
+// [`memory::next_intervals`] over the verse's card as a grade would find it:
+// its own, the schedule of a chunk it has yet to be split from, or a new one.
+// Nothing is written. Null on a bad argument.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_memory_next_json(const struct PlumblineEngine *engine,
+                                        const char *verse_ref,
+                                        const char *now);
 
 // Memorization activity over the reading pace's windows, as
 // `{windows:[{id,days,reviews,added}]}` — [`memory::pace`] over the home's

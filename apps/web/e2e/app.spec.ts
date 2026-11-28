@@ -275,7 +275,7 @@ test("menus open promptly after boot (freeze regression)", { tag: "@perf" }, asy
 test("destinations are exclusive (memorize does not linger)", async ({ page }) => {
   await boot(page);
   await page.getByRole("button", { name: "Study", exact: true }).click();
-  await page.locator(".ex-card", { hasText: /^Memorize/ }).click();
+  await page.locator('[data-lead="memorize"]').click();
   await expect(page.getByText("Review due")).toBeVisible();
   await page.getByRole("button", { name: "Study", exact: true }).click();
   await expect(page.getByText("Review due")).toBeHidden();
@@ -1160,7 +1160,7 @@ test("checking a typed recall scores it (a perfect copy is 100%)", async ({ page
     await s.engine.memoryAdd("John 3:16", new Date().toISOString());
   });
   await page.getByRole("button", { name: "Study", exact: true }).click();
-  await page.locator(".ex-card", { hasText: /^Memorize/ }).click();
+  await page.locator('[data-lead="memorize"]').click();
   await page.getByRole("button", { name: "Review due", exact: false }).click();
   await page.getByRole("button", { name: "Type it" }).click();
 
@@ -1195,7 +1195,7 @@ test("a typed recall survives a pause and a background study refresh", async ({ 
     await s.engine.memoryAdd("John 3:16", new Date().toISOString());
   });
   await page.getByRole("button", { name: "Study", exact: true }).click();
-  await page.locator(".ex-card", { hasText: /^Memorize/ }).click();
+  await page.locator('[data-lead="memorize"]').click();
   await page.getByRole("button", { name: "Review due", exact: false }).click();
   await page.getByRole("button", { name: "Type it" }).click();
 
@@ -1291,24 +1291,4 @@ test("Copy passage… puts the run on the clipboard, with no edition after the r
   expect(one).toMatch(/ — Psalms 23:1$/);
 });
 
-// A whole section as one card: the hub lists one row labelled with the range, and
-// the drill covers every verse in it.
-test("a passage is memorized as one card, drilled whole", async ({ page }) => {
-  await boot(page);
-  await page.evaluate(async () => {
-    const s = (window as any).__plumbline;
-    await s.engine.memoryAddPassage("Ps 23:1", "Ps 23:3", new Date().toISOString());
-  });
-  await page.getByRole("button", { name: "Study", exact: true }).click();
-  await page.locator(".ex-card", { hasText: /^Memorize/ }).click();
-  // One row, named as a range — not three verse rows.
-  await expect(page.locator(".card .ref", { hasText: "Ps 23:1–3" })).toHaveCount(1);
-  const drill = await page.evaluate(async () => {
-    const s = (window as any).__plumbline;
-    return await s.engine.memoryDrill("Ps 23:1", 0);
-  });
-  expect(drill.label).toBe("Ps 23:1–3");
-  expect(drill.verses).toBe(3);
-  expect(drill.text).toContain("The LORD is my shepherd");
-  expect(drill.text).toContain("He restoreth my soul");
-});
+// A passage in the hub and its drill: e2e/memorize-passage.spec.ts.

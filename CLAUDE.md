@@ -50,6 +50,16 @@
   it, and is rewritten as v2 on its next edit. Builds before 0.78.0 refuse v2
   files. The ABI's `plumbline_engine_user_note_set` is gone; notes are added,
   edited and deleted by id.
+- **A passage is memorized verse by verse** (2026-11-27,
+  `crates/core/src/memory/passage.rs`). All memorization is a verse with a
+  card; a passage only groups them: one row of the hub, one place in the queue
+  and one against the daily cap. Working it is its due verses in order, then
+  the first verse not passed yet; a pass opens the next in the same sitting.
+  On disk the first verse's card carries `through` and `perVerse`, and every
+  other verse gets an ordinary card when it is first graded. A passage card
+  without `perVerse` is from a build that drilled it as one chunk: it reads as
+  every verse on that one schedule and is split on its first grade. Removing a
+  passage deletes every verse's card and records a tombstone for each.
 - **Restore merges** (`crates/core/src/merge.rs`): it combines the backup with
   the device instead of writing over it — notes by id (newer edit wins, different
   ids all kept), unions for tag members, weave links, plan days and hymn

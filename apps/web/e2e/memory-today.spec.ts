@@ -50,7 +50,7 @@ test("today's memorization rides the plans surface under a daily cap", async ({ 
   // Review from the card: exactly the two scheduled cards, then the day is done.
   await card.getByRole("button", { name: /to review today/ }).click();
   for (let i = 0; i < 2; i++) {
-    await page.getByRole("button", { name: "Good", exact: true }).click();
+    await page.locator('[data-grade="good"]').click();
   }
   await expect(page.getByText("Done — every card reviewed.")).toBeVisible();
 

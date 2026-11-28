@@ -116,7 +116,7 @@
     void s.author("memoryAdd", ref, nowStamp()).then((err) => s.showToast(err ?? t("menu.memorizing", { passage: said })));
   }
 
-  /** A whole section as one card — this verse starts it, the picker ends it. */
+  /** A whole section as one row of the hub — this verse starts it, the picker ends it. */
   function memorizePassage(): void {
     const ref = menu!.refKey;
     close();

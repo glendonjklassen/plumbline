@@ -14,6 +14,12 @@
   // shown a page at a time. The day a row is filed under is the day it was
   // added on the list and the day it was answered on Answered.
   //
+  // The screen is the list. Everything that is not a prayer sits behind one of
+  // three buttons at the end of the view row (maintainer, 2026-11-27): Filter
+  // opens the filters, Edit turns on the controls that change a prayer, and New
+  // opens the form for one. A row at rest carries only what is done to a prayer
+  // every day: Prayed, and Answered where the type can be.
+  //
   // "Prayed" is recorded once a day per prayer, in the reader's own calendar
   // day (`localDay`), and cannot be taken back: it is not a delete path, so the
   // restore merge can union the days from two devices without a record.
@@ -21,6 +27,7 @@
   import ScreenBar from "../lib/ScreenBar.svelte";
   import { localDay, nowStamp } from "../engine/StudyEngine";
   import { dateLocale, lang, plural, t } from "../lib/i18n.svelte";
+  import { modal } from "../lib/modal";
   import { refDisplay } from "../reader/refname";
   import { dispatchLink } from "../study/links";
 
@@ -53,20 +60,18 @@
   // Verses only — no copy of ours beside them (maintainer, 2026-11-25).
   const CONFESSION = "confession";
   const confession = $derived((listQ?.confession ?? []) as Passage[]);
-  /** The type picked for the new prayer; none while Confession is picked. */
-  const draftInfo = $derived(kinds.find((k) => k.id === draftKind) ?? null);
   const answerable = $derived(new Set(kinds.filter((k) => k.answerable).map((k) => k.id)));
 
   let view = $state<"list" | "answered">("list");
-  let draft = $state("");
-  let draftKind = $state("request");
-  /** The row being edited in place, with its title and type as typed so far. */
-  let editId = $state<string | null>(null);
-  let editTitle = $state("");
-  let editKind = $state("request");
+  /** The prayer form: a new prayer (`id` null) or the one being edited, with
+   *  its title and type as typed so far. Null while the form is closed. */
+  let form = $state<{ id: string | null; title: string; kind: string } | null>(null);
+  /** The type picked in the form; none while Confession is picked. */
+  const formInfo = $derived(kinds.find((k) => k.id === form?.kind) ?? null);
+  let filtersOpen = $state(false);
 
   // ── filters and pages ──
-  const PAGE = 20;
+  const PAGE = 10;
   /** "" is every type. */
   let filterKind = $state("");
   /** `YYYY-MM-DD` from a date field, or "" for no bound. */
@@ -102,10 +107,11 @@
   /** A change of view or filter starts again at the first page. */
   function firstPage(): void {
     page = 0;
-    editId = null;
   }
   function show(v: "list" | "answered"): void {
     view = v;
+    // Never found already armed in the view it was not turned on in.
+    editing = false;
     // Answered has no praise or thanks to filter to.
     if (v === "answered" && filterKind && !answerable.has(filterKind)) filterKind = "";
     firstPage();
@@ -116,12 +122,12 @@
     to = "";
     firstPage();
   }
-  /** Answered prayers are a record to read, so they carry no controls until
-   *  Edit is on: then each shows its ✕ and the way back to the list. Off again
-   *  whenever the view is left, so it is never found already armed. */
+  /** Edit is on: each row shows its ✕ and the control that changes it — Edit
+   *  on the list, the way back to the list on Answered. Off again when the
+   *  view is left or its last row goes. */
   let editing = $state(false);
   $effect(() => {
-    if (view !== "answered" || answered.length === 0) editing = false;
+    if (rows.length === 0) editing = false;
   });
   const nf = $derived(new Intl.NumberFormat(lang()));
 
@@ -139,34 +145,35 @@
     else if (done) s.showToast(done);
   }
 
-  async function add(ev: SubmitEvent): Promise<void> {
-    ev.preventDefault();
-    const title = draft.trim();
-    if (!title || draftKind === CONFESSION) return;
-    draft = "";
-    // The new prayer leads the first page.
-    page = 0;
-    await run(s.author("prayerAdd", title, draftKind, nowStamp()));
+  function openNew(): void {
+    form = { id: null, title: "", kind: "request" };
+  }
+  function openEdit(p: Prayer): void {
+    form = { id: p.id, title: p.title, kind: p.kind };
   }
 
-  function edit(p: Prayer): void {
-    editId = p.id;
-    editTitle = p.title;
-    editKind = p.kind;
-  }
-
-  async function saveEdit(ev: SubmitEvent, p: Prayer): Promise<void> {
+  async function saveForm(ev: SubmitEvent): Promise<void> {
     ev.preventDefault();
-    const title = editTitle.trim();
-    if (!title) return;
-    editId = null;
-    if (title === p.title && editKind === p.kind) return;
-    await run(s.author("prayerEdit", p.id, title, editKind, nowStamp()));
+    const f = form;
+    const title = f?.title.trim();
+    if (!f || !title || f.kind === CONFESSION) return;
+    form = null;
+    if (f.id === null) {
+      // The new prayer leads the first page of the list.
+      view = "list";
+      page = 0;
+      await run(s.author("prayerAdd", title, f.kind, nowStamp()));
+      return;
+    }
+    const was = praying.find((p) => p.id === f.id);
+    if (was && title === was.title && f.kind === was.kind) return;
+    await run(s.author("prayerEdit", f.id, title, f.kind, nowStamp()));
   }
 
   /** Open a verse in the reader. refKey → the core's `go:` verb, split on the
    *  LAST space, as App.svelte's `goUri` does. */
   function goRef(refKey: string): void {
+    form = null;
     void dispatchLink(s, `go:${refKey.replace(/ (?=\S*$)/, ":")}`);
   }
   /** A verse's text in the reader's Bible; empty until the engine answers. */
@@ -206,84 +213,43 @@
         {t("prayer.answered")}
         {#if answered.length > 0}<span class="n">{nf.format(answered.length)}</span>{/if}
       </button>
-      {#if view === "answered" && answered.length > 0}
-        <button class="chip edit" class:on={editing} aria-pressed={editing} onclick={() => (editing = !editing)}>
-          {t(editing ? "prayer.editDone" : "prayer.edit")}
+      <!-- Filter · Edit · New, at the far end. Filter and Edit act on rows, so
+           they are off with none; New is always there. -->
+      <div class="tools" data-surface="prayer-tools">
+        <button
+          class="tool"
+          class:on={filtering}
+          disabled={rows.length === 0}
+          aria-label={t("prayer.filter")}
+          title={t("prayer.filter")}
+          aria-haspopup="dialog"
+          data-filtering={filtering}
+          onclick={() => (filtersOpen = true)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 7.5V19l-4-2v-4.5z" /></svg>
         </button>
-      {/if}
-    </div>
-
-    {#if view === "list"}
-      <!-- The type leads the row, at the edge the line and the verses under it
-           start from. Confession takes the field and ＋ away and the picker has
-           not moved, with what it shows directly beneath it. -->
-      <form class="add" onsubmit={add}>
-        <select bind:value={draftKind} aria-label={t("prayer.kindLabel")} data-surface="prayer-kind">
-          {#each kinds as k (k.id)}
-            <option value={k.id}>{t(`prayer.kind.${k.id}`)}</option>
-          {/each}
-          {#if confession.length > 0}
-            <option value={CONFESSION}>{t("prayer.kind.confession")}</option>
-          {/if}
-        </select>
-        {#if draftKind !== CONFESSION}
-          <input bind:value={draft} placeholder={t("prayer.addPlaceholder")} aria-label={t("prayer.addPlaceholder")} />
-          <!-- ＋ beside a "New …" field, as the tag and thread pickers add. -->
-          <button type="submit" disabled={!draft.trim()} aria-label={t("prayer.chipAdd")} title={t("prayer.chipAdd")}>
-            {t("prayer.add")}
-          </button>
-        {/if}
-      </form>
-      {#if draftKind === CONFESSION}
-        <!-- The devotional's passage block: a reference that opens the reader,
-             then the verses. -->
-        <div data-surface="prayer-confession">
-          {#each confession as c (c.label)}
-            <div class="passage">
-              <button class="ref" onclick={() => goRef(c.verses[0])}>{refDisplay(s, c.label)}</button>
-              <p class="verses">
-                {#each c.verses as v (v)}<span class="v"
-                    >{#if c.verses.length > 1}<span class="n">{v.slice(v.lastIndexOf(":") + 1)}</span>{/if}{verseText(v)}
-                  </span>{/each}
-              </p>
-            </div>
-          {/each}
-        </div>
-      {/if}
-      {#if draftInfo}
-        <!-- What the picked type is, with a prayer of that type to read: one
-             quiet line under the field, not a list of all of them. -->
-        <p class="kind-info" data-surface="prayer-kind-info">
-          {t(`prayer.kindDef.${draftInfo.id}`)}
-          <button class="ref" onclick={() => goRef(draftInfo.example)}>{refDisplay(s, draftInfo.exampleLabel)}</button>
-        </p>
-      {/if}
-    {/if}
-
-    {#if rows.length > 0}
-      <div class="filters" role="group" data-surface="prayer-filters">
-        <select bind:value={filterKind} onchange={firstPage} aria-label={t("prayer.kindLabel")}>
-          <option value="">{t("prayer.filterAll")}</option>
-          {#each kinds as k (k.id)}
-            <!-- Answered holds only the types that can be. -->
-            {#if view === "list" || k.answerable}
-              <option value={k.id}>{t(`prayer.kind.${k.id}`)}</option>
-            {/if}
-          {/each}
-        </select>
-        <label>
-          <span>{t("prayer.filterFrom")}</span>
-          <input type="date" bind:value={from} max={to || undefined} onchange={firstPage} />
-        </label>
-        <label>
-          <span>{t("prayer.filterTo")}</span>
-          <input type="date" bind:value={to} min={from || undefined} onchange={firstPage} />
-        </label>
-        {#if filtering}
-          <button class="clear" onclick={clearFilters}>{t("common.clear")}</button>
-        {/if}
+        <button
+          class="tool"
+          class:on={editing}
+          disabled={rows.length === 0}
+          aria-label={t("prayer.edit")}
+          title={t("prayer.edit")}
+          aria-pressed={editing}
+          onclick={() => (editing = !editing)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4.5L16.5 4l3.5 3.5L8.5 19z" /><path d="M14 6.5l3.5 3.5" /></svg>
+        </button>
+        <button
+          class="tool"
+          aria-label={t("prayer.chipAdd")}
+          title={t("prayer.chipAdd")}
+          aria-haspopup="dialog"
+          onclick={openNew}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        </button>
       </div>
-    {/if}
+    </div>
 
     {#if listQ != null && rows.length === 0}
       <p class="empty">{t(view === "list" ? "prayer.empty" : "prayer.answeredEmpty")}</p>
@@ -292,40 +258,29 @@
     {/if}
 
     {#if view === "list"}
-      <!-- Each item: the title with its ✕ in the top corner, its type and the
-           day it was added, then one line holding the days prayed and, at the
-           far end, what can be done. -->
+      <!-- Each item: the title, its type and the day it was added, then one
+           line holding the days prayed and, at the far end, what is done to a
+           prayer day to day. Edit adds the ✕ and the Edit button. -->
       <ul class="list" data-surface="prayer-list">
         {#each pageRows as p (p.id)}
           <li class="item" data-kind={p.kind}>
-            {#if editId === p.id}
-              <form class="edit-row" onsubmit={(ev) => saveEdit(ev, p)}>
-                <div class="add">
-                  <select bind:value={editKind} aria-label={t("prayer.kindLabel")}>
-                    {#each kinds as k (k.id)}
-                      <option value={k.id}>{t(`prayer.kind.${k.id}`)}</option>
-                    {/each}
-                  </select>
-                  <input bind:value={editTitle} aria-label={t("prayer.editTitle")} />
-                </div>
-                <div class="actions">
-                  <button type="button" onclick={() => (editId = null)}>{t("common.cancel")}</button>
-                  <button type="submit" class="primary" disabled={!editTitle.trim()}>{t("common.save")}</button>
-                </div>
-              </form>
-            {:else}
-              <div class="head">
-                <span class="title">{p.title}</span>
+            <div class="head">
+              <span class="title">{p.title}</span>
+              {#if editing}
                 <button class="x" aria-label={t("prayer.delete")} title={t("prayer.delete")} onclick={() => remove(p)}>✕</button>
-              </div>
-              <span class="note">{t(`prayer.kind.${p.kind}`)} · {dayLabel(stampDay(p.created))}</span>
-              <div class="foot">
-                {#if p.prayedDays > 0}
-                  <span class="note">
-                    {plural("prayer.prayedDays.one", "prayer.prayedDays.other", p.prayedDays, { n: nf.format(p.prayedDays) })}
-                  </span>
-                {/if}
-                <div class="actions">
+              {/if}
+            </div>
+            <span class="note">{t(`prayer.kind.${p.kind}`)} · {dayLabel(stampDay(p.created))}</span>
+            <div class="foot">
+              {#if p.prayedDays > 0}
+                <span class="note">
+                  {plural("prayer.prayedDays.one", "prayer.prayedDays.other", p.prayedDays, { n: nf.format(p.prayedDays) })}
+                </span>
+              {/if}
+              <div class="actions">
+                {#if editing}
+                  <button onclick={() => openEdit(p)}>{t("prayer.edit")}</button>
+                {:else}
                   <button
                     class="primary"
                     disabled={p.prayedToday}
@@ -336,10 +291,9 @@
                   {#if answerable.has(p.kind)}
                     <button onclick={() => answer(p)}>{t("prayer.markAnswered")}</button>
                   {/if}
-                  <button onclick={() => edit(p)}>{t("prayer.edit")}</button>
-                </div>
+                {/if}
               </div>
-            {/if}
+            </div>
           </li>
         {/each}
       </ul>
@@ -384,6 +338,115 @@
   </div>
 </section>
 
+{#if filtersOpen}
+  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+  <div class="backdrop" onclick={() => (filtersOpen = false)}></div>
+  <div
+    class="dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-label={t("prayer.filter")}
+    tabindex="-1"
+    data-surface="prayer-filters"
+    use:modal={{ close: () => (filtersOpen = false) }}
+  >
+    <h2>{t("prayer.filter")}</h2>
+    <label class="field">
+      <span>{t("prayer.kindLabel")}</span>
+      <select bind:value={filterKind} onchange={firstPage}>
+        <option value="">{t("prayer.filterAll")}</option>
+        {#each kinds as k (k.id)}
+          <!-- Answered holds only the types that can be. -->
+          {#if view === "list" || k.answerable}
+            <option value={k.id}>{t(`prayer.kind.${k.id}`)}</option>
+          {/if}
+        {/each}
+      </select>
+    </label>
+    <label class="field">
+      <span>{t("prayer.filterFrom")}</span>
+      <input type="date" bind:value={from} max={to || undefined} onchange={firstPage} />
+    </label>
+    <label class="field">
+      <span>{t("prayer.filterTo")}</span>
+      <input type="date" bind:value={to} min={from || undefined} onchange={firstPage} />
+    </label>
+    <div class="dialog-actions">
+      <button disabled={!filtering} onclick={clearFilters}>{t("common.clear")}</button>
+      <button class="primary" onclick={() => (filtersOpen = false)}>{t("prayer.editDone")}</button>
+    </div>
+  </div>
+{/if}
+
+{#if form}
+  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+  <div class="backdrop" onclick={() => (form = null)}></div>
+  <div
+    class="dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-label={t(form.id === null ? "prayer.new" : "prayer.editTitle")}
+    tabindex="-1"
+    data-surface="prayer-form"
+    use:modal={{ close: () => (form = null) }}
+  >
+   <form onsubmit={saveForm}>
+    <h2>{t(form.id === null ? "prayer.new" : "prayer.editTitle")}</h2>
+    <label class="field">
+      <span>{t("prayer.kindLabel")}</span>
+      <select bind:value={form.kind} data-surface="prayer-kind">
+        {#each kinds as k (k.id)}
+          <option value={k.id}>{t(`prayer.kind.${k.id}`)}</option>
+        {/each}
+        <!-- Confession is read, not kept, so it is offered for a new prayer
+             and never as a type to change one to. -->
+        {#if form.id === null && confession.length > 0}
+          <option value={CONFESSION}>{t("prayer.kind.confession")}</option>
+        {/if}
+      </select>
+    </label>
+    {#if formInfo}
+      <!-- What the picked type is, with a prayer of that type to read. -->
+      <p class="kind-info" data-surface="prayer-kind-info">
+        {t(`prayer.kindDef.${formInfo.id}`)}
+        <button type="button" class="ref" onclick={() => goRef(formInfo.example)}>
+          {refDisplay(s, formInfo.exampleLabel)}
+        </button>
+      </p>
+    {/if}
+    {#if form.kind === CONFESSION}
+      <!-- The devotional's passage block: a reference that opens the reader,
+           then the verses. No field: nothing confessed is put on a list. -->
+      <div class="confession" data-surface="prayer-confession">
+        {#each confession as c (c.label)}
+          <div class="passage">
+            <button type="button" class="ref" onclick={() => goRef(c.verses[0])}>{refDisplay(s, c.label)}</button>
+            <p class="verses">
+              {#each c.verses as v (v)}<span class="v"
+                  >{#if c.verses.length > 1}<span class="n">{v.slice(v.lastIndexOf(":") + 1)}</span>{/if}{verseText(v)}
+                </span>{/each}
+            </p>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <input
+        data-modal-focus
+        bind:value={form.title}
+        placeholder={t("prayer.addPlaceholder")}
+        aria-label={t("prayer.addPlaceholder")}
+      />
+    {/if}
+    <div class="dialog-actions">
+      <button type="button" onclick={() => (form = null)}>{t("common.cancel")}</button>
+      {#if form.kind !== CONFESSION}
+        <button type="submit" class="primary" disabled={!form.title.trim()}>{t("common.save")}</button>
+      {/if}
+    </div>
+   </form>
+  </div>
+{/if}
+
 <style>
   .screen {
     flex: 1;
@@ -424,61 +487,111 @@
     border-color: var(--gold, #9e7d38);
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
-  /* The Answered view's Edit toggle, at the far end of the row. */
-  .chip.edit {
+  /* Filter · Edit · New: three icon buttons at the far end of the view row. */
+  .tools {
     margin-inline-start: auto;
+    display: flex;
+    gap: 6px;
+  }
+  .tool {
+    width: 40px;
+    height: 40px;
+    min-height: auto;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    background: var(--paper, #fcf9f4);
+    color: var(--faded, #8a8276);
+  }
+  .tool svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .tool:hover:not(:disabled) {
+    color: var(--ink, #211f1a);
+  }
+  .tool.on {
+    color: var(--gold, #9e7d38);
+    border-color: var(--gold, #9e7d38);
+    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+  }
+  .tool:disabled {
+    opacity: 0.4;
   }
   .chip .n {
     margin-inline-start: 4px;
     font-variant-numeric: tabular-nums;
   }
-  .add {
-    display: flex;
-    gap: 8px;
+  /* The two dialogs: PromptDialog's box, at its level. */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 16, 8, 0.35);
+    z-index: 44;
   }
-  /* The pickers' add row: a field on paper and a gold-outlined ＋. */
-  .add input {
-    flex: 1;
-    min-width: 0;
-    padding: 5px 10px;
+  .dialog {
+    position: fixed;
+    z-index: 45;
+    top: 12vh;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(440px, 92vw);
+    max-height: 76vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+    background: var(--popupPaper, #f2eee6);
     border: 1px solid var(--rule, #d8cba8);
-    border-radius: 6px;
-    background: var(--paper, #fcf9f4);
-    color: var(--ink, #211f1a);
-    font-size: calc(16px * var(--uiScale, 1));
-  }
-  .add input:focus {
-    outline: none;
-    border-color: var(--gold, #9e7d38);
-  }
-  /* The type beside the title, and the filters: the field's own look. */
-  .add select,
-  .filters select,
-  .filters input {
-    padding: 5px 8px;
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 6px;
-    background: var(--paper, #fcf9f4);
-    color: var(--ink, #211f1a);
-    font-size: calc(16px * var(--uiScale, 1));
-    min-width: 0;
-  }
-  .edit-row {
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
   }
-  .add select:focus,
-  .filters select:focus,
-  .filters input:focus {
+  .dialog form {
+    display: contents;
+  }
+  .dialog h2 {
+    margin: 0;
+    font-size: calc(15px * var(--uiScale, 1));
+    font-weight: 600;
+    color: var(--ink, #211f1a);
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: calc(12.5px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+  }
+  .dialog input,
+  .dialog select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 7px 10px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
+    font-size: calc(16px * var(--uiScale, 1));
+    min-width: 0;
+  }
+  .dialog input:focus,
+  .dialog select:focus {
     outline: none;
     border-color: var(--gold, #9e7d38);
   }
   /* The picker's own chevron, in place of the browser's: that one sits hard
      against the border and takes its colour from the system, not the theme.
      Two half-filled squares meet as a ⌄ in the text colour. */
-  .add select,
-  .filters select {
+  .dialog select {
     appearance: none;
     padding-inline-end: 30px;
     background-image:
@@ -490,33 +603,32 @@
     background-size: 5px 5px;
     background-repeat: no-repeat;
   }
-  .add select:dir(rtl),
-  .filters select:dir(rtl) {
+  .dialog select:dir(rtl) {
     background-position:
       11px 50%,
       16px 50%;
   }
-  .filters {
+  .dialog-actions {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
+    justify-content: flex-end;
     gap: 8px;
   }
-  .filters label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: calc(12.5px * var(--uiScale, 1));
-    color: var(--faded, #8a8276);
-  }
-  .filters .clear,
+  .dialog-actions button,
   .pager button {
-    padding: 6px 12px;
+    padding: 6px 14px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 6px;
     background: var(--paper, #fcf9f4);
     color: var(--ink, #211f1a);
-    font-size: calc(13px * var(--uiScale, 1));
+    font-size: calc(13.5px * var(--uiScale, 1));
+  }
+  .dialog-actions button:disabled {
+    opacity: 0.4;
+  }
+  .dialog-actions .primary:not(:disabled) {
+    background: var(--gold, #9e7d38);
+    color: #fff;
+    border-color: var(--gold, #9e7d38);
   }
   .pager {
     display: flex;
@@ -528,7 +640,7 @@
     opacity: 0.4;
   }
   .kind-info {
-    margin: -4px 0 0;
+    margin: -6px 0 0;
     font-size: calc(13.5px * var(--uiScale, 1));
     line-height: 1.45;
     color: var(--faded, #8a8276);
@@ -563,15 +675,6 @@
     color: var(--gold, #9e7d38);
     font-size: inherit;
     text-decoration: underline;
-  }
-  .add button {
-    padding: 5px 14px;
-    border: 1px solid var(--gold, #9e7d38);
-    border-radius: 6px;
-    color: var(--gold, #9e7d38);
-  }
-  .add button:disabled {
-    opacity: 0.4;
   }
   .actions button {
     padding: 8px 14px;
