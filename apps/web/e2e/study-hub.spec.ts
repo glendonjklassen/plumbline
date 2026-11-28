@@ -294,3 +294,64 @@ test("coverage counts the chapters actually read", async ({ page }) => {
   await openStudy(page);
   await expect(page.locator('[data-surface="pace"] .chip.on')).toHaveText("All time", { timeout: 15_000 });
 });
+
+// Memorization and prayer are measured the way reading is (maintainer,
+// 2026-11-28): a figure per day over the window, with an arrow against the
+// next broader window.
+//
+// Can it fail? The card and the prayer are 40 days old with one review and one
+// day prayed, both 40 days ago, so the 30 days hold nothing and all time holds
+// something: every arrow at "30 days" is DOWN, and a column left without its
+// arrow fails its own count. The memorization lines are matched whole, so
+// totals ("1 review") in place of rates fail the text. Then one review today
+// makes the 7 days (1 in 7) beat the 30 (1 in 30): the same line turns UP,
+// which a mark drawn from a constant cannot do. "7 days" before that review is
+// level with the 30 — nothing against nothing — and draws no arrow at all.
+test("memorization and prayer are per day, with arrows against the broader window", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    const then = new Date(Date.now() - 40 * 24 * 3600 * 1000);
+    const stamp = then.toISOString().replace(/\.\d{3}Z$/, "Z");
+    const day = `${then.getFullYear()}-${String(then.getMonth() + 1).padStart(2, "0")}-${String(then.getDate()).padStart(2, "0")}`;
+    const run = async (...args: unknown[]) => {
+      const err = await s.author(...args);
+      if (err) throw new Error(err);
+    };
+    await run("memoryAdd", "John 3:16", stamp);
+    await run("memoryGrade", "John 3:16", "easy", stamp);
+    await run("prayerAdd", "Daily bread", "request", stamp);
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const id = (await s.rpc.call("prayers", today)).praying[0].id as string;
+    await run("prayerPrayed", id, day);
+  });
+  await openStudy(page);
+  const pace = page.locator('[data-surface="pace"]');
+  const memory = pace.locator('[data-surface="pace-memory"]');
+  const prayer = pace.locator('[data-surface="pace-prayer"]');
+  await pace.locator(".chip", { hasText: "30 days" }).click();
+  await expect(memory.locator(".pace-fact")).toHaveText(["0 reviews a day", "0 verses added a day"], { timeout: 15_000 });
+  await expect(memory.locator('[data-trend="down"]')).toHaveCount(2);
+  await expect(memory.locator("[data-trend]").first()).toHaveAttribute("aria-label", "Below average (All time)");
+  await expect(prayer.locator(".pace-fact")).toHaveText("Prayed 0 of 30 days");
+  await expect(prayer.locator('[data-trend="down"]')).toHaveCount(1);
+
+  // Level with the 30 days: no arrow.
+  await pace.locator(".chip", { hasText: "7 days" }).click();
+  await expect(memory.locator(".pace-fact").first()).toHaveText("0 reviews a day");
+  await expect(pace.locator("[data-trend]")).toHaveCount(0);
+
+  // One review today: the week now beats the month.
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    const err = await s.author("memoryGrade", "John 3:16", "good", new Date().toISOString());
+    if (err) throw new Error(err);
+  });
+  await expect(memory.locator(".pace-fact").first()).toHaveText("0.1 reviews a day", { timeout: 15_000 });
+  await expect(memory.locator('[data-trend="up"]')).toHaveCount(1);
+  await expect(memory.locator("[data-trend]").first()).toHaveAttribute("aria-label", "Above average (30 days)");
+  // Today is what was done today, not a rate.
+  await pace.locator(".chip", { hasText: "Today" }).click();
+  await expect(memory.locator(".pace-fact")).toHaveText(["1 review", "0 verses added"]);
+});
