@@ -171,17 +171,29 @@
   // reader three days in has the same words in every window, so the 7 days
   // would always beat the 30 and the 30 always trail all time: an arrow drawn
   // from two divisors, not from how much was read.
-  const broader = $derived(paceWindows[paceWindows.findIndex((w) => w.id === paceId) + 1] ?? null);
-  const paceSpan = $derived(paceWindows.find((w) => w.id === "all")?.days ?? 0);
+  //
+  // The same rule for all three columns, each over its own windows: reading
+  // from its first read, memorization from its first card, prayer from its
+  // first prayer. `rate` is the quantity as a figure per day.
   type Trend = { up: boolean; label: string } | null;
-  function trend(mine: number | undefined, theirs: number | undefined): Trend {
-    if (!pace || !broader || paceSpan <= pace.days) return null;
-    if (mine == null || theirs == null || mine === theirs) return null;
-    const up = mine > theirs;
-    return { up, label: t(up ? "explore.paceAbove" : "explore.paceBelow", { window: t(PACE_LABEL[broader.id]) }) };
+  function trendOf<W extends { id: string; days: number }>(windows: W[], rate: (w: W) => number): Trend {
+    const at = windows.findIndex((w) => w.id === paceId);
+    const mine = windows[at];
+    const theirs = windows[at + 1];
+    const span = windows.find((w) => w.id === "all")?.days ?? 0;
+    if (!mine || !theirs || span <= mine.days) return null;
+    const [a, b] = [rate(mine), rate(theirs)];
+    if (a === b) return null;
+    const up = a > b;
+    return { up, label: t(up ? "explore.paceAbove" : "explore.paceBelow", { window: t(PACE_LABEL[theirs.id]) }) };
   }
-  const wordsTrend = $derived(trend(pace?.wordsPerDay, broader?.wordsPerDay));
-  const chaptersTrend = $derived(trend(pace?.chaptersPerDay, broader?.chaptersPerDay));
+  const perDay = (n: number, days: number): number => n / Math.max(1, days);
+  const wordsTrend = $derived(trendOf(paceWindows, (w) => w.wordsPerDay));
+  const chaptersTrend = $derived(trendOf(paceWindows, (w) => w.chaptersPerDay));
+  const reviewsTrend = $derived(trendOf(memWindows, (w) => perDay(w.reviews, w.days)));
+  const addedTrend = $derived(trendOf(memWindows, (w) => perDay(w.added, w.days)));
+  // Prayer is a share of days already; its arrow compares that share.
+  const prayTrend = $derived(trendOf(prayWindows, (w) => perDay(w.prayedDays, w.days)));
   const nf0 = $derived(new Intl.NumberFormat(lang(), { maximumFractionDigits: 0 }));
   const nf1 = $derived(new Intl.NumberFormat(lang(), { maximumFractionDigits: 1 }));
 
@@ -394,12 +406,23 @@
                 </div>
                 <div class="pace-col" data-surface="pace-memory">
                   <p class="pace-sub">{t("explore.paceMemory")}</p>
-                  <p class="pace-fact">
-                    {plural("explore.paceReviews.one", "explore.paceReviews.other", mem?.reviews ?? 0, { n: nf.format(mem?.reviews ?? 0) })}
-                  </p>
-                  <p class="pace-fact">
-                    {plural("explore.paceAdded.one", "explore.paceAdded.other", mem?.added ?? 0, { n: nf.format(mem?.added ?? 0) })}
-                  </p>
+                  <!-- As reading: today is what was done today, a longer window
+                       is a figure per day, and either carries its arrow. -->
+                  {#if paceId === "day"}
+                    <p class="pace-fact">
+                      {plural("explore.paceReviews.one", "explore.paceReviews.other", mem?.reviews ?? 0, { n: nf.format(mem?.reviews ?? 0) })}{@render arrow(reviewsTrend)}
+                    </p>
+                    <p class="pace-fact">
+                      {plural("explore.paceAdded.one", "explore.paceAdded.other", mem?.added ?? 0, { n: nf.format(mem?.added ?? 0) })}{@render arrow(addedTrend)}
+                    </p>
+                  {:else}
+                    <p class="pace-fact">
+                      {t("explore.paceReviewsRate", { n: nf1.format(perDay(mem?.reviews ?? 0, mem?.days ?? 1)) })}{@render arrow(reviewsTrend)}
+                    </p>
+                    <p class="pace-fact">
+                      {t("explore.paceAddedRate", { n: nf1.format(perDay(mem?.added ?? 0, mem?.days ?? 1)) })}{@render arrow(addedTrend)}
+                    </p>
+                  {/if}
                 </div>
                 {#if pray}
                   <!-- Only with a prayer list: without one there is no day to
@@ -414,7 +437,7 @@
                           n: nf.format(pray.prayedDays),
                           days: nf.format(pray.days),
                         })}
-                      {/if}
+                      {/if}{@render arrow(prayTrend)}
                     </p>
                   </div>
                 {/if}
